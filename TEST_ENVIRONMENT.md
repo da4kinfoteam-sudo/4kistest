@@ -12,6 +12,17 @@ The app uses the main build's source history, but its Vercel and Supabase resour
 
 Historical incremental migrations from the production repository are retained under `supabase/migrations_legacy/` for reference. They are not applied after the consolidated test baseline.
 
+## Synthetic test data
+
+`supabase/migrations/202607150002_test_seed_data.sql` provides a repeatable, synthetic fixture across all 53 public tables. It does not contain production records, production users, or live Google Drive tokens.
+
+Test administrator login:
+
+- Username: `testadmin`
+- Password: `Test4K!2026`
+
+Additional role-scoped accounts are `testfocal` and `testrfo`; they use the same test-only password. Mock Google Drive metadata is linked to a deliberately disconnected placeholder connection, so it cannot access a real Drive account.
+
 ## Syncing future main changes
 
 ```powershell
