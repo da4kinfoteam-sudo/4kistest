@@ -1,5 +1,5 @@
 
-// Author: 4K 
+// Author: 4K
 import React, { useState, useMemo, useEffect } from 'react';
 import { Subproject, Activity, OfficeRequirement, StaffingRequirement, OtherProgramExpense, operatingUnits, fundTypes, tiers, filterYears, ObligationRecord, DisbursementRecord } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
@@ -19,2044 +19,2025 @@ import { resolveDisbursementEntries, summarizeDisbursements } from '../../lib/di
 import { getBudgetLineAmount } from '../../lib/budgetLineAdjustments';
 import type { DataScope } from '../../lib/scopedDataFetch';
 import { normalizeStaffingExpenses, staffingExpenseItemId } from '../../lib/staffingExpenseIdentity';
+import { ConfirmDialog, LoadingState } from '../ui/enterprise';
 
 interface Props {
-    subprojects: Subproject[];
-    setSubprojects: React.Dispatch<React.SetStateAction<Subproject[]>>;
-    activities: Activity[];
-    setActivities: React.Dispatch<React.SetStateAction<Activity[]>>;
-    officeReqs: OfficeRequirement[];
-    setOfficeReqs: React.Dispatch<React.SetStateAction<OfficeRequirement[]>>;
-    staffingReqs: StaffingRequirement[];
-    setStaffingReqs: React.Dispatch<React.SetStateAction<StaffingRequirement[]>>;
-    otherProgramExpenses: OtherProgramExpense[];
-    setOtherProgramExpenses: React.Dispatch<React.SetStateAction<OtherProgramExpense[]>>;
-    budgetCeilings?: Array<{ operating_unit: string; year: number; amount: number }>;
-    uacsCodes: { [key: string]: { [key: string]: { [key: string]: string } } };
-    onSelectSubproject: (subproject: Subproject) => void;
-    onSelectActivity: (activity: Activity) => void;
-    onSelectOfficeReq: (item: OfficeRequirement) => void;
-    onSelectStaffingReq: (item: StaffingRequirement) => void;
-    onSelectOtherExpense: (item: OtherProgramExpense) => void;
-    onDataScopeChange?: (scope: Partial<DataScope>) => void;
+ subprojects: Subproject[];
+ setSubprojects: React.Dispatch<React.SetStateAction<Subproject[]>>;
+ activities: Activity[];
+ setActivities: React.Dispatch<React.SetStateAction<Activity[]>>;
+ officeReqs: OfficeRequirement[];
+ setOfficeReqs: React.Dispatch<React.SetStateAction<OfficeRequirement[]>>;
+ staffingReqs: StaffingRequirement[];
+ setStaffingReqs: React.Dispatch<React.SetStateAction<StaffingRequirement[]>>;
+ otherProgramExpenses: OtherProgramExpense[];
+ setOtherProgramExpenses: React.Dispatch<React.SetStateAction<OtherProgramExpense[]>>;
+ budgetCeilings?: Array<{ operating_unit: string; year: number; amount: number }>;
+ uacsCodes: { [key: string]: { [key: string]: { [key: string]: string } } };
+ onSelectSubproject: (subproject: Subproject) => void;
+ onSelectActivity: (activity: Activity) => void;
+ onSelectOfficeReq: (item: OfficeRequirement) => void;
+ onSelectStaffingReq: (item: StaffingRequirement) => void;
+ onSelectOtherExpense: (item: OtherProgramExpense) => void;
+ onDataScopeChange?: (scope: Partial<DataScope>) => void;
 }
 
 interface FinancialItem {
-    uniqueId: string;
-    sourceType: 'Subproject' | 'Activity' | 'Office' | 'Staffing' | 'Other';
-    sourceId: number;
-    detailId?: number; // For subprojects and activity expenses
-    
-    // Identifiers
-    uacsCode: string;
-    objectType: string;
-    expenseParticular: string; // The group name basically
-    
-    // Display Info
-    sourceName: string; // Project Name, Activity Name, etc.
-    budgetParticular?: string; // For subprojects, the specific item name
-    
-    // Financials
-    targetObligationMonth: string;
-    targetObligationAmount: number;
-    targetDisbursementMonth: string;
-    targetDisbursementAmount: number;
-    
-    actualObligationMonth: string;
-    actualObligationAmount: number;
-    actualDisbursementMonth: string;
-    actualDisbursementAmount: number;
+ uniqueId: string;
+ sourceType: 'Subproject' | 'Activity' | 'Office' | 'Staffing' | 'Other';
+ sourceId: number;
+ detailId?: number; // For subprojects and activity expenses
 
-    obligations: ObligationRecord[];
-    disbursements: DisbursementRecord[];
+ // Identifiers
+ uacsCode: string;
+ objectType: string;
+ expenseParticular: string; // The group name basically
 
-    // Monthly breakdown for actuals (specific to Staffing/Other)
-    actualDisbursementJan: number;
-    actualDisbursementFeb: number;
-    actualDisbursementMar: number;
-    actualDisbursementApr: number;
-    actualDisbursementMay: number;
-    actualDisbursementJun: number;
-    actualDisbursementJul: number;
-    actualDisbursementAug: number;
-    actualDisbursementSep: number;
-    actualDisbursementOct: number;
-    actualDisbursementNov: number;
-    actualDisbursementDec: number;
+ // Display Info
+ sourceName: string; // Project Name, Activity Name, etc.
+ budgetParticular?: string; // For subprojects, the specific item name
 
-    status: string; // Added status field
-    isRealignment?: boolean;
-    isSavings?: boolean;
-    isCancelled?: boolean;
-    isConfirmed: boolean; // Just a UI state for this session (or could map to 'status')
+ // Financials
+ targetObligationMonth: string;
+ targetObligationAmount: number;
+ targetDisbursementMonth: string;
+ targetDisbursementAmount: number;
+
+ actualObligationMonth: string;
+ actualObligationAmount: number;
+ actualDisbursementMonth: string;
+ actualDisbursementAmount: number;
+
+ obligations: ObligationRecord[];
+ disbursements: DisbursementRecord[];
+
+ // Monthly breakdown for actuals (specific to Staffing/Other)
+ actualDisbursementJan: number;
+ actualDisbursementFeb: number;
+ actualDisbursementMar: number;
+ actualDisbursementApr: number;
+ actualDisbursementMay: number;
+ actualDisbursementJun: number;
+ actualDisbursementJul: number;
+ actualDisbursementAug: number;
+ actualDisbursementSep: number;
+ actualDisbursementOct: number;
+ actualDisbursementNov: number;
+ actualDisbursementDec: number;
+
+ status: string; // Added status field
+ isRealignment?: boolean;
+ isSavings?: boolean;
+ isCancelled?: boolean;
+ isConfirmed: boolean; // Just a UI state for this session (or could map to 'status')
 }
 
-const MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"
 ];
 
-const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // Helper to get month index from YYYY-MM-DD
 const getMonthFromDateStr = (dateStr: string | undefined) => {
-    if (!dateStr) return '';
-    const parts = dateStr.split('-');
-    if (parts.length > 1) return (parseInt(parts[1]) - 1).toString();
-    return '';
+ if (!dateStr) return '';
+ const parts = dateStr.split('-');
+ if (parts.length > 1) return (parseInt(parts[1]) - 1).toString();
+ return '';
 };
 
 const toFiniteNumber = (value: unknown) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
+ const parsed = Number(value);
+ return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const sumAmounts = (records: Array<{ amount?: number | string | null }> = []) => {
-    return records.reduce((sum, record) => sum + toFiniteNumber(record.amount), 0);
+ return records.reduce((sum, record) => sum + toFiniteNumber(record.amount), 0);
 };
 
 const formatCurrency = (amount: number) => {
-  // Round up to nearest whole number
-  const rounded = Math.ceil(toFiniteNumber(amount));
-  return new Intl.NumberFormat('en-PH', { 
-      style: 'currency', 
-      currency: 'PHP',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0 
-  }).format(rounded);
+ // Round up to nearest whole number
+ const rounded = Math.ceil(toFiniteNumber(amount));
+ return new Intl.NumberFormat('en-PH', {
+ style: 'currency',
+ currency: 'PHP',
+ minimumFractionDigits: 0,
+ maximumFractionDigits: 0
+ }).format(rounded);
 }
 
 // Helper to normalize legacy obligations to the new array structure
 const getInitialObligations = (existingArr: ObligationRecord[] | undefined, date: string, amount: number) => {
-    // If we have an existing array with elements, use it. 
-    // This preserves multiple entries if they were saved in the JSONB field.
-    if (existingArr && existingArr.length > 0) return existingArr;
-    
-    // Fallback for truly legacy single-entry fields
-    if (amount > 0) {
-        return [{
-            id: Date.now() + Math.floor(Math.random() * 1000),
-            date: date || '',
-            amount: amount,
-            remarks: 'Legacy Record'
-        }];
-    }
-    return [];
+ // If we have an existing array with elements, use it.
+ // This preserves multiple entries if they were saved in the JSONB field.
+ if (existingArr && existingArr.length > 0) return existingArr;
+
+ // Fallback for truly legacy single-entry fields
+ if (amount > 0) {
+ return [{
+ id: Date.now() + Math.floor(Math.random() * 1000),
+ date: date || '',
+ amount: amount,
+ remarks: 'Legacy Record'
+ }];
+ }
+ return [];
 };
 
 const getInitialDisbursements = (existingArr: DisbursementRecord[] | undefined, date: string, amount: number) => {
-    // Similarly for disbursements
-    if (existingArr && existingArr.length > 0) return existingArr;
-    
-    if (amount > 0) {
-        return [{
-            id: Date.now() + Math.floor(Math.random() * 1000),
-            date: date || '',
-            amount: amount,
-            remarks: 'Legacy Record'
-        }];
-    }
-    return [];
+ // Similarly for disbursements
+ if (existingArr && existingArr.length > 0) return existingArr;
+
+ if (amount > 0) {
+ return [{
+ id: Date.now() + Math.floor(Math.random() * 1000),
+ date: date || '',
+ amount: amount,
+ remarks: 'Legacy Record'
+ }];
+ }
+ return [];
 };
 
 const getContextDescription = (item: FinancialItem) => {
-    if (item.sourceType === 'Subproject') {
-        return item.budgetParticular && item.sourceName !== item.budgetParticular ? item.sourceName : '';
-    }
-    if (item.sourceType === 'Staffing') {
-        return item.expenseParticular !== item.sourceName ? item.sourceName : '';
-    }
-    if (item.sourceType === 'Other') {
-        return item.expenseParticular && item.expenseParticular !== item.sourceName ? item.expenseParticular : 'Other program expense';
-    }
-    if (item.sourceType === 'Activity') {
-        return item.sourceName;
-    }
-    return item.expenseParticular;
+ if (item.sourceType === 'Subproject') {
+ return item.budgetParticular && item.sourceName !== item.budgetParticular ? item.sourceName : '';
+ }
+ if (item.sourceType === 'Staffing') {
+ return item.expenseParticular !== item.sourceName ? item.sourceName : '';
+ }
+ if (item.sourceType === 'Other') {
+ return item.expenseParticular && item.expenseParticular !== item.sourceName ? item.expenseParticular : 'Other program expense';
+ }
+ if (item.sourceType === 'Activity') {
+ return item.sourceName;
+ }
+ return item.expenseParticular;
 };
 
 const isTaggedExclusion = (item: FinancialItem) => !!(item.isRealignment || item.isSavings || item.isCancelled);
 
 const getTargetObligationForTotals = (item: FinancialItem) =>
-    isTaggedExclusion(item) ? 0 : toFiniteNumber(item.targetObligationAmount);
+ isTaggedExclusion(item) ? 0 : toFiniteNumber(item.targetObligationAmount);
 
 const getTargetDisbursementForTotals = (item: FinancialItem) =>
-    isTaggedExclusion(item) ? 0 : toFiniteNumber(item.targetDisbursementAmount);
+ isTaggedExclusion(item) ? 0 : toFiniteNumber(item.targetDisbursementAmount);
 
 const getTaggedAllocationAmount = (item: FinancialItem) =>
-    isTaggedExclusion(item) ? toFiniteNumber(item.targetObligationAmount) : 0;
+ isTaggedExclusion(item) ? toFiniteNumber(item.targetObligationAmount) : 0;
 
 const FinancialAccomplishment: React.FC<Props> = ({
-    subprojects, setSubprojects,
-    activities, setActivities,
-    officeReqs, setOfficeReqs,
-    staffingReqs, setStaffingReqs,
-    otherProgramExpenses, setOtherProgramExpenses,
-    budgetCeilings = [],
-    uacsCodes,
-    onSelectSubproject, onSelectActivity,
-    onSelectOfficeReq, onSelectStaffingReq, onSelectOtherExpense,
-    onDataScopeChange
+ subprojects, setSubprojects,
+ activities, setActivities,
+ officeReqs, setOfficeReqs,
+ staffingReqs, setStaffingReqs,
+ otherProgramExpenses, setOtherProgramExpenses,
+ budgetCeilings = [],
+ uacsCodes,
+ onSelectSubproject, onSelectActivity,
+ onSelectOfficeReq, onSelectStaffingReq, onSelectOtherExpense,
+ onDataScopeChange
 }) => {
-    const { currentUser } = useAuth();
-    const { canEdit, canViewAll } = useUserAccess('Accomplishment - Financial');
-    const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
-    const defaultYear = new Date().getFullYear();
-
-    // Filter States (Persistent)
-    const [selectedYear, setSelectedYear] = useLocalStorageState<number | null>('fin_selectedYear', defaultYear);
-    const [selectedOu, setSelectedOu] = useLocalStorageState<string>('fin_selectedOu', 'All');
-    const [selectedTier, setSelectedTier] = useLocalStorageState<string>('fin_selectedTier', 'Tier 1');
-    const [selectedFundType, setSelectedFundType] = useLocalStorageState<string>('fin_selectedFundType', 'Current');
-    const [filtersOpen, setFiltersOpen] = useState(false);
-    
-    const [isLoading, setIsLoading] = useState(false);
-    const [originalItems, setOriginalItems] = useState<FinancialItem[]>([]);
-    const [items, setItems] = useState<FinancialItem[]>([]);
-    const [changedItems, setChangedItems] = useState<Map<string, FinancialItem>>(new Map());
-    const [isSavingAll, setIsSavingAll] = useState(false);
-    const [localSavingIds, setLocalSavingIds] = useState<Set<string>>(new Set());
-    const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
-    const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
-    const [monthLockMessage, setMonthLockMessage] = useState('');
-    type SortKey = 'targetObligationAmount' | 'targetObligationMonth' | 'actualObligationAmount' | 'actualObligationMonth' | 'targetDisbursementAmount' | 'targetDisbursementMonth' | 'actualDisbursementAmount' | 'actualDisbursementMonth';
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: 'asc' | 'desc' } | null>(null);
-    
-    // Persistent Expansion States (Stored as Arrays in localStorage)
-    const [expandedObjectTypes, setExpandedObjectTypes] = useLocalStorageState<string[]>('fin_expandedObjectTypes', ['MOOE', 'CO']);
-    const [expandedGroups, setExpandedGroups] = useLocalStorageState<string[]>('fin_expandedGroups', []);
-    const [expandedSubGroups, setExpandedSubGroups] = useLocalStorageState<string[]>('fin_expandedSubGroups', []);
-    const [expandedRows, setExpandedRows] = useLocalStorageState<string[]>('fin_expandedRows', []);
-
-    const getPolicySubjectForFinancialItem = (item: FinancialItem) => (
-        item.sourceType === 'Staffing'
-            ? { hiringStatus: item.status || 'Proposed' }
-            : { status: item.status || 'Proposed' }
-    );
-
-    const getFinancialStatusDecision = (item: FinancialItem) => {
-        const moduleKey = getDcfModuleKeyForSourceType(item.sourceType);
-        if (!moduleKey) {
-            return { allowed: false, code: 'blocked_by_status' as const, message: 'Unknown DCF source type.' };
-        }
-        return getStatusDecision({
-            moduleKey,
-            item: getPolicySubjectForFinancialItem(item),
-            action: 'editFinancialAccomplishment',
-            hasModuleAccess: canEdit,
-        });
-    };
-
-    const ensureFinancialItemAllowed = async (item: FinancialItem) => {
-        const moduleKey = getDcfModuleKeyForSourceType(item.sourceType);
-        if (!moduleKey) {
-            alert('Unknown DCF source type.');
-            return false;
-        }
-        return ensureDecisionAllowed(getFinancialStatusDecision(item), {
-            moduleKey,
-            item: getPolicySubjectForFinancialItem(item),
-            itemId: item.sourceId,
-            itemName: item.sourceName,
-            status: item.status as any,
-            action: 'editFinancialAccomplishment',
-            entityType: item.sourceType.toLowerCase(),
-        });
-    };
-
-    const validateFinancialActualMonth = async (item: FinancialItem, month: string) => {
-        if (!month) return true;
-        const moduleKey = getDcfModuleKeyForSourceType(item.sourceType);
-        if (!moduleKey) {
-            alert('Unknown DCF source type.');
-            return false;
-        }
-        if (!(await ensureFinancialItemAllowed(item))) return false;
-        const monthDecision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(monthDecision)) {
-            setMonthLockMessage('');
-            return true;
-        }
-        setMonthLockMessage(getMonthLockMessage(monthDecision));
-        return false;
-    };
-
-    const hasMonthChanged = (current?: string | null, original?: string | null) => (
-        normalizePolicyMonth(current) !== normalizePolicyMonth(original)
-    );
-
-    const getChangedRecordMonths = (
-        currentRecords: Array<{ id?: number | string; date?: string | null }> = [],
-        originalRecords: Array<{ id?: number | string; date?: string | null }> = []
-    ) => currentRecords
-        .filter((record, index) => {
-            const originalRecord = record.id !== undefined
-                ? originalRecords.find(item => item.id === record.id)
-                : originalRecords[index];
-            return !!record.date && (!originalRecord || hasMonthChanged(record.date, originalRecord.date));
-        })
-        .map(record => record.date)
-        .filter(Boolean) as string[];
-
-    const validateFinancialItemForSave = async (item: FinancialItem) => {
-        if (!(await ensureFinancialItemAllowed(item))) return false;
-        const originalItem = originalItems.find(original => original.uniqueId === item.uniqueId);
-        const months = [
-            ...getChangedRecordMonths(item.obligations || [], originalItem?.obligations || []),
-            ...getChangedRecordMonths(item.disbursements || [], originalItem?.disbursements || []),
-            ...SHORT_MONTHS
-                .map((month, index) => {
-                    const field = `actualDisbursement${month}`;
-                    const currentAmount = toFiniteNumber((item as any)[field]);
-                    const originalAmount = toFiniteNumber((originalItem as any)?.[field]);
-                    return currentAmount > 0 && !valuesDiffer(currentAmount, originalAmount)
-                        ? ''
-                        : currentAmount > 0
-                            ? `${selectedYear || defaultYear}-${String(index + 1).padStart(2, '0')}`
-                            : '';
-                })
-                .filter(Boolean),
-        ] as string[];
-        for (const month of months) {
-            if (!(await validateFinancialActualMonth(item, month))) return false;
-        }
-        return true;
-    };
-
-    // Initialize User OU lock based on permissions
-    useEffect(() => {
-        if (!selectedYear) {
-            setSelectedYear(defaultYear);
-        }
-        if (!canViewAll && currentUser?.operatingUnit) {
-            setSelectedOu(currentUser.operatingUnit);
-        }
-    }, [currentUser, canViewAll, defaultYear, selectedYear, setSelectedOu, setSelectedYear]);
-
-    useEffect(() => {
-        onDataScopeChange?.({
-            year: selectedYear || defaultYear,
-            operatingUnit: selectedOu,
-            tier: selectedTier,
-            fundType: selectedFundType,
-            canViewAllOus: canViewAll,
-            requestedBy: currentUser?.id ?? null
-        });
-    }, [canViewAll, currentUser?.id, defaultYear, onDataScopeChange, selectedFundType, selectedOu, selectedTier, selectedYear]);
-
-    // --- 1. Load and Normalize Data ---
-    useEffect(() => {
-        if (!selectedYear) return;
-        setIsLoading(true);
-
-        const fetchData = async () => {
-            try {
-                const matchesFilters = (item: any) => {
-                    const itemYear = item.fundingYear || item.fundYear;
-                    if (itemYear !== selectedYear) return false;
-                    if (selectedOu !== 'All' && item.operatingUnit !== selectedOu) return false;
-                    if (selectedTier !== 'All' && item.tier !== selectedTier) return false;
-                    if (selectedFundType !== 'All' && item.fundType !== selectedFundType) return false;
-                    return true;
-                };
-
-                const filteredSubprojects = (subprojects || []).filter(matchesFilters);
-                const filteredActivities = (activities || []).filter(matchesFilters);
-                const filteredOfficeReqs = (officeReqs || []).filter(matchesFilters);
-                const filteredStaffingReqs = (staffingReqs || []).filter(matchesFilters);
-                const filteredOtherProgramExpenses = (otherProgramExpenses || []).filter(matchesFilters);
-
-                const uniqueIds = (values: unknown[]) =>
-                    Array.from(new Set(values.map(Number).filter(Number.isFinite)));
-
-                const financialGroups = [
-                    { entityType: 'subproject_detail', ids: uniqueIds(filteredSubprojects.map(item => item.id)) },
-                    { entityType: 'activity_expense', ids: uniqueIds(filteredActivities.map(item => item.id)) },
-                    { entityType: 'office_requirement', ids: uniqueIds(filteredOfficeReqs.map(item => item.id)) },
-                    { entityType: 'staffing_expense', ids: uniqueIds(filteredStaffingReqs.map(item => item.id)) },
-                    { entityType: 'other_program_expense', ids: uniqueIds(filteredOtherProgramExpenses.map(item => item.id)) },
-                ];
-
-                const fetchFinancialRows = async (
-                    tableName: 'financial_obligations' | 'financial_disbursements',
-                    groups: Array<{ entityType: string; ids: number[] }>
-                ) => {
-                    const chunkSize = 100;
-                    const queries = groups.flatMap(group => {
-                        const chunks: number[][] = [];
-                        for (let index = 0; index < group.ids.length; index += chunkSize) {
-                            chunks.push(group.ids.slice(index, index + chunkSize));
-                        }
-                        return chunks.map(chunk =>
-                            supabase
-                                .from(tableName)
-                                .select('*')
-                                .eq('entity_type', group.entityType)
-                                .in('parent_id', chunk)
-                        );
-                    });
-
-                    if (queries.length === 0) return [];
-                    const responses = await Promise.all(queries);
-                    const error = responses.find(response => response.error)?.error;
-                    if (error) throw error;
-                    return responses.flatMap(response => response.data || []);
-                };
-
-                const [obliRes, disbRes] = await Promise.all([
-                    fetchFinancialRows('financial_obligations', financialGroups),
-                    fetchFinancialRows('financial_disbursements', financialGroups)
-                ]);
-
-                const centralizedObligations = obliRes || [];
-                const centralizedDisbursements = disbRes || [];
-
-                // Helper to get obligations for a specific item
-                const matchesCentralItemId = (sourceType: string, rowItemId: string | number | null | undefined, detailId?: number) => {
-                    const itemId = sourceType === 'Staffing'
-                        ? staffingExpenseItemId(detailId)
-                        : detailId !== undefined && detailId !== null
-                            ? detailId.toString()
-                            : null;
-
-                    if (itemId) return rowItemId?.toString() === itemId;
-                    if (sourceType === 'Staffing') return rowItemId === null || rowItemId === undefined || rowItemId === '';
-                    return true;
-                };
-
-                const getObligations = (sourceType: string, parentId: number, detailId?: number) => {
-                    const entityType = sourceType === 'Subproject' ? 'subproject_detail' : 
-                                      sourceType === 'Activity' ? 'activity_expense' : 
-                                      sourceType === 'Staffing' ? 'staffing_expense' :
-                                      sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
-                    
-                    const matches = centralizedObligations.filter(o => 
-                        o.entity_type === entityType && 
-                        o.parent_id === parentId && 
-                        matchesCentralItemId(sourceType, o.item_id, detailId)
-                    );
-
-                    return matches.map(o => ({
-                        id: o.id,
-                        date: o.obligation_date,
-                        amount: o.amount,
-                        remarks: o.remarks
-                    }));
-                };
-
-                const getDisbursements = (sourceType: string, parentId: number, detailId?: number) => {
-                    const entityType = sourceType === 'Subproject' ? 'subproject_detail' : 
-                                      sourceType === 'Activity' ? 'activity_expense' : 
-                                      sourceType === 'Staffing' ? 'staffing_expense' :
-                                      sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
-                    
-                    const matches = centralizedDisbursements.filter(d => 
-                        d.entity_type === entityType && 
-                        d.parent_id === parentId && 
-                        matchesCentralItemId(sourceType, d.item_id, detailId)
-                    );
-
-                    return matches.map(d => ({
-                        id: d.id,
-                        date: d.disbursement_date,
-                        amount: d.amount,
-                        remarks: d.remarks
-                    }));
-                };
-
-                const loadedItems: FinancialItem[] = [];
-                const defaultMonthly = {
-                     actualDisbursementJan: 0, actualDisbursementFeb: 0, actualDisbursementMar: 0,
-                     actualDisbursementApr: 0, actualDisbursementMay: 0, actualDisbursementJun: 0,
-                     actualDisbursementJul: 0, actualDisbursementAug: 0, actualDisbursementSep: 0,
-                     actualDisbursementOct: 0, actualDisbursementNov: 0, actualDisbursementDec: 0
-                };
-
-                // Subprojects
-                filteredSubprojects.forEach(sp => {
-                    (sp.details || []).forEach(d => {
-                        const obs = getObligations('Subproject', sp.id, d.id);
-                        const dibs = getDisbursements('Subproject', sp.id, d.id);
-                        
-                        loadedItems.push({
-                            uniqueId: `sp-${sp.id}-${d.id}`,
-                            sourceType: 'Subproject',
-                            sourceId: sp.id,
-                            detailId: d.id,
-                            uacsCode: d.uacsCode,
-                            objectType: d.objectType || 'MOOE',
-                            expenseParticular: d.expenseParticular || 'Unspecified',
-                            sourceName: sp.name,
-                            budgetParticular: d.particulars,
-                            targetObligationMonth: d.obligationMonth,
-                            targetObligationAmount: getBudgetLineAmount(d),
-                            targetDisbursementMonth: d.disbursementMonth,
-                            targetDisbursementAmount: getBudgetLineAmount(d),
-                            actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (d.actualObligationDate || ''),
-                            actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(d.actualObligationAmount),
-                            actualDisbursementMonth: dibs.length > 0 ? dibs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (d.actualDisbursementDate || ''),
-                            actualDisbursementAmount: dibs.length > 0 ? sumAmounts(dibs) : toFiniteNumber(d.actualDisbursementAmount),
-                            obligations: obs.length > 0 ? obs : getInitialObligations(d.obligations, d.actualObligationDate || '', toFiniteNumber(d.actualObligationAmount)),
-                            disbursements: dibs.length > 0 ? dibs : getInitialDisbursements(d.disbursements, d.actualDisbursementDate || '', toFiniteNumber(d.actualDisbursementAmount)),
-                            status: sp.status,
-                            isRealignment: sp.isRealignment || d.isRealignment,
-                            isSavings: sp.isSavings || d.isSavings,
-                            isCancelled: sp.status === 'Cancelled' || d.isCancelled,
-                            ...defaultMonthly,
-                            isConfirmed: false
-                        });
-                    });
-                });
-
-                // Activities
-                filteredActivities.forEach(act => {
-                    (act.expenses || []).forEach(e => {
-                        const obs = getObligations('Activity', act.id, e.id);
-                        const dibs = getDisbursements('Activity', act.id, e.id);
-
-                        loadedItems.push({
-                            uniqueId: `act-${act.id}-${e.id}`,
-                            sourceType: 'Activity',
-                            sourceId: act.id,
-                            detailId: e.id,
-                            uacsCode: e.uacsCode,
-                            objectType: e.objectType || 'MOOE',
-                            expenseParticular: e.expenseParticular || 'Unspecified',
-                            sourceName: act.name || `${act.type} (${act.component})`,
-                            targetObligationMonth: e.obligationMonth,
-                            targetObligationAmount: getBudgetLineAmount(e),
-                            targetDisbursementMonth: e.disbursementMonth,
-                            targetDisbursementAmount: getBudgetLineAmount(e),
-                            actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (e.actualObligationDate || ''),
-                            actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(e.actualObligationAmount),
-                            actualDisbursementMonth: dibs.length > 0 ? dibs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (e.actualDisbursementDate || ''),
-                            actualDisbursementAmount: dibs.length > 0 ? sumAmounts(dibs) : toFiniteNumber(e.actualDisbursementAmount),
-                            obligations: obs.length > 0 ? obs : getInitialObligations(e.obligations, e.actualObligationDate || '', toFiniteNumber(e.actualObligationAmount)),
-                            disbursements: dibs.length > 0 ? dibs : getInitialDisbursements(e.disbursements, e.actualDisbursementDate || '', toFiniteNumber(e.actualDisbursementAmount)),
-                            status: act.status,
-                            isRealignment: act.isRealignment || e.isRealignment,
-                            isSavings: act.isSavings || e.isSavings,
-                            isCancelled: act.status === 'Cancelled' || e.isCancelled,
-                            ...defaultMonthly,
-                            isConfirmed: false
-                        });
-                    });
-                });
-
-                // Office Requirements
-                filteredOfficeReqs.forEach(o => {
-                    const obs = getObligations('Office', o.id);
-                    const dibs = getDisbursements('Office', o.id);
-
-                    loadedItems.push({
-                        uniqueId: `office-${o.id}`,
-                        sourceType: 'Office',
-                        sourceId: o.id,
-                        uacsCode: o.uacsCode,
-                        objectType: 'MOOE',
-                        expenseParticular: 'Office Requirements',
-                        sourceName: o.equipment,
-                        targetObligationMonth: o.obligationDate,
-                        targetObligationAmount: toFiniteNumber(o.pricePerUnit) * toFiniteNumber(o.numberOfUnits),
-                        targetDisbursementMonth: o.disbursementDate,
-                        targetDisbursementAmount: toFiniteNumber(o.pricePerUnit) * toFiniteNumber(o.numberOfUnits),
-                        actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (o.actualObligationDate || ''),
-                        actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(o.actualObligationAmount),
-                        actualDisbursementMonth: dibs.length > 0 ? dibs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (o.actualDisbursementDate || ''),
-                        actualDisbursementAmount: dibs.length > 0 ? sumAmounts(dibs) : toFiniteNumber(o.actualDisbursementAmount),
-                        obligations: obs.length > 0 ? obs : getInitialObligations(o.obligations, o.actualObligationDate || '', toFiniteNumber(o.actualObligationAmount)),
-                        disbursements: dibs.length > 0 ? dibs : getInitialDisbursements(o.disbursements, o.actualDisbursementDate || '', toFiniteNumber(o.actualDisbursementAmount)),
-                        status: o.status,
-                        isRealignment: o.isRealignment,
-                        isSavings: o.isSavings,
-                        ...defaultMonthly,
-                        isConfirmed: false
-                    });
-                });
-
-                // Staffing
-                const staffingNormalizationUpdates: Array<{ id: number; expenses: StaffingRequirement['expenses'] }> = [];
-
-                filteredStaffingReqs.forEach(s => {
-                    if (s.expenses && s.expenses.length > 0) {
-                        const normalizedExpenses = normalizeStaffingExpenses(s.expenses);
-                        const hasNormalizedIds = normalizedExpenses.some((expense, index) => expense.id !== s.expenses?.[index]?.id);
-
-                        if (hasNormalizedIds) {
-                            staffingNormalizationUpdates.push({ id: s.id, expenses: normalizedExpenses });
-                        }
-
-                        normalizedExpenses.forEach(e => {
-                            const obs = getObligations('Staffing', s.id, e.id);
-                            const centralDibs = getDisbursements('Staffing', s.id, e.id);
-                            const disbursements = centralDibs.length > 0
-                                ? centralDibs
-                                : resolveDisbursementEntries({ ...e, disbursements: undefined }, selectedYear);
-                            const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
-
-                            loadedItems.push({
-                                uniqueId: `staff-${s.id}-${e.id}`,
-                                sourceType: 'Staffing',
-                                sourceId: s.id,
-                                detailId: e.id,
-                                uacsCode: e.uacsCode,
-                                objectType: e.objectType || 'MOOE',
-                                expenseParticular: e.expenseParticular || 'Salaries & Wages',
-                                sourceName: s.personnelPosition,
-                                targetObligationMonth: e.obligationDate,
-                                targetObligationAmount: getBudgetLineAmount(e),
-                                targetDisbursementMonth: 'Monthly',
-                                targetDisbursementAmount: getBudgetLineAmount(e),
-                                actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (e.actualObligationDate || ''),
-                                actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(e.actualObligationAmount),
-                                actualDisbursementMonth: disbursementSummary.latestDate || e.actualDisbursementDate || '',
-                                actualDisbursementAmount: disbursementSummary.total,
-                                obligations: obs.length > 0 ? obs : getInitialObligations(e.obligations, e.actualObligationDate || '', toFiniteNumber(e.actualObligationAmount)),
-                                disbursements,
-                                status: s.hiringStatus,
-                                isRealignment: s.isRealignment || e.isRealignment,
-                                isSavings: s.isSavings || e.isSavings,
-                                isCancelled: s.status === 'Cancelled' || e.isCancelled,
-                                ...defaultMonthly,
-                                ...disbursementSummary.monthlyFields,
-                                isConfirmed: false
-                            });
-                        });
-                    } else {
-                         const obs = getObligations('Staffing', s.id);
-                         const centralDibs = getDisbursements('Staffing', s.id);
-                         const disbursements = centralDibs.length > 0
-                             ? centralDibs
-                             : resolveDisbursementEntries({ ...s, disbursements: undefined }, selectedYear);
-                         const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
-
-                         loadedItems.push({
-                            uniqueId: `staff-${s.id}`,
-                            sourceType: 'Staffing',
-                            sourceId: s.id,
-                            uacsCode: s.uacsCode,
-                            objectType: 'MOOE',
-                            expenseParticular: 'Salaries & Wages',
-                            sourceName: s.personnelPosition,
-                            targetObligationMonth: s.obligationDate,
-                            targetObligationAmount: toFiniteNumber(s.annualSalary),
-                            targetDisbursementMonth: 'Monthly',
-                            targetDisbursementAmount: toFiniteNumber(s.annualSalary),
-                            actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (s.actualObligationDate || ''),
-                            actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(s.actualObligationAmount),
-                            actualDisbursementMonth: disbursementSummary.latestDate || s.actualDisbursementDate || '',
-                            actualDisbursementAmount: disbursementSummary.total,
-                            obligations: obs.length > 0 ? obs : getInitialObligations(s.obligations, s.actualObligationDate || '', toFiniteNumber(s.actualObligationAmount)),
-                            disbursements,
-                            status: s.hiringStatus,
-                            isRealignment: s.isRealignment,
-                            isSavings: s.isSavings,
-                            ...defaultMonthly,
-                            ...disbursementSummary.monthlyFields,
-                            isConfirmed: false
-                        });
-                    }
-                });
-
-                // Other
-                filteredOtherProgramExpenses.forEach(ope => {
-                    const obs = getObligations('Other', ope.id);
-                    const centralDibs = getDisbursements('Other', ope.id);
-                    const disbursements = centralDibs.length > 0
-                        ? centralDibs
-                        : resolveDisbursementEntries({ ...ope, disbursements: undefined }, selectedYear);
-                    const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
-
-                    loadedItems.push({
-                        uniqueId: `other-${ope.id}`,
-                        sourceType: 'Other',
-                        sourceId: ope.id,
-                        uacsCode: ope.uacsCode,
-                        objectType: 'MOOE',
-                        expenseParticular: 'Other Expenses',
-                        sourceName: ope.particulars,
-                        targetObligationMonth: ope.obligationDate,
-                        targetObligationAmount: toFiniteNumber(ope.amount),
-                        targetDisbursementMonth: ope.disbursementDate,
-                        targetDisbursementAmount: toFiniteNumber(ope.amount),
-                        actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (ope.actualObligationDate || ''),
-                        actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(ope.actualObligationAmount),
-                        actualDisbursementMonth: disbursementSummary.latestDate || ope.actualDisbursementDate || '',
-                        actualDisbursementAmount: disbursementSummary.total,
-                        obligations: obs.length > 0 ? obs : getInitialObligations(ope.obligations, ope.actualObligationDate || '', toFiniteNumber(ope.actualObligationAmount)),
-                        disbursements,
-                        status: ope.status,
-                        isRealignment: ope.isRealignment,
-                        isSavings: ope.isSavings,
-                        ...defaultMonthly,
-                        ...disbursementSummary.monthlyFields,
-                        isConfirmed: false
-                    });
-                });
-
-                if (staffingNormalizationUpdates.length > 0) {
-                    setStaffingReqs(prev => prev.map(req => {
-                        const update = staffingNormalizationUpdates.find(item => item.id === req.id);
-                        return update ? { ...req, expenses: update.expenses } : req;
-                    }));
-                }
-
-                setItems(loadedItems);
-                setOriginalItems(loadedItems);
-            } catch (error) {
-                console.error("Error loading data:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [selectedYear, selectedOu, selectedTier, selectedFundType, subprojects, activities, officeReqs, staffingReqs, otherProgramExpenses]);
-
-
-    // --- 2. Grouping Logic ---
-    const groupedItems = useMemo(() => {
-        const typeGroups: { [key: string]: { uacsMap: { [code: string]: { items: FinancialItem[], description: string, totalTargetObli: number, totalActualObli: number, totalTargetDisb: number, totalActualDisb: number } } } } = {};
-
-        items.forEach(item => {
-            const type = item.objectType || 'Unspecified';
-            const code = item.uacsCode || 'No Code';
-
-            if (!typeGroups[type]) {
-                typeGroups[type] = { uacsMap: {} };
-            }
-
-            if (!typeGroups[type].uacsMap[code]) {
-                // Find description from UACS Codes prop
-                let desc = '';
-                if (uacsCodes[type]) {
-                    for (const part in uacsCodes[type]) {
-                        if (uacsCodes[type][part][code]) {
-                            desc = uacsCodes[type][part][code];
-                            break;
-                        }
-                    }
-                }
-                
-                typeGroups[type].uacsMap[code] = {
-                    items: [],
-                    description: desc,
-                    totalTargetObli: 0,
-                    totalActualObli: 0,
-                    totalTargetDisb: 0,
-                    totalActualDisb: 0
-                };
-            }
-
-            const group = typeGroups[type].uacsMap[code];
-            group.items.push(item);
-            group.totalTargetObli += getTargetObligationForTotals(item);
-            group.totalActualObli += toFiniteNumber(item.actualObligationAmount);
-            group.totalTargetDisb += getTargetDisbursementForTotals(item);
-            group.totalActualDisb += toFiniteNumber(item.actualDisbursementAmount);
-        });
-
-        // Convert to array structure for rendering
-        const groupItemsBySource = (items: FinancialItem[]) => {
-            const map = new Map<number, { sourceId: number, sourceName: string, items: FinancialItem[], targetObligationAmount: number, actualObligationAmount: number, targetDisbursementAmount: number, actualDisbursementAmount: number }>();
-            items.forEach(item => {
-                if (!map.has(item.sourceId)) {
-                    map.set(item.sourceId, {
-                        sourceId: item.sourceId,
-                        sourceName: item.sourceName,
-                        items: [],
-                        targetObligationAmount: 0,
-                        actualObligationAmount: 0,
-                        targetDisbursementAmount: 0,
-                        actualDisbursementAmount: 0,
-                    });
-                }
-                const g = map.get(item.sourceId)!;
-                g.items.push(item);
-                g.targetObligationAmount += getTargetObligationForTotals(item);
-                g.actualObligationAmount += toFiniteNumber(item.actualObligationAmount);
-                g.targetDisbursementAmount += getTargetDisbursementForTotals(item);
-                g.actualDisbursementAmount += toFiniteNumber(item.actualDisbursementAmount);
-            });
-            return Array.from(map.values());
-        };
-
-        return Object.entries(typeGroups).map(([type, data]) => ({
-            objectType: type,
-            uacsGroups: Object.entries(data.uacsMap).map(([code, groupData]) => ({
-                uacsCode: code,
-                description: groupData.description,
-                key: `${type}-${code}`,
-                items: groupData.items,
-                totalTargetObli: groupData.totalTargetObli,
-                totalActualObli: groupData.totalActualObli,
-                totalTargetDisb: groupData.totalTargetDisb,
-                totalActualDisb: groupData.totalActualDisb,
-                subGroups: {
-                    'Subprojects': groupItemsBySource(groupData.items.filter(i => i.sourceType === 'Subproject')),
-                    'Activities': groupItemsBySource(groupData.items.filter(i => i.sourceType === 'Activity')),
-                    'Program Management': groupItemsBySource(groupData.items.filter(i => ['Office', 'Staffing', 'Other'].includes(i.sourceType)))
-                }
-            })).sort((a, b) => a.uacsCode.localeCompare(b.uacsCode))
-        })).sort((a, b) => a.objectType.localeCompare(b.objectType));
-    }, [items, uacsCodes]);
-
-    // --- 2.1 Grand Total Calculation ---
-    const grandTotals = useMemo(() => {
-        return items.reduce((acc, item) => ({
-            targetObli: acc.targetObli + getTargetObligationForTotals(item),
-            actualObli: acc.actualObli + toFiniteNumber(item.actualObligationAmount),
-            targetDisb: acc.targetDisb + getTargetDisbursementForTotals(item),
-            actualDisb: acc.actualDisb + toFiniteNumber(item.actualDisbursementAmount)
-        }), { targetObli: 0, actualObli: 0, targetDisb: 0, actualDisb: 0 });
-    }, [items]);
-
-    const summaryCards = useMemo(() => {
-        const selectedYearNumber = Number(selectedYear);
-        const hasBudgetCeilingScope = selectedTier === 'Tier 1' && selectedFundType === 'Current';
-        const budgetCeiling = Number.isFinite(selectedYearNumber) && hasBudgetCeilingScope
-            ? budgetCeilings.reduce((sum, ceiling) => {
-                if (Number(ceiling.year) !== selectedYearNumber) return sum;
-                if (selectedOu !== 'All' && ceiling.operating_unit !== selectedOu) return sum;
-                return sum + toFiniteNumber(ceiling.amount);
-            }, 0)
-            : 0;
-
-        return items.reduce((acc, item) => {
-            const targetObligation = getTargetObligationForTotals(item);
-            const targetDisbursement = getTargetDisbursementForTotals(item);
-            const actualObligation = toFiniteNumber(item.actualObligationAmount);
-            const actualDisbursement = toFiniteNumber(item.actualDisbursementAmount);
-
-            acc.actualObligation += actualObligation;
-            acc.actualDisbursement += actualDisbursement;
-            acc.realignedSavings += getTaggedAllocationAmount(item);
-            acc.totalAllocation += targetObligation;
-            acc.targetObligation += targetObligation;
-            acc.targetDisbursement += targetDisbursement;
-
-            return acc;
-        }, {
-            budgetCeiling,
-            totalAllocation: 0,
-            targetObligation: 0,
-            actualObligation: 0,
-            targetDisbursement: 0,
-            actualDisbursement: 0,
-            realignedSavings: 0,
-            hasBudgetCeilingScope
-        });
-    }, [budgetCeilings, items, selectedFundType, selectedOu, selectedTier, selectedYear]);
-
-    const getPercent = (value: number, target: number) => {
-        if (!target) return null;
-        return Math.round((value / target) * 100);
-    };
-
-    const allocationCeilingPercent = getPercent(summaryCards.totalAllocation, summaryCards.budgetCeiling);
-    const obligationUtilizationPercent = getPercent(summaryCards.actualObligation, summaryCards.targetObligation);
-    const disbursementUtilizationPercent = getPercent(summaryCards.actualDisbursement, summaryCards.targetDisbursement);
-    const taggedAllocationPercent = getPercent(summaryCards.realignedSavings, summaryCards.totalAllocation);
-    const ceilingVariance = summaryCards.budgetCeiling - summaryCards.totalAllocation;
-
-    const financialSummaryCards = [
-        {
-            label: 'Total Allocation',
-            value: summaryCards.totalAllocation,
-            indicator: !summaryCards.hasBudgetCeilingScope
-                ? 'Budget ceiling applies to Tier 1 Current only'
-                : summaryCards.budgetCeiling <= 0
-                    ? 'No budget ceiling set'
-                    : ceilingVariance < 0
-                        ? `Ceiling ${formatCurrency(summaryCards.budgetCeiling)} · ${allocationCeilingPercent}% used · ${formatCurrency(Math.abs(ceilingVariance))} exceeded`
-                        : `Ceiling ${formatCurrency(summaryCards.budgetCeiling)} · ${allocationCeilingPercent}% used · ${formatCurrency(ceilingVariance)} remaining`,
-            tone: summaryCards.hasBudgetCeilingScope && ceilingVariance < 0 ? 'danger' : 'neutral'
-        },
-        {
-            label: 'Obligation',
-            value: summaryCards.actualObligation,
-            indicator: obligationUtilizationPercent === null
-                ? `Target ${formatCurrency(summaryCards.targetObligation)} · No target set`
-                : `Target ${formatCurrency(summaryCards.targetObligation)} · ${obligationUtilizationPercent}% utilized`,
-            tone: obligationUtilizationPercent !== null && obligationUtilizationPercent > 100 ? 'danger' : 'neutral'
-        },
-        {
-            label: 'Disbursement',
-            value: summaryCards.actualDisbursement,
-            indicator: disbursementUtilizationPercent === null
-                ? `Target ${formatCurrency(summaryCards.targetDisbursement)} · No target set`
-                : `Target ${formatCurrency(summaryCards.targetDisbursement)} · ${disbursementUtilizationPercent}% utilized`,
-            tone: disbursementUtilizationPercent !== null && disbursementUtilizationPercent > 100 ? 'danger' : 'neutral'
-        },
-        {
-            label: 'Realigned/Savings',
-            value: summaryCards.realignedSavings,
-            indicator: taggedAllocationPercent === null ? '0% of allocation' : `${taggedAllocationPercent}% of allocation`,
-            tone: summaryCards.realignedSavings > 0 ? 'warning' : 'neutral'
-        },
-    ];
-
-    const availableYears = useMemo(() => {
-        const years = new Set<string>(filterYears);
-        [
-            ...subprojects.map(item => item.fundingYear),
-            ...activities.map(item => item.fundingYear),
-            ...officeReqs.map(item => item.fundYear),
-            ...staffingReqs.map(item => item.fundYear),
-            ...otherProgramExpenses.map(item => item.fundYear),
-            ...budgetCeilings.map(item => item.year),
-            defaultYear,
-        ].forEach(year => {
-            if (year) years.add(year.toString());
-        });
-        return Array.from(years).sort((a, b) => Number(b) - Number(a));
-    }, [activities, budgetCeilings, defaultYear, officeReqs, otherProgramExpenses, staffingReqs, subprojects]);
-
-
-    // --- 3. Handlers ---
-
-    const toggleObjectType = (type: string) => {
-        setExpandedObjectTypes(prev => {
-            if (prev.includes(type)) return prev.filter(t => t !== type);
-            return [...prev, type];
-        });
-    };
-
-    const toggleGroup = (key: string) => {
-        setExpandedGroups(prev => {
-            if (prev.includes(key)) return prev.filter(k => k !== key);
-            return [...prev, key];
-        });
-    };
-
-    const toggleSubGroup = (key: string) => {
-        setExpandedSubGroups(prev => {
-            if (prev.includes(key)) return prev.filter(k => k !== key);
-            return [...prev, key];
-        });
-    };
-
-    const toggleRowExpansion = (uniqueId: string) => {
-        setExpandedRows(prev => {
-            if (prev.includes(uniqueId)) return prev.filter(id => id !== uniqueId);
-            return [...prev, uniqueId];
-        });
-    }
-
-    // Update Local State for any field
-    const updateLocalItem = (uniqueId: string, updates: Partial<FinancialItem>) => {
-        setItems(prev => prev.map(item => {
-            if (item.uniqueId === uniqueId) {
-                const newItem = { ...item, ...updates };
-
-                // If obligations were updated, auto-sum amount and update month
-                if (updates.obligations) {
-                    const total = sumAmounts(updates.obligations);
-                    newItem.actualObligationAmount = total;
-                    
-                    if (updates.obligations.length > 0) {
-                        const sorted = [...updates.obligations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                        newItem.actualObligationMonth = sorted[0].date;
-                    }
-                }
-
-                // If disbursements were updated, auto-sum amount and update month
-                if (updates.disbursements) {
-                    const summary = summarizeDisbursements(updates.disbursements, selectedYear?.toString());
-                    newItem.actualDisbursementAmount = summary.total;
-                    newItem.actualDisbursementMonth = summary.latestDate;
-                    Object.assign(newItem, summary.monthlyFields);
-                }
-
-                setChangedItems(prevMap => {
-                    const newMap = new Map(prevMap);
-                    newMap.set(uniqueId, newItem);
-                    return newMap;
-                });
-                return newItem;
-            }
-            return item;
-        }));
-    };
-
-    // Special handler for monthly disbursement updates to auto-sum total
-    const updateLocalMonthly = (uniqueId: string, month: string, value: number) => {
-        setItems(prev => prev.map(item => {
-            if (item.uniqueId === uniqueId) {
-                // Construct new item state
-                const newItem: any = { ...item, [`actualDisbursement${month}`]: value };
-                // Recalculate total
-                let total = 0;
-                SHORT_MONTHS.forEach(m => {
-                    total += toFiniteNumber(newItem[`actualDisbursement${m}`]);
-                });
-                newItem.actualDisbursementAmount = total;
-                
-                setChangedItems(prevMap => {
-                    const newMap = new Map(prevMap);
-                    newMap.set(uniqueId, newItem);
-                    return newMap;
-                });
-                
-                return newItem;
-            }
-            return item;
-        }));
-    };
-
-    // Group level month update
-    const handleGroupMonthChange = (groupKey: string, field: 'actualObligationMonth' | 'actualDisbursementMonth', dateStr: string) => {
-        let targetGroupItems: FinancialItem[] = [];
-        for (const typeGroup of groupedItems) {
-            const found = typeGroup.uacsGroups.find(ug => ug.key === groupKey);
-            if (found) {
-                targetGroupItems = found.items;
-                break;
-            }
-        }
-        if (targetGroupItems.length === 0) return;
-
-        setItems(prev => prev.map(item => {
-            if (targetGroupItems.some(gi => gi.uniqueId === item.uniqueId)) {
-                const updated = { ...item, [field]: dateStr };
-                setChangedItems(prevMap => {
-                    const newMap = new Map(prevMap);
-                    newMap.set(item.uniqueId, updated);
-                    return newMap;
-                });
-                return updated;
-            }
-            return item;
-        }));
-    };
-
-    const handleTitleClick = (item: FinancialItem) => {
-        if (item.sourceType === 'Subproject') {
-            const sp = subprojects.find(s => s.id === item.sourceId);
-            if (sp) onSelectSubproject(sp);
-        } else if (item.sourceType === 'Activity') {
-            const act = activities.find(a => a.id === item.sourceId);
-            if (act) onSelectActivity(act);
-        } else if (item.sourceType === 'Office') {
-            const req = officeReqs.find(r => r.id === item.sourceId);
-            if (req) onSelectOfficeReq(req);
-        } else if (item.sourceType === 'Staffing') {
-            const req = staffingReqs.find(r => r.id === item.sourceId);
-            if (req) onSelectStaffingReq(req);
-        } else if (item.sourceType === 'Other') {
-            const req = otherProgramExpenses.find(r => r.id === item.sourceId);
-            if (req) onSelectOtherExpense(req);
-        }
-    };
-
-    const syncObligationsToCentralTable = async (item: FinancialItem) => {
-        if (!supabase) return;
-        
-        const entityType = item.sourceType === 'Subproject' ? 'subproject_detail' : 
-                          item.sourceType === 'Activity' ? 'activity_expense' : 
-                          item.sourceType === 'Staffing' ? 'staffing_expense' :
-                          item.sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
-        
-        const parentId = item.sourceId;
-        const itemId = item.sourceType === 'Staffing'
-            ? staffingExpenseItemId(item.detailId)
-            : item.detailId?.toString() || null;
-
-        // 1. Delete existing records for this specific item
-        let deleteQuery = supabase.from('financial_obligations')
-            .delete()
-            .eq('entity_type', entityType)
-            .eq('parent_id', parentId);
-        
-        if (itemId === null) {
-            deleteQuery = deleteQuery.is('item_id', null);
-        } else {
-            deleteQuery = deleteQuery.eq('item_id', itemId);
-        }
-        
-        const { error: deleteError } = await deleteQuery;
-        
-        if (deleteError) {
-            console.error("Error deleting old obligations:", deleteError);
-            throw deleteError;
-        }
-
-        if (!item.obligations || item.obligations.length === 0) return;
-
-        // 2. Insert new records
-        const payload = item.obligations.map(o => ({
-            entity_type: entityType,
-            parent_id: parentId,
-            item_id: itemId,
-            obligation_date: o.date,
-            amount: toFiniteNumber(o.amount),
-            remarks: o.remarks || ''
-        }));
-
-        const { error: insertError } = await supabase.from('financial_obligations').insert(payload);
-        if (insertError) {
-            console.error("Error inserting obligations:", insertError);
-            throw insertError;
-        }
-    };
-
-    const syncDisbursementsToCentralTable = async (item: FinancialItem) => {
-        if (!supabase) return;
-        
-        const entityType = item.sourceType === 'Subproject' ? 'subproject_detail' : 
-                          item.sourceType === 'Activity' ? 'activity_expense' : 
-                          item.sourceType === 'Staffing' ? 'staffing_expense' :
-                          item.sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
-        
-        const parentId = item.sourceId;
-        const itemId = item.sourceType === 'Staffing'
-            ? staffingExpenseItemId(item.detailId)
-            : item.detailId?.toString() || null;
-
-        let deleteQuery = supabase.from('financial_disbursements')
-            .delete()
-            .eq('entity_type', entityType)
-            .eq('parent_id', parentId);
-        
-        if (itemId === null) {
-            deleteQuery = deleteQuery.is('item_id', null);
-        } else {
-            deleteQuery = deleteQuery.eq('item_id', itemId);
-        }
-
-        const { error: deleteError } = await deleteQuery;
-        
-        if (deleteError) {
-            console.error("Error deleting old disbursements:", deleteError);
-            throw deleteError;
-        }
-
-        if (!item.disbursements || item.disbursements.length === 0) return;
-
-        const payload = item.disbursements.map(d => ({
-            entity_type: entityType,
-            parent_id: parentId,
-            item_id: itemId,
-            disbursement_date: d.date,
-            amount: toFiniteNumber(d.amount),
-            remarks: d.remarks || ''
-        }));
-
-        const { error: insertError } = await supabase.from('financial_disbursements').insert(payload);
-        if (insertError) {
-            console.error("Error inserting disbursements:", insertError);
-            throw insertError;
-        }
-    };
-
-    const saveItemToDB = async (item: FinancialItem) => {
-        const submittedAt = new Date().toISOString();
-        if (item.sourceType === 'Subproject') {
-            const sp = subprojects.find(s => s.id === item.sourceId);
-            if (!sp) throw new Error("Subproject not found");
-            
-            const updatedDetails = sp.details.map(d => {
-                if (d.id === item.detailId) {
-                    const updated = { 
-                        ...d, 
-                        actualObligationDate: item.actualObligationMonth,
-                        actualObligationAmount: item.actualObligationAmount,
-                        actualDisbursementDate: item.actualDisbursementMonth,
-                        actualDisbursementAmount: item.actualDisbursementAmount,
-                        obligations: item.obligations,
-                        disbursements: item.disbursements
-                    };
-                    // Update targets if Proposed
-                    if (item.status === 'Proposed') {
-                        updated.obligationMonth = item.targetObligationMonth;
-                        updated.disbursementMonth = item.targetDisbursementMonth;
-                        updated.pricePerUnit = item.targetObligationAmount;
-                        updated.numberOfUnits = 1;
-                    }
-                    return updated;
-                }
-                return d;
-            });
-            
-            if (supabase) {
-                const { error: updateError } = await supabase.from('subprojects').update({ details: updatedDetails }).eq('id', sp.id);
-                if (updateError) throw updateError;
-            }
-            setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, details: updatedDetails } : s));
-
-        } else if (item.sourceType === 'Activity') {
-            const act = activities.find(a => a.id === item.sourceId);
-            if (!act) throw new Error("Activity not found");
-
-            const updatedExpenses = act.expenses.map(e => {
-                 if (e.id === item.detailId) {
-                    const updated = { 
-                        ...e, 
-                        actualObligationDate: item.actualObligationMonth,
-                        actualObligationAmount: item.actualObligationAmount,
-                        actualDisbursementDate: item.actualDisbursementMonth,
-                        actualDisbursementAmount: item.actualDisbursementAmount
-                    };
-                    // Update targets if Proposed
-                    if (item.status === 'Proposed') {
-                        updated.obligationMonth = item.targetObligationMonth;
-                        updated.disbursementMonth = item.targetDisbursementMonth;
-                        updated.amount = item.targetObligationAmount;
-                    }
-                    return updated;
-                }
-                return e;
-            });
-
-            if (supabase) {
-                // Don't include obligations/disbursements in the direct update of activities table
-                // as they are stored in the centralized tables and causing schema cache errors
-                const { error: updateError } = await supabase.from('activities').update({ expenses: updatedExpenses }).eq('id', act.id);
-                if (updateError) throw updateError;
-            }
-            setActivities(prev => prev.map(a => a.id === act.id ? { ...a, expenses: updatedExpenses } : a));
-
-        } else if (item.sourceType === 'Staffing') {
-            const s = staffingReqs.find(req => req.id === item.sourceId);
-            if (!s) throw new Error("Staffing Requirement not found");
-
-            let payload: any = {};
-            let updatedExpenses = normalizeStaffingExpenses(s.expenses || []);
-
-            if (staffingExpenseItemId(item.detailId)) {
-                updatedExpenses = updatedExpenses.map(e => {
-                    if (e.id === item.detailId) {
-                        const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
-                        const updatedExpense: any = {
-                            ...e,
-                            actualObligationDate: item.actualObligationMonth,
-                            actualObligationAmount: item.actualObligationAmount,
-                            actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
-                            actualDisbursementAmount: disbursementSummary.total,
-                            disbursements: item.disbursements || []
-                        };
-                        SHORT_MONTHS.forEach(m => {
-                            updatedExpense[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
-                        });
-                        // Update targets if Proposed
-                        if (item.status === 'Proposed') {
-                            updatedExpense.obligationDate = item.targetObligationMonth;
-                            updatedExpense.amount = item.targetObligationAmount;
-                        }
-                        return updatedExpense;
-                    }
-                    return e;
-                });
-
-                // Aggregate totals for the root
-                let totalActualObli = 0;
-                let totalActualDisb = 0;
-                const monthlyTotals: any = {};
-                SHORT_MONTHS.forEach(m => monthlyTotals[`actualDisbursement${m}`] = 0);
-
-                updatedExpenses.forEach(e => {
-                    totalActualObli += toFiniteNumber(e.actualObligationAmount);
-                    totalActualDisb += toFiniteNumber(e.actualDisbursementAmount);
-                    SHORT_MONTHS.forEach(m => {
-                        monthlyTotals[`actualDisbursement${m}`] += toFiniteNumber((e as any)[`actualDisbursement${m}`]);
-                    });
-                });
-
-                payload = {
-                    expenses: updatedExpenses,
-                    actualObligationAmount: totalActualObli,
-                    actualDisbursementAmount: totalActualDisb,
-                    actualObligationDate: item.actualObligationMonth || s.actualObligationDate,
-                    actualDisbursementDate: item.actualDisbursementMonth || s.actualDisbursementDate,
-                    ...monthlyTotals
-                };
-                
-                if (item.status === 'Proposed') {
-                    payload.obligationDate = item.targetObligationMonth;
-                    payload.annualSalary = item.targetObligationAmount;
-                }
-
-            } else {
-                const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
-                payload = {
-                     actualObligationDate: item.actualObligationMonth,
-                     actualObligationAmount: item.actualObligationAmount,
-                     actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
-                     actualDisbursementAmount: disbursementSummary.total
-                };
-                SHORT_MONTHS.forEach(m => {
-                    payload[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
-                });
-                if (item.status === 'Proposed') {
-                    payload.obligationDate = item.targetObligationMonth;
-                    payload.annualSalary = item.targetObligationAmount;
-                }
-            }
-
-            const actualDateBasis = getProgramManagementPhysicalDateBasis(payload);
-            const previousActualDateBasis = getProgramManagementPhysicalDateBasis(s);
-            payload.physical_accomplishment_submitted_at = resolvePhysicalAccomplishmentSubmittedAt({
-                hasPhysicalAccomplishment: !!actualDateBasis,
-                hasChanged: valuesDiffer(previousActualDateBasis, actualDateBasis),
-                previousSubmittedAt: s.physical_accomplishment_submitted_at,
-                submittedAt
-            });
-
-            if (supabase) {
-                const { error: updateError } = await supabase.from('staffing_requirements').update(payload).eq('id', item.sourceId);
-                if (updateError) throw updateError;
-            }
-            setStaffingReqs(prev => prev.map(req => req.id === item.sourceId ? { ...req, ...payload } : req));
-
-        } else if (item.sourceType === 'Other') {
-            const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
-            const payload: any = {
-                 actualObligationDate: item.actualObligationMonth,
-                 actualObligationAmount: item.actualObligationAmount,
-                 actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
-                 actualDisbursementAmount: disbursementSummary.total
-            };
-            
-            SHORT_MONTHS.forEach(m => {
-                payload[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
-            });
-
-            if (item.status === 'Proposed') {
-                payload.obligationDate = item.targetObligationMonth;
-                payload.disbursementDate = item.targetDisbursementMonth;
-                payload.amount = item.targetObligationAmount;
-            }
-
-            if (supabase) {
-                const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.sourceId);
-                if (updateError) throw updateError;
-            }
-            setOtherProgramExpenses(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
-        } else if (item.sourceType === 'Office') {
-            const payload: any = {
-                 actualObligationDate: item.actualObligationMonth,
-                 actualObligationAmount: item.actualObligationAmount,
-                 actualDisbursementDate: item.actualDisbursementMonth,
-                 actualDisbursementAmount: item.actualDisbursementAmount,
-                 obligations: item.obligations,
-                 disbursements: item.disbursements
-            };
-            if (item.status === 'Proposed') {
-                payload.obligationDate = item.targetObligationMonth;
-                payload.disbursementDate = item.targetDisbursementMonth;
-                payload.pricePerUnit = item.targetObligationAmount;
-                payload.numberOfUnits = 1;
-            }
-            const o = officeReqs.find(req => req.id === item.sourceId);
-            const actualDateBasis = getProgramManagementPhysicalDateBasis(payload);
-            const previousActualDateBasis = getProgramManagementPhysicalDateBasis(o || {});
-            payload.physical_accomplishment_submitted_at = resolvePhysicalAccomplishmentSubmittedAt({
-                hasPhysicalAccomplishment: !!actualDateBasis,
-                hasChanged: valuesDiffer(previousActualDateBasis, actualDateBasis),
-                previousSubmittedAt: o?.physical_accomplishment_submitted_at,
-                submittedAt
-            });
-            if (supabase) {
-                const { error: updateError } = await supabase.from('office_requirements').update(payload).eq('id', item.sourceId);
-                if (updateError) throw updateError;
-            }
-            setOfficeReqs(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
-        }
-
-        // Sync with centralized obligations table
-        await syncObligationsToCentralTable(item);
-        await syncDisbursementsToCentralTable(item);
-    };
-
-    const undoLocalItem = (uniqueId: string) => {
-        const original = originalItems.find(i => i.uniqueId === uniqueId);
-        if (original) {
-            setItems(prev => prev.map(item => item.uniqueId === uniqueId ? original : item));
-            setChangedItems(prev => {
-                const next = new Map(prev);
-                next.delete(uniqueId);
-                return next;
-            });
-        }
-    };
-
-    const handleSort = (key: SortKey) => {
-        setSortConfig(prev => {
-            if (prev?.key === key) {
-                if (prev.direction === 'asc') return { key, direction: 'desc' };
-                return null; // clear sort
-            }
-            return { key, direction: 'asc' };
-        });
-    };
-
-    const SortIcon = (key: SortKey) => {
-        if (sortConfig?.key !== key) return <ArrowUpDown className="inline-block w-3 h-3 ml-1 text-gray-400" />;
-        return sortConfig.direction === 'asc' ? <ArrowUp className="inline-block w-3 h-3 ml-1 text-emerald-500" /> : <ArrowDown className="inline-block w-3 h-3 ml-1 text-emerald-500" />;
-    };
-
-    const handleSaveAllClick = () => {
-        if (!canEdit || changedItems.size === 0) return;
-        setIsSaveConfirmOpen(true);
-    };
-
-    const confirmSaveAll = async () => {
-        setIsSaveConfirmOpen(false);
-        setIsSavingAll(true);
-        try {
-            const itemsToSave: FinancialItem[] = Array.from(changedItems.values() as Iterable<FinancialItem>);
-            for (const item of itemsToSave) {
-                if (!(await validateFinancialItemForSave(item))) {
-                    setIsSavingAll(false);
-                    return;
-                }
-            }
-            await Promise.all(itemsToSave.map((item: FinancialItem) => saveItemToDB(item)));
-            
-            // Mark as saved and clear changes (but don't lock)
-            setItems(prev => prev.map(item => {
-                if (changedItems.has(item.uniqueId)) {
-                    return { ...item, isConfirmed: false };
-                }
-                return item;
-            }));
-            setChangedItems(new Map());
-            setSaveSuccessMessage('Changes saved successfully!');
-            setTimeout(() => setSaveSuccessMessage(''), 3000);
-        } catch (error: any) {
-            console.error("Error saving all changes:", error);
-            alert("Failed to save some changes. " + error.message);
-        } finally {
-            setIsSavingAll(false);
-        }
-    };
-
-    const handleConfirmItem = async (item: FinancialItem) => {
-        if (!canEdit) return;
-        if (!(await validateFinancialItemForSave(item))) return;
-
-        setLocalSavingIds(prev => new Set(prev).add(item.uniqueId));
-        try {
-            await saveItemToDB(item);
-            
-            updateLocalItem(item.uniqueId, { isConfirmed: false });
-            setChangedItems(prev => {
-                const newMap = new Map(prev);
-                newMap.delete(item.uniqueId);
-                return newMap;
-            });
-
-        } catch (error: any) {
-            console.error("Error saving accomplishment:", error);
-            alert("Failed to save changes: " + (error.message || "Unknown error"));
-        } finally {
-            setLocalSavingIds(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(item.uniqueId);
-                return newSet;
-            });
-        }
-    };
-
-    // --- Render ---
-
-    return (
-        <div className="data-list-page">
-            <div className="data-list-header">
-                <div>
-                    <h2 className="data-list-title">Financial Accomplishment Collection Form</h2>
-                </div>
-                <div className="page-filter-toggle">
-                    <span className="page-filter-summary">
-                        {[selectedOu === 'All' ? 'All OUs' : selectedOu, selectedTier, selectedFundType, selectedYear].join(' / ')}
-                    </span>
-                    <button
-                        type="button"
-                        className={`btn btn-secondary page-filter-button ${filtersOpen ? 'is-open' : ''}`}
-                        onClick={() => setFiltersOpen(prev => !prev)}
-                        aria-expanded={filtersOpen}
-                        aria-controls="financial-accomplishment-filter-panel"
-                    >
-                        <SlidersHorizontal aria-hidden="true" />
-                        <span>Filters</span>
-                        <ChevronDown aria-hidden="true" className="page-filter-button__chevron" />
-                    </button>
-                </div>
-            </div>
-
-            <div
-                id="financial-accomplishment-filter-panel"
-                className={`report-filter-panel dashboard-filter-panel page-filter-panel ${filtersOpen ? 'is-open' : ''}`}
-                hidden={!filtersOpen}
-            >
-                <div className="report-filter-grid">
-                    <div className="report-filter">
-                        <label htmlFor="financial-ou-filter" className="form-label">OU</label>
-                        <select
-                            id="financial-ou-filter"
-                            value={selectedOu}
-                            onChange={(event) => setSelectedOu(event.target.value)}
-                            disabled={!canViewAll}
-                            className="form-control"
-                        >
-                            <option value="All">All OUs</option>
-                            {operatingUnits.map(ou => (
-                                <option key={ou} value={ou}>{ou}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="report-filter">
-                        <label htmlFor="financial-tier-filter" className="form-label">Tier</label>
-                        <select
-                            id="financial-tier-filter"
-                            value={selectedTier}
-                            onChange={(event) => setSelectedTier(event.target.value)}
-                            className="form-control"
-                        >
-                            <option value="All">All Tiers</option>
-                            {tiers.map(tier => (
-                                <option key={tier} value={tier}>{tier}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="report-filter">
-                        <label htmlFor="financial-fund-type-filter" className="form-label">Fund Type</label>
-                        <select
-                            id="financial-fund-type-filter"
-                            value={selectedFundType}
-                            onChange={(event) => setSelectedFundType(event.target.value)}
-                            className="form-control"
-                        >
-                            <option value="All">All Fund Types</option>
-                            {fundTypes.map(fundType => (
-                                <option key={fundType} value={fundType}>{fundType}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="report-filter">
-                        <label htmlFor="financial-year-filter" className="form-label">Year</label>
-                        <select
-                            id="financial-year-filter"
-                            value={(selectedYear || defaultYear).toString()}
-                            onChange={(event) => setSelectedYear(Number(event.target.value))}
-                            className="form-control"
-                        >
-                            {availableYears.map(year => (
-                                <option key={year} value={year}>{year}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-24">
-                    <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mb-4" />
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">Loading financial data...</p>
-                </div>
-            ) : (
-            <div className="data-table-card">
-            <section className="financial-accomplishment-summary-grid" aria-label="Financial accomplishment summary">
-                {financialSummaryCards.map(card => (
-                    <div key={card.label} className={`financial-accomplishment-summary-card financial-accomplishment-summary-card--${card.tone}`}>
-                        <div className="financial-accomplishment-summary-card__header">
-                            <span>{card.label}</span>
-                        </div>
-                        <strong>{formatCurrency(card.value)}</strong>
-                        <small>{card.indicator}</small>
-                    </div>
-                ))}
-            </section>
-            <div className="data-table-scroll financial-accomplishment-table-scroll custom-scrollbar">
-                <table className="data-table financial-accomplishment-table min-w-[1240px] divide-y divide-gray-200 dark:divide-gray-700">
-                    <colgroup>
-                        <col className="fac-width-particulars" />
-                        {Array.from({ length: 8 }).map((_, index) => (
-                            <col key={`financial-col-${index}`} className="fac-width-financial" />
-                        ))}
-                        <col className="fac-width-action" />
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th rowSpan={2} className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars financial-accomplishment-sticky-head fac-header-particulars px-4 py-3 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider align-middle">Particulars / UACS</th>
-                            {/* Target Obligation */}
-                            <th colSpan={2} className="fac-col-target-obligation px-4 py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-l border-b border-gray-200 dark:border-gray-700">Target Obligation</th>
-                            
-                            {/* Actual Obligation */}
-                            <th colSpan={2} className="fac-col-actual-obligation px-4 py-2 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider border-l border-b border-emerald-200 dark:border-emerald-800 bg-emerald-100/50 dark:bg-emerald-800/30">Actual Obligation</th>
-                            
-                            {/* Target Disbursement */}
-                            <th colSpan={2} className="fac-col-target-disbursement px-4 py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-l border-b border-gray-200 dark:border-gray-700">Target Disbursement</th>
-                            
-                            {/* Actual Disbursement */}
-                            <th colSpan={2} className="fac-col-actual-disbursement px-4 py-2 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider border-l border-b border-emerald-200 dark:border-emerald-800 bg-emerald-100/50 dark:bg-emerald-800/30">Actual Disbursement</th>
-                            
-                            <th rowSpan={2} className="fac-header-action fac-col-action px-4 py-3 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider align-middle">Action</th>
-                        </tr>
-                        <tr>
-                            {/* Target Obligation */}
-                            <th className="fac-col-target-obligation px-2 py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-l border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('targetObligationAmount')}>
-                                Amount {SortIcon('targetObligationAmount')}
-                            </th>
-                            <th className="fac-col-target-obligation px-2 py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('targetObligationMonth')}>
-                                Date {SortIcon('targetObligationMonth')}
-                            </th>
-                            
-                            <th className="fac-col-actual-obligation px-2 py-2 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider border-l border-emerald-200 dark:border-emerald-800 bg-emerald-100/50 dark:bg-emerald-800/30" colSpan={2}>
-                                Obligations
-                            </th>
-                            
-                            {/* Target Disbursement */}
-                            <th className="fac-col-target-disbursement px-2 py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-l border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('targetDisbursementAmount')}>
-                                Amount {SortIcon('targetDisbursementAmount')}
-                            </th>
-                            <th className="fac-col-target-disbursement px-2 py-2 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => handleSort('targetDisbursementMonth')}>
-                                Date {SortIcon('targetDisbursementMonth')}
-                            </th>
-                            
-                            {/* Actual Disbursement */}
-                            <th className="fac-col-actual-disbursement px-2 py-2 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider border-l border-emerald-200 dark:border-emerald-800 bg-emerald-100/50 dark:bg-emerald-800/30" colSpan={2}>
-                                Disbursements
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
-                        {groupedItems.map((typeGroup) => {
-                            const isTypeExpanded = expandedObjectTypes.includes(typeGroup.objectType);
-                            const objectTypeTotalTargetObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetObli), 0);
-                            const objectTypeTotalActualObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualObli), 0);
-                            const objectTypeTotalTargetDisb = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetDisb), 0);
-                            const objectTypeTotalActualDisb = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualDisb), 0);
-                            return (
-                                <React.Fragment key={typeGroup.objectType}>
-                                    {/* Level 1: Object Type Header (Container) */}
-                                    <tr className="fac-row-object bg-emerald-200/80 dark:bg-gray-700/80 border-b-2 border-emerald-300 dark:border-gray-600">
-                                        <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3">
-                                            <button onClick={() => toggleObjectType(typeGroup.objectType)} className="fac-drill-button text-md font-bold text-emerald-900 dark:text-white focus:outline-none group w-full">
-                                                <span className="fac-expand-toggle" aria-hidden="true">{isTypeExpanded ? '-' : '+'}</span>
-                                                <span className="fac-drill-text">{typeGroup.objectType}</span>
-                                            </button>
-                                        </td>
-                                        <td className="fac-col-target-obligation fac-collapsed-total px-4 py-3 text-center text-xs font-semibold border-l border-gray-200 dark:border-gray-700">
-                                            {formatCurrency(objectTypeTotalTargetObli)}
-                                        </td>
-                                        <td className="fac-col-target-obligation px-4 py-3 text-center text-xs text-gray-400">-</td>
-                                        <td className="fac-col-actual-obligation fac-collapsed-total px-4 py-3 text-center text-xs border-l border-emerald-100 dark:border-emerald-800" colSpan={2}>{formatCurrency(objectTypeTotalActualObli)}</td>
-                                        <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-3 text-center text-xs border-l border-gray-200 dark:border-gray-700">{formatCurrency(objectTypeTotalTargetDisb)}</td>
-                                        <td className="fac-col-target-disbursement px-4 py-3 text-center text-xs text-gray-400">-</td>
-                                        <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-3 text-center text-xs border-l border-emerald-100 dark:border-emerald-800" colSpan={2}>{formatCurrency(objectTypeTotalActualDisb)}</td>
-                                        <td className="fac-col-action px-4 py-3"></td>
-                                    </tr>
-
-                                    {/* Level 2: UACS Groups */}
-                                    {isTypeExpanded && typeGroup.uacsGroups.map((group) => {
-                                        const isExpanded = expandedGroups.includes(group.key);
-                                        // Determine if all items have same month to display in group header
-                                        return (
-                                            <React.Fragment key={group.key}>
-                                                {/* Group Header Row (UACS) */}
-                                                <tr className="fac-row-uacs bg-emerald-50 dark:bg-gray-700/40 hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors border-b border-gray-200 dark:border-gray-700 border-l-4 border-l-emerald-400 dark:border-l-emerald-600">
-                                                    <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3">
-                                                        <button onClick={() => toggleGroup(group.key)} className="fac-drill-button text-sm text-gray-700 dark:text-gray-200 focus:outline-none group text-left w-full" title={`${group.uacsCode} ${group.description}`}>
-                                                            <span className="fac-expand-toggle" aria-hidden="true">{isExpanded ? '-' : '+'}</span>
-                                                            <span className="fac-drill-text" title={`${group.uacsCode} ${group.description}`}>
-                                                                <span className="fac-uacs-code font-mono text-gray-500 dark:text-gray-400 mr-2">{group.uacsCode}</span>
-                                                                <span className="fac-uacs-description">{group.description}</span>
-                                                            </span>
-                                                        </button>
-                                                    </td>
-                                                    {/* Targets Total */}
-                                                    <td className="fac-col-target-obligation fac-collapsed-total px-4 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700">{formatCurrency(group.totalTargetObli)}</td>
-                                                    <td className="fac-col-target-obligation px-4 py-3 text-center text-xs text-gray-400">-</td>
-                                                    
-                                                    {/* Actual Obli Total & Batch */}
-                                                    <td className="fac-col-actual-obligation px-4 py-3 text-center text-xs font-bold text-emerald-600 dark:text-emerald-400 border-l border-emerald-100 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10" colSpan={2}>
-                                                        {formatCurrency(group.totalActualObli)}
-                                                    </td>
-                                                    
-                                                    {/* Target Disb Total */}
-                                                    <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-3 text-center text-xs text-gray-500 border-l border-gray-200 dark:border-gray-700">{formatCurrency(group.totalTargetDisb)}</td>
-                                                    <td className="fac-col-target-disbursement px-4 py-3 text-center text-xs text-gray-400">-</td>
-
-                                                    {/* Actual Disb Total & Batch */}
-                                                    <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-3 text-center text-xs text-emerald-600 border-l border-emerald-100 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10" colSpan={2}>{formatCurrency(group.totalActualDisb)}</td>
-                                                    <td className="fac-col-action px-4 py-3"></td>
-                                                </tr>
-
-                                                {/* Expanded Content (Subgroups) */}
-                                                {isExpanded && Object.entries(group.subGroups).map(([subKey, sourceGroups]) => {
-                                                    // Fix: Explicitly cast items to FinancialItem[] to resolve unknown type errors (length, map, etc.)
-                                                    const typedSourceGroups = sourceGroups as { sourceId: number, sourceName: string, items: FinancialItem[], targetObligationAmount: number, actualObligationAmount: number, targetDisbursementAmount: number, actualDisbursementAmount: number }[];
-                                                    if (typedSourceGroups.length === 0) return null;
-                                                    const subId = `${group.key}-${subKey}`;
-                                                    const isSubExpanded = expandedSubGroups.includes(subId);
-                                                    const subGroupTotalTargetObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetObligationAmount), 0);
-                                                    const subGroupTotalActualObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualObligationAmount), 0);
-                                                    const subGroupTotalTargetDisb = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetDisbursementAmount), 0);
-                                                    const subGroupTotalActualDisb = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualDisbursementAmount), 0);
-
-                                                    return (
-                                                        <React.Fragment key={subId}>
-                                                            <tr className="fac-row-category bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-                                                                <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-2">
-                                                                     <button onClick={() => toggleSubGroup(subId)} className="fac-drill-button text-xs uppercase text-gray-500 dark:text-gray-400 tracking-wider hover:text-emerald-600 transition-colors">
-                                                                        <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSubExpanded ? '-' : '+'}</span>
-                                                                        <span className="fac-drill-text">{subKey}</span>
-                                                                     </button>
-                                                                </td>
-                                                                <td className="fac-col-target-obligation fac-collapsed-total px-4 py-2 text-center text-xs font-semibold border-l border-gray-200 dark:border-gray-700">
-                                                                    {formatCurrency(subGroupTotalTargetObli)}
-                                                                </td>
-                                                                <td className="fac-col-target-obligation px-4 py-2 text-center text-xs text-gray-400">-</td>
-                                                                <td className="fac-col-actual-obligation fac-collapsed-total px-4 py-2 text-center text-xs border-l border-emerald-100 dark:border-emerald-800" colSpan={2}>{formatCurrency(subGroupTotalActualObli)}</td>
-                                                                <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-2 text-center text-xs border-l border-gray-200 dark:border-gray-700">{formatCurrency(subGroupTotalTargetDisb)}</td>
-                                                                <td className="fac-col-target-disbursement px-4 py-2 text-center text-xs text-gray-400">-</td>
-                                                                <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-2 text-center text-xs border-l border-emerald-100 dark:border-emerald-800" colSpan={2}>{formatCurrency(subGroupTotalActualDisb)}</td>
-                                                                <td className="fac-col-action px-4 py-2"></td>
-                                                            </tr>
-                                                            {isSubExpanded && typedSourceGroups.map(sourceGroup => {
-                                                                const sourceId = `${subId}-${sourceGroup.sourceId}`;
-                                                                const isSourceExpanded = expandedRows.includes(sourceId);
-                                                                
-                                                                const sortedItems = sortConfig ? [...sourceGroup.items].sort((a, b) => {
-                                                                    let valA = a[sortConfig.key];
-                                                                    let valB = b[sortConfig.key];
-                                                                    if (valA === valB) return 0;
-                                                                    if (valA === undefined || valA === null) return 1;
-                                                                    if (valB === undefined || valB === null) return -1;
-                                                                    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-                                                                    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-                                                                    return 0;
-                                                                }) : sourceGroup.items;
-
-                                                                return (
-                                                                    <React.Fragment key={sourceId}>
-                                                                        <tr className="fac-row-source bg-gray-50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
-                                                                            <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                                                <button onClick={() => toggleRowExpansion(sourceId)} className="fac-drill-button hover:text-emerald-600 focus:outline-none" title={sourceGroup.sourceName}>
-                                                                                    <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSourceExpanded ? '-' : '+'}</span>
-                                                                                    <span className="fac-drill-text leading-tight" title={sourceGroup.sourceName}>{sourceGroup.sourceName}</span>
-                                                                                </button>
-                                                                            </td>
-                                                                            <td className="fac-col-target-obligation fac-collapsed-total px-2 py-1.5 text-center text-xs text-gray-500 border-l border-gray-100 dark:border-gray-700">{formatCurrency(sourceGroup.targetObligationAmount)}</td>
-                                                                            <td className="fac-col-target-obligation px-2 py-1.5 text-center text-[10px] text-gray-400">-</td>
-                                                                            <td className="fac-col-actual-obligation fac-collapsed-total px-2 py-1.5 text-center text-xs text-emerald-600 border-l border-emerald-100 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/5" colSpan={2}>{formatCurrency(sourceGroup.actualObligationAmount)}</td>
-                                                                            <td className="fac-col-target-disbursement fac-collapsed-total px-2 py-1.5 text-center text-xs text-gray-500 border-l border-gray-100 dark:border-gray-700">{formatCurrency(sourceGroup.targetDisbursementAmount)}</td>
-                                                                            <td className="fac-col-target-disbursement px-2 py-1.5 text-center text-[10px] text-gray-400">-</td>
-                                                                            <td className="fac-col-actual-disbursement fac-collapsed-total px-2 py-1.5 text-center text-xs text-emerald-600 border-l border-emerald-100 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/5" colSpan={2}>{formatCurrency(sourceGroup.actualDisbursementAmount)}</td>
-                                                                            <td className="fac-col-action px-4 py-1.5 text-right"></td>
-                                                                        </tr>
-                                                                        {isSourceExpanded && sortedItems.map(item => {
-                                                                            const isBreakdownExpanded = expandedRows.includes(item.uniqueId);
-                                                                            const isChanged = changedItems.has(item.uniqueId);
-                                                                            const contextDescription = getContextDescription(item);
-                                                                            const isTagged = isTaggedExclusion(item);
-                                                                            const taggedLabel = item.isCancelled ? 'Cancelled' : item.isSavings ? 'Savings' : item.isRealignment ? 'Realignment' : '';
-                                                                            const itemFinancialDecision = getFinancialStatusDecision(item);
-                                                                            const canEditFinancialItem = canEdit && itemFinancialDecision.allowed;
-
-                                                                            return (
-                                                                            <React.Fragment key={item.uniqueId}>
-                                                                                <tr className={`fac-row-item hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors border-b border-gray-100 dark:border-gray-800 ${isTagged ? 'is-tagged-exclusion' : ''} ${isChanged ? 'is-changed bg-yellow-50 dark:bg-yellow-900/10' : ''}`}>
-                                                                                    <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400">
-                                                                                        <button
-                                                                                            onClick={() => handleTitleClick(item)}
-                                                                                            className="fac-item-title text-left hover:text-emerald-600 hover:underline focus:outline-none"
-                                                                                            title={`${item.sourceType === 'Subproject' && item.budgetParticular ? item.budgetParticular : item.expenseParticular}${contextDescription ? ` - ${contextDescription}` : ''}${taggedLabel ? ` (${taggedLabel})` : ''}`}
-                                                                                        >
-                                                                                            <span className="fac-item-primary block leading-tight">
-                                                                                                <span>{item.sourceType === 'Subproject' && item.budgetParticular ? item.budgetParticular : item.expenseParticular}</span>
-                                                                                                {taggedLabel && <span className="fac-tagged-badge">{taggedLabel}</span>}
-                                                                                            </span>
-                                                                                            {contextDescription && (
-                                                                                                <span className="fac-item-description mt-0.5 block text-[11px] font-medium leading-tight text-gray-400 dark:text-gray-500 no-underline">
-                                                                                                    {contextDescription}
-                                                                                                </span>
-                                                                                            )}
-                                                                                        </button>
-                                                                                    </td>
-                                                                        
-                                                                        {/* Target Obli */}
-                                                                        <td className={`fac-col-target-obligation px-2 py-1.5 text-center text-xs text-gray-500 border-l border-gray-100 dark:border-gray-700 ${isTagged ? 'fac-target-excluded fac-target-excluded-amount' : ''}`}>
-                                                                            {item.status === 'Proposed' ? (
-                                                                                <FormattedAmountInput
-                                                                                    value={toFiniteNumber(item.targetObligationAmount)}
-                                                                                    onValueChange={(value) => updateLocalItem(item.uniqueId, { targetObligationAmount: value })}
-                                                                                    disabled={!canEditFinancialItem}
-                                                                                    className="w-full text-xs text-right p-1 border rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-emerald-500 focus:border-emerald-500"
-                                                                                    placeholder="0.00"
-                                                                                    emptyWhenZero
-                                                                                />
-                                                                            ) : (
-                                                                                formatCurrency(item.targetObligationAmount)
-                                                                            )}
-                                                                        </td>
-                                                                        <td className={`fac-col-target-obligation px-2 py-1.5 text-center text-[10px] text-gray-400 ${isTagged ? 'fac-target-excluded' : ''}`}>
-                                                                            {item.targetObligationMonth === 'Monthly' ? (
-                                                                                'Monthly'
-                                                                            ) : item.status === 'Proposed' ? (
-                                                                                <MonthYearPicker 
-                                                                                    value={item.targetObligationMonth} 
-                                                                                    onChange={(val) => updateLocalItem(item.uniqueId, { targetObligationMonth: val })}
-                                                                                    disabled={!canEditFinancialItem}
-                                                                                    className="h-7 text-[10px] py-0"
-                                                                                />
-                                                                            ) : (
-                                                                                item.targetObligationMonth ? new Date(item.targetObligationMonth).toLocaleDateString(undefined, {month:'long', year:'numeric'}) : '-'
-                                                                            )}
-                                                                        </td>
-
-                                                                        {/* Actual Obli */}
-                                                                        <td className="fac-col-actual-obligation px-2 py-1.5 border-l border-emerald-100 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/5" colSpan={2}>
-                                                                            <ObligationsEditor
-                                                                                obligations={item.obligations || []}
-                                                                                onChange={(newObs, total) => updateLocalItem(item.uniqueId, { obligations: newObs, actualObligationAmount: total })}
-                                                                                defaultYear={selectedYear?.toString()}
-                                                                                readOnly={!canEditFinancialItem}
-                                                                                validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
-                                                                            />
-                                                                        </td>
-
-                                                                        {/* Target Disb */}
-                                                                        <td className={`fac-col-target-disbursement px-2 py-1.5 text-center text-xs text-gray-500 border-l border-gray-100 dark:border-gray-700 ${isTagged ? 'fac-target-excluded fac-target-excluded-amount' : ''}`}>
-                                                                            {item.status === 'Proposed' ? (
-                                                                                <FormattedAmountInput
-                                                                                    value={toFiniteNumber(item.targetDisbursementAmount)}
-                                                                                    onValueChange={(value) => updateLocalItem(item.uniqueId, { targetDisbursementAmount: value })}
-                                                                                    disabled={!canEditFinancialItem}
-                                                                                    className="w-full text-xs text-right p-1 border rounded dark:bg-gray-700 dark:border-gray-600 focus:ring-emerald-500 focus:border-emerald-500"
-                                                                                    placeholder="0.00"
-                                                                                    emptyWhenZero
-                                                                                />
-                                                                            ) : (
-                                                                                formatCurrency(item.targetDisbursementAmount)
-                                                                            )}
-                                                                        </td>
-                                                                        <td className={`fac-col-target-disbursement px-2 py-1.5 text-center text-[10px] text-gray-400 ${isTagged ? 'fac-target-excluded' : ''}`}>
-                                                                            {item.targetDisbursementMonth === 'Monthly' ? (
-                                                                                'Monthly'
-                                                                            ) : item.status === 'Proposed' ? (
-                                                                                <MonthYearPicker 
-                                                                                    value={item.targetDisbursementMonth} 
-                                                                                    onChange={(val) => updateLocalItem(item.uniqueId, { targetDisbursementMonth: val })}
-                                                                                    disabled={!canEditFinancialItem}
-                                                                                    className="h-7 text-[10px] py-0"
-                                                                                />
-                                                                            ) : (
-                                                                                item.targetDisbursementMonth ? (item.targetDisbursementMonth.includes('-') ? new Date(item.targetDisbursementMonth).toLocaleDateString(undefined, {month:'long', year:'numeric'}) : item.targetDisbursementMonth) : '-'
-                                                                            )}
-                                                                        </td>
-
-                                                                        {/* Actual Disbursement */}
-                                                                        <td className="fac-col-actual-disbursement px-2 py-1.5 border-l border-emerald-100 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/5" colSpan={2}>
-                                                                            <DisbursementsEditor
-                                                                                disbursements={item.disbursements || []}
-                                                                                onChange={(newDibs, total) => updateLocalItem(item.uniqueId, { disbursements: newDibs, actualDisbursementAmount: total })}
-                                                                                defaultYear={selectedYear?.toString()}
-                                                                                readOnly={!canEditFinancialItem}
-                                                                                validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
-                                                                            />
-                                                                        </td>
-
-                                                                        <td className="fac-col-action px-4 py-1.5 text-right">
-                                                                            <div className="flex items-center gap-1 justify-end">
-                                                                                <button
-                                                                                    onClick={() => toggleRowExpansion(item.uniqueId)}
-                                                                                    className={`fac-breakdown-button px-3 py-1 rounded text-xs font-bold transition-all flex items-center justify-center shadow-sm min-w-[74px] ${isBreakdownExpanded ? 'is-expanded bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-900/60 dark:text-emerald-200' : 'bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50 dark:bg-gray-800 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/30'}`}
-                                                                                    title={isBreakdownExpanded ? 'Hide breakdown' : 'Show breakdown'}
-                                                                                    aria-label={isBreakdownExpanded ? 'Hide breakdown' : 'Show breakdown'}
-                                                                                    aria-expanded={isBreakdownExpanded}
-                                                                                >
-                                                                                    {isBreakdownExpanded ? 'Collapse' : 'Expand'}
-                                                                                </button>
-                                                                                {canEdit && (
-                                                                                    <>
-                                                                                    {isChanged && !localSavingIds.has(item.uniqueId) && (
-                                                                                        <button
-                                                                                            onClick={() => undoLocalItem(item.uniqueId)}
-                                                                                            className="p-1.5 rounded text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                                                                                            title="Undo changes"
-                                                                                        >
-                                                                                            <Undo2 className="w-4 h-4" />
-                                                                                        </button>
-                                                                                    )}
-                                                                                    <button 
-                                                                                        onClick={() => handleConfirmItem(item)}
-                                                                                        disabled={localSavingIds.has(item.uniqueId) || !canEditFinancialItem}
-                                                                                        className="fac-save-button px-3 py-1 rounded text-xs font-bold transition-all flex items-center justify-center gap-1 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:opacity-50 min-w-[60px]"
-                                                                                        title={canEditFinancialItem ? 'Save row' : itemFinancialDecision.message}
-                                                                                    >
-                                                                                        {localSavingIds.has(item.uniqueId) ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
-                                                                                    </button>
-                                                                                    </>
-                                                                                )}
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                    {/* Expandable Breakdown (Monthly or Obligations) */}
-                                                                    {isBreakdownExpanded && (
-                                                                        <tr className="fac-row-breakdown bg-gray-50 dark:bg-gray-700/30 animate-fadeIn overflow-hidden">
-                                                                            <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-4"></td>
-                                                                            <td colSpan={9} className="px-4 py-4 border-l-4 border-l-emerald-600">
-                                                                                <div className="flex flex-col lg:flex-row gap-6">
-                                                                                    {/* Multi-Obligation Section */}
-                                                                                    <div className="flex-1">
-                                                                                        <h4 className="text-[11px] font-black uppercase text-emerald-800 dark:text-emerald-400 mb-3 flex items-center gap-2">
-                                                                                            <ListFilter className="w-4 h-4" />
-                                                                                            Multi-Obligation Records
-                                                                                        </h4>
-                                                                                        <ObligationListEditor 
-                                                                                            obligations={item.obligations}
-                                                                                            onChange={(obs) => updateLocalItem(item.uniqueId, { obligations: obs })}
-                                                                                            readOnly={!canEditFinancialItem}
-                                                                                            hideHeaderAddButton
-                                                                                            validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
-                                                                                        />
-                                                                                    </div>
-
-                                                                                    {/* Monthly Disbursement Section (If supported) */}
-                                                                                    <div className="flex-1">
-                                                                                        <h4 className="text-[11px] font-black uppercase text-emerald-800 dark:text-emerald-400 mb-3 flex items-center gap-2">
-                                                                                            <ListFilter className="w-4 h-4" />
-                                                                                            Multi-Disbursement Records
-                                                                                        </h4>
-                                                                                        <DisbursementListEditor
-                                                                                            disbursements={item.disbursements || []}
-                                                                                            onChange={(newDb) => {
-                                                                                                updateLocalItem(item.uniqueId, { disbursements: newDb });
-                                                                                            }}
-                                                                                            readOnly={!canEditFinancialItem}
-                                                                                            hideHeaderAddButton
-                                                                                            validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
-                                                                                        />
-                                                                                    </div>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    )}
-                                                                </React.Fragment>
-                                                                );
-                                                            })}
-                                                                    </React.Fragment>
-                                                                );
-                                                            })}
-                                                        </React.Fragment>
-                                                    );
-                                                })}
-                                            </React.Fragment>
-                                        );
-                                    })}
-                                </React.Fragment>
-                            )
-                        })}
-                        {groupedItems.length === 0 && (
-                            <tr>
-                                <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-8"></td>
-                                <td colSpan={9} className="px-6 py-8 text-center text-gray-500 italic">No financial items found for the selected criteria.</td>
-                            </tr>
-                        )}
-                    </tbody>
-                    <tfoot className="bg-emerald-100 dark:bg-emerald-900 border-t-2 border-emerald-300 dark:border-emerald-700 font-bold">
-                        <tr>
-                            <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3 text-right text-emerald-900 dark:text-emerald-100">GRAND TOTAL</td>
-                            <td className="fac-col-target-obligation px-4 py-3 text-center text-gray-700 dark:text-gray-300 border-l border-emerald-200 dark:border-emerald-800">{formatCurrency(grandTotals.targetObli)}</td>
-                            <td className="fac-col-target-obligation px-4 py-3"></td>
-                            <td className="fac-col-actual-obligation px-4 py-3 text-center text-emerald-800 dark:text-emerald-300 border-l border-emerald-200 dark:border-emerald-800">{formatCurrency(grandTotals.actualObli)}</td>
-                            <td className="fac-col-actual-obligation px-4 py-3"></td>
-                            <td className="fac-col-target-disbursement px-4 py-3 text-center text-gray-700 dark:text-gray-300 border-l border-emerald-200 dark:border-emerald-800">{formatCurrency(grandTotals.targetDisb)}</td>
-                            <td className="fac-col-target-disbursement px-4 py-3"></td>
-                            <td className="fac-col-actual-disbursement px-4 py-3 text-center text-emerald-800 dark:text-emerald-300 border-l border-emerald-200 dark:border-emerald-800">{formatCurrency(grandTotals.actualDisb)}</td>
-                            <td className="fac-col-actual-disbursement px-4 py-3"></td>
-                            <td className="fac-col-action px-4 py-3"></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-            </div>
-            )}
-
-            {/* Global Save Bar */}
-            {changedItems.size > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-40 flex justify-between items-center animate-in slide-in-from-bottom duration-300">
-                    <div className="flex items-center gap-4 ml-64"> {/* ml-64 to account for sidebar if present */}
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
-                            <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 px-2.5 py-1 rounded-full text-xs font-bold mr-3">
-                                {changedItems.size}
-                            </span>
-                            Unsaved changes in financial accomplishments
-                        </span>
-                    </div>
-                    <div className="flex gap-3 mr-8">
-                        <button 
-                            onClick={() => {
-                                setChangedItems(new Map());
-                                // We don't reload items here to avoid losing all progress, 
-                                // but we clear the highlight
-                                setItems(prev => prev.map(item => ({ ...item }))); 
-                            }}
-                            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-                        >
-                            Discard Changes
-                        </button>
-                        <button 
-                            onClick={handleSaveAllClick}
-                            disabled={isSavingAll}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isSavingAll ? (
-                                <>
-                                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    Saving Changes...
-                                </>
-                            ) : 'Save All Changes'}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Save Confirmation Modal */}
-            {isSaveConfirmOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Confirm Save</h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-6">
-                            Are you sure you want to save {changedItems.size} changes? This action will update the database.
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setIsSaveConfirmOpen(false)}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmSaveAll}
-                                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors"
-                            >
-                                Yes, Save Changes
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Success Message Toast */}
-            {saveSuccessMessage && (
-                <div className="fixed bottom-24 right-8 bg-emerald-100 border border-emerald-200 text-emerald-800 dark:bg-emerald-900/50 dark:border-emerald-800 dark:text-emerald-300 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in slide-in-from-bottom-5 z-50">
-                    <CheckCircle className="w-5 h-5" />
-                    <span className="font-medium">{saveSuccessMessage}</span>
-                </div>
-            )}
-            {monthLockMessage && (
-                <div className="fixed bottom-24 right-8 bg-amber-100 border border-amber-200 text-amber-900 dark:bg-amber-900/50 dark:border-amber-800 dark:text-amber-200 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in slide-in-from-bottom-5 z-50" role="status">
-                    <span className="font-medium">{monthLockMessage}</span>
-                </div>
-            )}
-        </div>
-    );
+ const { currentUser } = useAuth();
+ const { canEdit, canViewAll } = useUserAccess('Accomplishment - Financial');
+ const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
+ const defaultYear = new Date().getFullYear();
+
+ // Filter States (Persistent)
+ const [selectedYear, setSelectedYear] = useLocalStorageState<number | null>('fin_selectedYear', defaultYear);
+ const [selectedOu, setSelectedOu] = useLocalStorageState<string>('fin_selectedOu', 'All');
+ const [selectedTier, setSelectedTier] = useLocalStorageState<string>('fin_selectedTier', 'Tier 1');
+ const [selectedFundType, setSelectedFundType] = useLocalStorageState<string>('fin_selectedFundType', 'Current');
+ const [filtersOpen, setFiltersOpen] = useState(false);
+
+ const [isLoading, setIsLoading] = useState(false);
+ const [originalItems, setOriginalItems] = useState<FinancialItem[]>([]);
+ const [items, setItems] = useState<FinancialItem[]>([]);
+ const [changedItems, setChangedItems] = useState<Map<string, FinancialItem>>(new Map());
+ const [isSavingAll, setIsSavingAll] = useState(false);
+ const [localSavingIds, setLocalSavingIds] = useState<Set<string>>(new Set());
+ const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
+ const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
+ const [monthLockMessage, setMonthLockMessage] = useState('');
+ type SortKey = 'targetObligationAmount' | 'targetObligationMonth' | 'actualObligationAmount' | 'actualObligationMonth' | 'targetDisbursementAmount' | 'targetDisbursementMonth' | 'actualDisbursementAmount' | 'actualDisbursementMonth';
+ const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: 'asc' | 'desc' } | null>(null);
+
+ // Persistent Expansion States (Stored as Arrays in localStorage)
+ const [expandedObjectTypes, setExpandedObjectTypes] = useLocalStorageState<string[]>('fin_expandedObjectTypes', ['MOOE', 'CO']);
+ const [expandedGroups, setExpandedGroups] = useLocalStorageState<string[]>('fin_expandedGroups', []);
+ const [expandedSubGroups, setExpandedSubGroups] = useLocalStorageState<string[]>('fin_expandedSubGroups', []);
+ const [expandedRows, setExpandedRows] = useLocalStorageState<string[]>('fin_expandedRows', []);
+
+ const getPolicySubjectForFinancialItem = (item: FinancialItem) => (
+ item.sourceType === 'Staffing'
+ ? { hiringStatus: item.status || 'Proposed' }
+ : { status: item.status || 'Proposed' }
+ );
+
+ const getFinancialStatusDecision = (item: FinancialItem) => {
+ const moduleKey = getDcfModuleKeyForSourceType(item.sourceType);
+ if (!moduleKey) {
+ return { allowed: false, code: 'blocked_by_status' as const, message: 'Unknown DCF source type.' };
+ }
+ return getStatusDecision({
+ moduleKey,
+ item: getPolicySubjectForFinancialItem(item),
+ action: 'editFinancialAccomplishment',
+ hasModuleAccess: canEdit,
+ });
+ };
+
+ const ensureFinancialItemAllowed = async (item: FinancialItem) => {
+ const moduleKey = getDcfModuleKeyForSourceType(item.sourceType);
+ if (!moduleKey) {
+ alert('Unknown DCF source type.');
+ return false;
+ }
+ return ensureDecisionAllowed(getFinancialStatusDecision(item), {
+ moduleKey,
+ item: getPolicySubjectForFinancialItem(item),
+ itemId: item.sourceId,
+ itemName: item.sourceName,
+ status: item.status as any,
+ action: 'editFinancialAccomplishment',
+ entityType: item.sourceType.toLowerCase(),
+ });
+ };
+
+ const validateFinancialActualMonth = async (item: FinancialItem, month: string) => {
+ if (!month) return true;
+ const moduleKey = getDcfModuleKeyForSourceType(item.sourceType);
+ if (!moduleKey) {
+ alert('Unknown DCF source type.');
+ return false;
+ }
+ if (!(await ensureFinancialItemAllowed(item))) return false;
+ const monthDecision = getMonthDecision(month);
+ if (isMonthSelectionAllowed(monthDecision)) {
+ setMonthLockMessage('');
+ return true;
+ }
+ setMonthLockMessage(getMonthLockMessage(monthDecision));
+ return false;
+ };
+
+ const hasMonthChanged = (current?: string | null, original?: string | null) => (
+ normalizePolicyMonth(current) !== normalizePolicyMonth(original)
+ );
+
+ const getChangedRecordMonths = (
+ currentRecords: Array<{ id?: number | string; date?: string | null }> = [],
+ originalRecords: Array<{ id?: number | string; date?: string | null }> = []
+ ) => currentRecords
+ .filter((record, index) => {
+ const originalRecord = record.id !== undefined
+ ? originalRecords.find(item => item.id === record.id)
+ : originalRecords[index];
+ return !!record.date && (!originalRecord || hasMonthChanged(record.date, originalRecord.date));
+ })
+ .map(record => record.date)
+ .filter(Boolean) as string[];
+
+ const validateFinancialItemForSave = async (item: FinancialItem) => {
+ if (!(await ensureFinancialItemAllowed(item))) return false;
+ const originalItem = originalItems.find(original => original.uniqueId === item.uniqueId);
+ const months = [
+ ...getChangedRecordMonths(item.obligations || [], originalItem?.obligations || []),
+ ...getChangedRecordMonths(item.disbursements || [], originalItem?.disbursements || []),
+ ...SHORT_MONTHS
+ .map((month, index) => {
+ const field = `actualDisbursement${month}`;
+ const currentAmount = toFiniteNumber((item as any)[field]);
+ const originalAmount = toFiniteNumber((originalItem as any)?.[field]);
+ return currentAmount > 0 && !valuesDiffer(currentAmount, originalAmount)
+ ? ''
+ : currentAmount > 0
+ ? `${selectedYear || defaultYear}-${String(index + 1).padStart(2, '0')}`
+ : '';
+ })
+ .filter(Boolean),
+ ] as string[];
+ for (const month of months) {
+ if (!(await validateFinancialActualMonth(item, month))) return false;
+ }
+ return true;
+ };
+
+ // Initialize User OU lock based on permissions
+ useEffect(() => {
+ if (!selectedYear) {
+ setSelectedYear(defaultYear);
+ }
+ if (!canViewAll && currentUser?.operatingUnit) {
+ setSelectedOu(currentUser.operatingUnit);
+ }
+ }, [currentUser, canViewAll, defaultYear, selectedYear, setSelectedOu, setSelectedYear]);
+
+ useEffect(() => {
+ onDataScopeChange?.({
+ year: selectedYear || defaultYear,
+ operatingUnit: selectedOu,
+ tier: selectedTier,
+ fundType: selectedFundType,
+ canViewAllOus: canViewAll,
+ requestedBy: currentUser?.id ?? null
+ });
+ }, [canViewAll, currentUser?.id, defaultYear, onDataScopeChange, selectedFundType, selectedOu, selectedTier, selectedYear]);
+
+ // --- 1. Load and Normalize Data ---
+ useEffect(() => {
+ if (!selectedYear) return;
+ setIsLoading(true);
+
+ const fetchData = async () => {
+ try {
+ const matchesFilters = (item: any) => {
+ const itemYear = item.fundingYear || item.fundYear;
+ if (itemYear !== selectedYear) return false;
+ if (selectedOu !== 'All' && item.operatingUnit !== selectedOu) return false;
+ if (selectedTier !== 'All' && item.tier !== selectedTier) return false;
+ if (selectedFundType !== 'All' && item.fundType !== selectedFundType) return false;
+ return true;
+ };
+
+ const filteredSubprojects = (subprojects || []).filter(matchesFilters);
+ const filteredActivities = (activities || []).filter(matchesFilters);
+ const filteredOfficeReqs = (officeReqs || []).filter(matchesFilters);
+ const filteredStaffingReqs = (staffingReqs || []).filter(matchesFilters);
+ const filteredOtherProgramExpenses = (otherProgramExpenses || []).filter(matchesFilters);
+
+ const uniqueIds = (values: unknown[]) =>
+ Array.from(new Set(values.map(Number).filter(Number.isFinite)));
+
+ const financialGroups = [
+ { entityType: 'subproject_detail', ids: uniqueIds(filteredSubprojects.map(item => item.id)) },
+ { entityType: 'activity_expense', ids: uniqueIds(filteredActivities.map(item => item.id)) },
+ { entityType: 'office_requirement', ids: uniqueIds(filteredOfficeReqs.map(item => item.id)) },
+ { entityType: 'staffing_expense', ids: uniqueIds(filteredStaffingReqs.map(item => item.id)) },
+ { entityType: 'other_program_expense', ids: uniqueIds(filteredOtherProgramExpenses.map(item => item.id)) },
+ ];
+
+ const fetchFinancialRows = async (
+ tableName: 'financial_obligations' | 'financial_disbursements',
+ groups: Array<{ entityType: string; ids: number[] }>
+ ) => {
+ const chunkSize = 100;
+ const queries = groups.flatMap(group => {
+ const chunks: number[][] = [];
+ for (let index = 0; index < group.ids.length; index += chunkSize) {
+ chunks.push(group.ids.slice(index, index + chunkSize));
+ }
+ return chunks.map(chunk =>
+ supabase
+ .from(tableName)
+ .select('*')
+ .eq('entity_type', group.entityType)
+ .in('parent_id', chunk)
+ );
+ });
+
+ if (queries.length === 0) return [];
+ const responses = await Promise.all(queries);
+ const error = responses.find(response => response.error)?.error;
+ if (error) throw error;
+ return responses.flatMap(response => response.data || []);
+ };
+
+ const [obliRes, disbRes] = await Promise.all([
+ fetchFinancialRows('financial_obligations', financialGroups),
+ fetchFinancialRows('financial_disbursements', financialGroups)
+ ]);
+
+ const centralizedObligations = obliRes || [];
+ const centralizedDisbursements = disbRes || [];
+
+ // Helper to get obligations for a specific item
+ const matchesCentralItemId = (sourceType: string, rowItemId: string | number | null | undefined, detailId?: number) => {
+ const itemId = sourceType === 'Staffing'
+ ? staffingExpenseItemId(detailId)
+ : detailId !== undefined && detailId !== null
+ ? detailId.toString()
+ : null;
+
+ if (itemId) return rowItemId?.toString() === itemId;
+ if (sourceType === 'Staffing') return rowItemId === null || rowItemId === undefined || rowItemId === '';
+ return true;
+ };
+
+ const getObligations = (sourceType: string, parentId: number, detailId?: number) => {
+ const entityType = sourceType === 'Subproject' ? 'subproject_detail' :
+ sourceType === 'Activity' ? 'activity_expense' :
+ sourceType === 'Staffing' ? 'staffing_expense' :
+ sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
+
+ const matches = centralizedObligations.filter(o =>
+ o.entity_type === entityType &&
+ o.parent_id === parentId &&
+ matchesCentralItemId(sourceType, o.item_id, detailId)
+ );
+
+ return matches.map(o => ({
+ id: o.id,
+ date: o.obligation_date,
+ amount: o.amount,
+ remarks: o.remarks
+ }));
+ };
+
+ const getDisbursements = (sourceType: string, parentId: number, detailId?: number) => {
+ const entityType = sourceType === 'Subproject' ? 'subproject_detail' :
+ sourceType === 'Activity' ? 'activity_expense' :
+ sourceType === 'Staffing' ? 'staffing_expense' :
+ sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
+
+ const matches = centralizedDisbursements.filter(d =>
+ d.entity_type === entityType &&
+ d.parent_id === parentId &&
+ matchesCentralItemId(sourceType, d.item_id, detailId)
+ );
+
+ return matches.map(d => ({
+ id: d.id,
+ date: d.disbursement_date,
+ amount: d.amount,
+ remarks: d.remarks
+ }));
+ };
+
+ const loadedItems: FinancialItem[] = [];
+ const defaultMonthly = {
+ actualDisbursementJan: 0, actualDisbursementFeb: 0, actualDisbursementMar: 0,
+ actualDisbursementApr: 0, actualDisbursementMay: 0, actualDisbursementJun: 0,
+ actualDisbursementJul: 0, actualDisbursementAug: 0, actualDisbursementSep: 0,
+ actualDisbursementOct: 0, actualDisbursementNov: 0, actualDisbursementDec: 0
+ };
+
+ // Subprojects
+ filteredSubprojects.forEach(sp => {
+ (sp.details || []).forEach(d => {
+ const obs = getObligations('Subproject', sp.id, d.id);
+ const dibs = getDisbursements('Subproject', sp.id, d.id);
+
+ loadedItems.push({
+ uniqueId: `sp-${sp.id}-${d.id}`,
+ sourceType: 'Subproject',
+ sourceId: sp.id,
+ detailId: d.id,
+ uacsCode: d.uacsCode,
+ objectType: d.objectType || 'MOOE',
+ expenseParticular: d.expenseParticular || 'Unspecified',
+ sourceName: sp.name,
+ budgetParticular: d.particulars,
+ targetObligationMonth: d.obligationMonth,
+ targetObligationAmount: getBudgetLineAmount(d),
+ targetDisbursementMonth: d.disbursementMonth,
+ targetDisbursementAmount: getBudgetLineAmount(d),
+ actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (d.actualObligationDate || ''),
+ actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(d.actualObligationAmount),
+ actualDisbursementMonth: dibs.length > 0 ? dibs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (d.actualDisbursementDate || ''),
+ actualDisbursementAmount: dibs.length > 0 ? sumAmounts(dibs) : toFiniteNumber(d.actualDisbursementAmount),
+ obligations: obs.length > 0 ? obs : getInitialObligations(d.obligations, d.actualObligationDate || '', toFiniteNumber(d.actualObligationAmount)),
+ disbursements: dibs.length > 0 ? dibs : getInitialDisbursements(d.disbursements, d.actualDisbursementDate || '', toFiniteNumber(d.actualDisbursementAmount)),
+ status: sp.status,
+ isRealignment: sp.isRealignment || d.isRealignment,
+ isSavings: sp.isSavings || d.isSavings,
+ isCancelled: sp.status === 'Cancelled' || d.isCancelled,
+ ...defaultMonthly,
+ isConfirmed: false
+ });
+ });
+ });
+
+ // Activities
+ filteredActivities.forEach(act => {
+ (act.expenses || []).forEach(e => {
+ const obs = getObligations('Activity', act.id, e.id);
+ const dibs = getDisbursements('Activity', act.id, e.id);
+
+ loadedItems.push({
+ uniqueId: `act-${act.id}-${e.id}`,
+ sourceType: 'Activity',
+ sourceId: act.id,
+ detailId: e.id,
+ uacsCode: e.uacsCode,
+ objectType: e.objectType || 'MOOE',
+ expenseParticular: e.expenseParticular || 'Unspecified',
+ sourceName: act.name || `${act.type} (${act.component})`,
+ targetObligationMonth: e.obligationMonth,
+ targetObligationAmount: getBudgetLineAmount(e),
+ targetDisbursementMonth: e.disbursementMonth,
+ targetDisbursementAmount: getBudgetLineAmount(e),
+ actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (e.actualObligationDate || ''),
+ actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(e.actualObligationAmount),
+ actualDisbursementMonth: dibs.length > 0 ? dibs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (e.actualDisbursementDate || ''),
+ actualDisbursementAmount: dibs.length > 0 ? sumAmounts(dibs) : toFiniteNumber(e.actualDisbursementAmount),
+ obligations: obs.length > 0 ? obs : getInitialObligations(e.obligations, e.actualObligationDate || '', toFiniteNumber(e.actualObligationAmount)),
+ disbursements: dibs.length > 0 ? dibs : getInitialDisbursements(e.disbursements, e.actualDisbursementDate || '', toFiniteNumber(e.actualDisbursementAmount)),
+ status: act.status,
+ isRealignment: act.isRealignment || e.isRealignment,
+ isSavings: act.isSavings || e.isSavings,
+ isCancelled: act.status === 'Cancelled' || e.isCancelled,
+ ...defaultMonthly,
+ isConfirmed: false
+ });
+ });
+ });
+
+ // Office Requirements
+ filteredOfficeReqs.forEach(o => {
+ const obs = getObligations('Office', o.id);
+ const dibs = getDisbursements('Office', o.id);
+
+ loadedItems.push({
+ uniqueId: `office-${o.id}`,
+ sourceType: 'Office',
+ sourceId: o.id,
+ uacsCode: o.uacsCode,
+ objectType: 'MOOE',
+ expenseParticular: 'Office Requirements',
+ sourceName: o.equipment,
+ targetObligationMonth: o.obligationDate,
+ targetObligationAmount: toFiniteNumber(o.pricePerUnit) * toFiniteNumber(o.numberOfUnits),
+ targetDisbursementMonth: o.disbursementDate,
+ targetDisbursementAmount: toFiniteNumber(o.pricePerUnit) * toFiniteNumber(o.numberOfUnits),
+ actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (o.actualObligationDate || ''),
+ actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(o.actualObligationAmount),
+ actualDisbursementMonth: dibs.length > 0 ? dibs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (o.actualDisbursementDate || ''),
+ actualDisbursementAmount: dibs.length > 0 ? sumAmounts(dibs) : toFiniteNumber(o.actualDisbursementAmount),
+ obligations: obs.length > 0 ? obs : getInitialObligations(o.obligations, o.actualObligationDate || '', toFiniteNumber(o.actualObligationAmount)),
+ disbursements: dibs.length > 0 ? dibs : getInitialDisbursements(o.disbursements, o.actualDisbursementDate || '', toFiniteNumber(o.actualDisbursementAmount)),
+ status: o.status,
+ isRealignment: o.isRealignment,
+ isSavings: o.isSavings,
+ ...defaultMonthly,
+ isConfirmed: false
+ });
+ });
+
+ // Staffing
+ const staffingNormalizationUpdates: Array<{ id: number; expenses: StaffingRequirement['expenses'] }> = [];
+
+ filteredStaffingReqs.forEach(s => {
+ if (s.expenses && s.expenses.length > 0) {
+ const normalizedExpenses = normalizeStaffingExpenses(s.expenses);
+ const hasNormalizedIds = normalizedExpenses.some((expense, index) => expense.id !== s.expenses?.[index]?.id);
+
+ if (hasNormalizedIds) {
+ staffingNormalizationUpdates.push({ id: s.id, expenses: normalizedExpenses });
+ }
+
+ normalizedExpenses.forEach(e => {
+ const obs = getObligations('Staffing', s.id, e.id);
+ const centralDibs = getDisbursements('Staffing', s.id, e.id);
+ const disbursements = centralDibs.length > 0
+ ? centralDibs
+ : resolveDisbursementEntries({ ...e, disbursements: undefined }, selectedYear);
+ const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
+
+ loadedItems.push({
+ uniqueId: `staff-${s.id}-${e.id}`,
+ sourceType: 'Staffing',
+ sourceId: s.id,
+ detailId: e.id,
+ uacsCode: e.uacsCode,
+ objectType: e.objectType || 'MOOE',
+ expenseParticular: e.expenseParticular || 'Salaries & Wages',
+ sourceName: s.personnelPosition,
+ targetObligationMonth: e.obligationDate,
+ targetObligationAmount: getBudgetLineAmount(e),
+ targetDisbursementMonth: 'Monthly',
+ targetDisbursementAmount: getBudgetLineAmount(e),
+ actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (e.actualObligationDate || ''),
+ actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(e.actualObligationAmount),
+ actualDisbursementMonth: disbursementSummary.latestDate || e.actualDisbursementDate || '',
+ actualDisbursementAmount: disbursementSummary.total,
+ obligations: obs.length > 0 ? obs : getInitialObligations(e.obligations, e.actualObligationDate || '', toFiniteNumber(e.actualObligationAmount)),
+ disbursements,
+ status: s.hiringStatus,
+ isRealignment: s.isRealignment || e.isRealignment,
+ isSavings: s.isSavings || e.isSavings,
+ isCancelled: s.status === 'Cancelled' || e.isCancelled,
+ ...defaultMonthly,
+ ...disbursementSummary.monthlyFields,
+ isConfirmed: false
+ });
+ });
+ } else {
+ const obs = getObligations('Staffing', s.id);
+ const centralDibs = getDisbursements('Staffing', s.id);
+ const disbursements = centralDibs.length > 0
+ ? centralDibs
+ : resolveDisbursementEntries({ ...s, disbursements: undefined }, selectedYear);
+ const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
+
+ loadedItems.push({
+ uniqueId: `staff-${s.id}`,
+ sourceType: 'Staffing',
+ sourceId: s.id,
+ uacsCode: s.uacsCode,
+ objectType: 'MOOE',
+ expenseParticular: 'Salaries & Wages',
+ sourceName: s.personnelPosition,
+ targetObligationMonth: s.obligationDate,
+ targetObligationAmount: toFiniteNumber(s.annualSalary),
+ targetDisbursementMonth: 'Monthly',
+ targetDisbursementAmount: toFiniteNumber(s.annualSalary),
+ actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (s.actualObligationDate || ''),
+ actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(s.actualObligationAmount),
+ actualDisbursementMonth: disbursementSummary.latestDate || s.actualDisbursementDate || '',
+ actualDisbursementAmount: disbursementSummary.total,
+ obligations: obs.length > 0 ? obs : getInitialObligations(s.obligations, s.actualObligationDate || '', toFiniteNumber(s.actualObligationAmount)),
+ disbursements,
+ status: s.hiringStatus,
+ isRealignment: s.isRealignment,
+ isSavings: s.isSavings,
+ ...defaultMonthly,
+ ...disbursementSummary.monthlyFields,
+ isConfirmed: false
+ });
+ }
+ });
+
+ // Other
+ filteredOtherProgramExpenses.forEach(ope => {
+ const obs = getObligations('Other', ope.id);
+ const centralDibs = getDisbursements('Other', ope.id);
+ const disbursements = centralDibs.length > 0
+ ? centralDibs
+ : resolveDisbursementEntries({ ...ope, disbursements: undefined }, selectedYear);
+ const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
+
+ loadedItems.push({
+ uniqueId: `other-${ope.id}`,
+ sourceType: 'Other',
+ sourceId: ope.id,
+ uacsCode: ope.uacsCode,
+ objectType: 'MOOE',
+ expenseParticular: 'Other Expenses',
+ sourceName: ope.particulars,
+ targetObligationMonth: ope.obligationDate,
+ targetObligationAmount: toFiniteNumber(ope.amount),
+ targetDisbursementMonth: ope.disbursementDate,
+ targetDisbursementAmount: toFiniteNumber(ope.amount),
+ actualObligationMonth: obs.length > 0 ? obs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date : (ope.actualObligationDate || ''),
+ actualObligationAmount: obs.length > 0 ? sumAmounts(obs) : toFiniteNumber(ope.actualObligationAmount),
+ actualDisbursementMonth: disbursementSummary.latestDate || ope.actualDisbursementDate || '',
+ actualDisbursementAmount: disbursementSummary.total,
+ obligations: obs.length > 0 ? obs : getInitialObligations(ope.obligations, ope.actualObligationDate || '', toFiniteNumber(ope.actualObligationAmount)),
+ disbursements,
+ status: ope.status,
+ isRealignment: ope.isRealignment,
+ isSavings: ope.isSavings,
+ ...defaultMonthly,
+ ...disbursementSummary.monthlyFields,
+ isConfirmed: false
+ });
+ });
+
+ if (staffingNormalizationUpdates.length > 0) {
+ setStaffingReqs(prev => prev.map(req => {
+ const update = staffingNormalizationUpdates.find(item => item.id === req.id);
+ return update ? { ...req, expenses: update.expenses } : req;
+ }));
+ }
+
+ setItems(loadedItems);
+ setOriginalItems(loadedItems);
+ } catch (error) {
+ console.error("Error loading data:", error);
+ } finally {
+ setIsLoading(false);
+ }
+ };
+
+ fetchData();
+ }, [selectedYear, selectedOu, selectedTier, selectedFundType, subprojects, activities, officeReqs, staffingReqs, otherProgramExpenses]);
+
+
+ // --- 2. Grouping Logic ---
+ const groupedItems = useMemo(() => {
+ const typeGroups: { [key: string]: { uacsMap: { [code: string]: { items: FinancialItem[], description: string, totalTargetObli: number, totalActualObli: number, totalTargetDisb: number, totalActualDisb: number } } } } = {};
+
+ items.forEach(item => {
+ const type = item.objectType || 'Unspecified';
+ const code = item.uacsCode || 'No Code';
+
+ if (!typeGroups[type]) {
+ typeGroups[type] = { uacsMap: {} };
+ }
+
+ if (!typeGroups[type].uacsMap[code]) {
+ // Find description from UACS Codes prop
+ let desc = '';
+ if (uacsCodes[type]) {
+ for (const part in uacsCodes[type]) {
+ if (uacsCodes[type][part][code]) {
+ desc = uacsCodes[type][part][code];
+ break;
+ }
+ }
+ }
+
+ typeGroups[type].uacsMap[code] = {
+ items: [],
+ description: desc,
+ totalTargetObli: 0,
+ totalActualObli: 0,
+ totalTargetDisb: 0,
+ totalActualDisb: 0
+ };
+ }
+
+ const group = typeGroups[type].uacsMap[code];
+ group.items.push(item);
+ group.totalTargetObli += getTargetObligationForTotals(item);
+ group.totalActualObli += toFiniteNumber(item.actualObligationAmount);
+ group.totalTargetDisb += getTargetDisbursementForTotals(item);
+ group.totalActualDisb += toFiniteNumber(item.actualDisbursementAmount);
+ });
+
+ // Convert to array structure for rendering
+ const groupItemsBySource = (items: FinancialItem[]) => {
+ const map = new Map<number, { sourceId: number, sourceName: string, items: FinancialItem[], targetObligationAmount: number, actualObligationAmount: number, targetDisbursementAmount: number, actualDisbursementAmount: number }>();
+ items.forEach(item => {
+ if (!map.has(item.sourceId)) {
+ map.set(item.sourceId, {
+ sourceId: item.sourceId,
+ sourceName: item.sourceName,
+ items: [],
+ targetObligationAmount: 0,
+ actualObligationAmount: 0,
+ targetDisbursementAmount: 0,
+ actualDisbursementAmount: 0,
+ });
+ }
+ const g = map.get(item.sourceId)!;
+ g.items.push(item);
+ g.targetObligationAmount += getTargetObligationForTotals(item);
+ g.actualObligationAmount += toFiniteNumber(item.actualObligationAmount);
+ g.targetDisbursementAmount += getTargetDisbursementForTotals(item);
+ g.actualDisbursementAmount += toFiniteNumber(item.actualDisbursementAmount);
+ });
+ return Array.from(map.values());
+ };
+
+ return Object.entries(typeGroups).map(([type, data]) => ({
+ objectType: type,
+ uacsGroups: Object.entries(data.uacsMap).map(([code, groupData]) => ({
+ uacsCode: code,
+ description: groupData.description,
+ key: `${type}-${code}`,
+ items: groupData.items,
+ totalTargetObli: groupData.totalTargetObli,
+ totalActualObli: groupData.totalActualObli,
+ totalTargetDisb: groupData.totalTargetDisb,
+ totalActualDisb: groupData.totalActualDisb,
+ subGroups: {
+ 'Subprojects': groupItemsBySource(groupData.items.filter(i => i.sourceType === 'Subproject')),
+ 'Activities': groupItemsBySource(groupData.items.filter(i => i.sourceType === 'Activity')),
+ 'Program Management': groupItemsBySource(groupData.items.filter(i => ['Office', 'Staffing', 'Other'].includes(i.sourceType)))
+ }
+ })).sort((a, b) => a.uacsCode.localeCompare(b.uacsCode))
+ })).sort((a, b) => a.objectType.localeCompare(b.objectType));
+ }, [items, uacsCodes]);
+
+ // --- 2.1 Grand Total Calculation ---
+ const grandTotals = useMemo(() => {
+ return items.reduce((acc, item) => ({
+ targetObli: acc.targetObli + getTargetObligationForTotals(item),
+ actualObli: acc.actualObli + toFiniteNumber(item.actualObligationAmount),
+ targetDisb: acc.targetDisb + getTargetDisbursementForTotals(item),
+ actualDisb: acc.actualDisb + toFiniteNumber(item.actualDisbursementAmount)
+ }), { targetObli: 0, actualObli: 0, targetDisb: 0, actualDisb: 0 });
+ }, [items]);
+
+ const summaryCards = useMemo(() => {
+ const selectedYearNumber = Number(selectedYear);
+ const hasBudgetCeilingScope = selectedTier === 'Tier 1' && selectedFundType === 'Current';
+ const budgetCeiling = Number.isFinite(selectedYearNumber) && hasBudgetCeilingScope
+ ? budgetCeilings.reduce((sum, ceiling) => {
+ if (Number(ceiling.year) !== selectedYearNumber) return sum;
+ if (selectedOu !== 'All' && ceiling.operating_unit !== selectedOu) return sum;
+ return sum + toFiniteNumber(ceiling.amount);
+ }, 0)
+ : 0;
+
+ return items.reduce((acc, item) => {
+ const targetObligation = getTargetObligationForTotals(item);
+ const targetDisbursement = getTargetDisbursementForTotals(item);
+ const actualObligation = toFiniteNumber(item.actualObligationAmount);
+ const actualDisbursement = toFiniteNumber(item.actualDisbursementAmount);
+
+ acc.actualObligation += actualObligation;
+ acc.actualDisbursement += actualDisbursement;
+ acc.realignedSavings += getTaggedAllocationAmount(item);
+ acc.totalAllocation += targetObligation;
+ acc.targetObligation += targetObligation;
+ acc.targetDisbursement += targetDisbursement;
+
+ return acc;
+ }, {
+ budgetCeiling,
+ totalAllocation: 0,
+ targetObligation: 0,
+ actualObligation: 0,
+ targetDisbursement: 0,
+ actualDisbursement: 0,
+ realignedSavings: 0,
+ hasBudgetCeilingScope
+ });
+ }, [budgetCeilings, items, selectedFundType, selectedOu, selectedTier, selectedYear]);
+
+ const getPercent = (value: number, target: number) => {
+ if (!target) return null;
+ return Math.round((value / target) * 100);
+ };
+
+ const allocationCeilingPercent = getPercent(summaryCards.totalAllocation, summaryCards.budgetCeiling);
+ const obligationUtilizationPercent = getPercent(summaryCards.actualObligation, summaryCards.targetObligation);
+ const disbursementUtilizationPercent = getPercent(summaryCards.actualDisbursement, summaryCards.targetDisbursement);
+ const taggedAllocationPercent = getPercent(summaryCards.realignedSavings, summaryCards.totalAllocation);
+ const ceilingVariance = summaryCards.budgetCeiling - summaryCards.totalAllocation;
+
+ const financialSummaryCards = [
+ {
+ label: 'Total Allocation',
+ value: summaryCards.totalAllocation,
+ indicator: !summaryCards.hasBudgetCeilingScope
+ ? 'Budget ceiling applies to Tier 1 Current only'
+ : summaryCards.budgetCeiling <= 0
+ ? 'No budget ceiling set'
+ : ceilingVariance < 0
+ ? `Ceiling ${formatCurrency(summaryCards.budgetCeiling)} · ${allocationCeilingPercent}% used · ${formatCurrency(Math.abs(ceilingVariance))} exceeded`
+ : `Ceiling ${formatCurrency(summaryCards.budgetCeiling)} · ${allocationCeilingPercent}% used · ${formatCurrency(ceilingVariance)} remaining`,
+ tone: summaryCards.hasBudgetCeilingScope && ceilingVariance < 0 ? 'danger' : 'neutral'
+ },
+ {
+ label: 'Obligation',
+ value: summaryCards.actualObligation,
+ indicator: obligationUtilizationPercent === null
+ ? `Target ${formatCurrency(summaryCards.targetObligation)} · No target set`
+ : `Target ${formatCurrency(summaryCards.targetObligation)} · ${obligationUtilizationPercent}% utilized`,
+ tone: obligationUtilizationPercent !== null && obligationUtilizationPercent > 100 ? 'danger' : 'neutral'
+ },
+ {
+ label: 'Disbursement',
+ value: summaryCards.actualDisbursement,
+ indicator: disbursementUtilizationPercent === null
+ ? `Target ${formatCurrency(summaryCards.targetDisbursement)} · No target set`
+ : `Target ${formatCurrency(summaryCards.targetDisbursement)} · ${disbursementUtilizationPercent}% utilized`,
+ tone: disbursementUtilizationPercent !== null && disbursementUtilizationPercent > 100 ? 'danger' : 'neutral'
+ },
+ {
+ label: 'Realigned/Savings',
+ value: summaryCards.realignedSavings,
+ indicator: taggedAllocationPercent === null ? '0% of allocation' : `${taggedAllocationPercent}% of allocation`,
+ tone: summaryCards.realignedSavings > 0 ? 'warning' : 'neutral'
+ },
+ ];
+
+ const availableYears = useMemo(() => {
+ const years = new Set<string>(filterYears);
+ [
+ ...subprojects.map(item => item.fundingYear),
+ ...activities.map(item => item.fundingYear),
+ ...officeReqs.map(item => item.fundYear),
+ ...staffingReqs.map(item => item.fundYear),
+ ...otherProgramExpenses.map(item => item.fundYear),
+ ...budgetCeilings.map(item => item.year),
+ defaultYear,
+ ].forEach(year => {
+ if (year) years.add(year.toString());
+ });
+ return Array.from(years).sort((a, b) => Number(b) - Number(a));
+ }, [activities, budgetCeilings, defaultYear, officeReqs, otherProgramExpenses, staffingReqs, subprojects]);
+
+
+ // --- 3. Handlers ---
+
+ const toggleObjectType = (type: string) => {
+ setExpandedObjectTypes(prev => {
+ if (prev.includes(type)) return prev.filter(t => t !== type);
+ return [...prev, type];
+ });
+ };
+
+ const toggleGroup = (key: string) => {
+ setExpandedGroups(prev => {
+ if (prev.includes(key)) return prev.filter(k => k !== key);
+ return [...prev, key];
+ });
+ };
+
+ const toggleSubGroup = (key: string) => {
+ setExpandedSubGroups(prev => {
+ if (prev.includes(key)) return prev.filter(k => k !== key);
+ return [...prev, key];
+ });
+ };
+
+ const toggleRowExpansion = (uniqueId: string) => {
+ setExpandedRows(prev => {
+ if (prev.includes(uniqueId)) return prev.filter(id => id !== uniqueId);
+ return [...prev, uniqueId];
+ });
+ }
+
+ // Update Local State for any field
+ const updateLocalItem = (uniqueId: string, updates: Partial<FinancialItem>) => {
+ setItems(prev => prev.map(item => {
+ if (item.uniqueId === uniqueId) {
+ const newItem = { ...item, ...updates };
+
+ // If obligations were updated, auto-sum amount and update month
+ if (updates.obligations) {
+ const total = sumAmounts(updates.obligations);
+ newItem.actualObligationAmount = total;
+
+ if (updates.obligations.length > 0) {
+ const sorted = [...updates.obligations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+ newItem.actualObligationMonth = sorted[0].date;
+ }
+ }
+
+ // If disbursements were updated, auto-sum amount and update month
+ if (updates.disbursements) {
+ const summary = summarizeDisbursements(updates.disbursements, selectedYear?.toString());
+ newItem.actualDisbursementAmount = summary.total;
+ newItem.actualDisbursementMonth = summary.latestDate;
+ Object.assign(newItem, summary.monthlyFields);
+ }
+
+ setChangedItems(prevMap => {
+ const newMap = new Map(prevMap);
+ newMap.set(uniqueId, newItem);
+ return newMap;
+ });
+ return newItem;
+ }
+ return item;
+ }));
+ };
+
+ // Special handler for monthly disbursement updates to auto-sum total
+ const updateLocalMonthly = (uniqueId: string, month: string, value: number) => {
+ setItems(prev => prev.map(item => {
+ if (item.uniqueId === uniqueId) {
+ // Construct new item state
+ const newItem: any = { ...item, [`actualDisbursement${month}`]: value };
+ // Recalculate total
+ let total = 0;
+ SHORT_MONTHS.forEach(m => {
+ total += toFiniteNumber(newItem[`actualDisbursement${m}`]);
+ });
+ newItem.actualDisbursementAmount = total;
+
+ setChangedItems(prevMap => {
+ const newMap = new Map(prevMap);
+ newMap.set(uniqueId, newItem);
+ return newMap;
+ });
+
+ return newItem;
+ }
+ return item;
+ }));
+ };
+
+ // Group level month update
+ const handleGroupMonthChange = (groupKey: string, field: 'actualObligationMonth' | 'actualDisbursementMonth', dateStr: string) => {
+ let targetGroupItems: FinancialItem[] = [];
+ for (const typeGroup of groupedItems) {
+ const found = typeGroup.uacsGroups.find(ug => ug.key === groupKey);
+ if (found) {
+ targetGroupItems = found.items;
+ break;
+ }
+ }
+ if (targetGroupItems.length === 0) return;
+
+ setItems(prev => prev.map(item => {
+ if (targetGroupItems.some(gi => gi.uniqueId === item.uniqueId)) {
+ const updated = { ...item, [field]: dateStr };
+ setChangedItems(prevMap => {
+ const newMap = new Map(prevMap);
+ newMap.set(item.uniqueId, updated);
+ return newMap;
+ });
+ return updated;
+ }
+ return item;
+ }));
+ };
+
+ const handleTitleClick = (item: FinancialItem) => {
+ if (item.sourceType === 'Subproject') {
+ const sp = subprojects.find(s => s.id === item.sourceId);
+ if (sp) onSelectSubproject(sp);
+ } else if (item.sourceType === 'Activity') {
+ const act = activities.find(a => a.id === item.sourceId);
+ if (act) onSelectActivity(act);
+ } else if (item.sourceType === 'Office') {
+ const req = officeReqs.find(r => r.id === item.sourceId);
+ if (req) onSelectOfficeReq(req);
+ } else if (item.sourceType === 'Staffing') {
+ const req = staffingReqs.find(r => r.id === item.sourceId);
+ if (req) onSelectStaffingReq(req);
+ } else if (item.sourceType === 'Other') {
+ const req = otherProgramExpenses.find(r => r.id === item.sourceId);
+ if (req) onSelectOtherExpense(req);
+ }
+ };
+
+ const syncObligationsToCentralTable = async (item: FinancialItem) => {
+ if (!supabase) return;
+
+ const entityType = item.sourceType === 'Subproject' ? 'subproject_detail' :
+ item.sourceType === 'Activity' ? 'activity_expense' :
+ item.sourceType === 'Staffing' ? 'staffing_expense' :
+ item.sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
+
+ const parentId = item.sourceId;
+ const itemId = item.sourceType === 'Staffing'
+ ? staffingExpenseItemId(item.detailId)
+ : item.detailId?.toString() || null;
+
+ // 1. Delete existing records for this specific item
+ let deleteQuery = supabase.from('financial_obligations')
+ .delete()
+ .eq('entity_type', entityType)
+ .eq('parent_id', parentId);
+
+ if (itemId === null) {
+ deleteQuery = deleteQuery.is('item_id', null);
+ } else {
+ deleteQuery = deleteQuery.eq('item_id', itemId);
+ }
+
+ const { error: deleteError } = await deleteQuery;
+
+ if (deleteError) {
+ console.error("Error deleting old obligations:", deleteError);
+ throw deleteError;
+ }
+
+ if (!item.obligations || item.obligations.length === 0) return;
+
+ // 2. Insert new records
+ const payload = item.obligations.map(o => ({
+ entity_type: entityType,
+ parent_id: parentId,
+ item_id: itemId,
+ obligation_date: o.date,
+ amount: toFiniteNumber(o.amount),
+ remarks: o.remarks || ''
+ }));
+
+ const { error: insertError } = await supabase.from('financial_obligations').insert(payload);
+ if (insertError) {
+ console.error("Error inserting obligations:", insertError);
+ throw insertError;
+ }
+ };
+
+ const syncDisbursementsToCentralTable = async (item: FinancialItem) => {
+ if (!supabase) return;
+
+ const entityType = item.sourceType === 'Subproject' ? 'subproject_detail' :
+ item.sourceType === 'Activity' ? 'activity_expense' :
+ item.sourceType === 'Staffing' ? 'staffing_expense' :
+ item.sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
+
+ const parentId = item.sourceId;
+ const itemId = item.sourceType === 'Staffing'
+ ? staffingExpenseItemId(item.detailId)
+ : item.detailId?.toString() || null;
+
+ let deleteQuery = supabase.from('financial_disbursements')
+ .delete()
+ .eq('entity_type', entityType)
+ .eq('parent_id', parentId);
+
+ if (itemId === null) {
+ deleteQuery = deleteQuery.is('item_id', null);
+ } else {
+ deleteQuery = deleteQuery.eq('item_id', itemId);
+ }
+
+ const { error: deleteError } = await deleteQuery;
+
+ if (deleteError) {
+ console.error("Error deleting old disbursements:", deleteError);
+ throw deleteError;
+ }
+
+ if (!item.disbursements || item.disbursements.length === 0) return;
+
+ const payload = item.disbursements.map(d => ({
+ entity_type: entityType,
+ parent_id: parentId,
+ item_id: itemId,
+ disbursement_date: d.date,
+ amount: toFiniteNumber(d.amount),
+ remarks: d.remarks || ''
+ }));
+
+ const { error: insertError } = await supabase.from('financial_disbursements').insert(payload);
+ if (insertError) {
+ console.error("Error inserting disbursements:", insertError);
+ throw insertError;
+ }
+ };
+
+ const saveItemToDB = async (item: FinancialItem) => {
+ const submittedAt = new Date().toISOString();
+ if (item.sourceType === 'Subproject') {
+ const sp = subprojects.find(s => s.id === item.sourceId);
+ if (!sp) throw new Error("Subproject not found");
+
+ const updatedDetails = sp.details.map(d => {
+ if (d.id === item.detailId) {
+ const updated = {
+ ...d,
+ actualObligationDate: item.actualObligationMonth,
+ actualObligationAmount: item.actualObligationAmount,
+ actualDisbursementDate: item.actualDisbursementMonth,
+ actualDisbursementAmount: item.actualDisbursementAmount,
+ obligations: item.obligations,
+ disbursements: item.disbursements
+ };
+ // Update targets if Proposed
+ if (item.status === 'Proposed') {
+ updated.obligationMonth = item.targetObligationMonth;
+ updated.disbursementMonth = item.targetDisbursementMonth;
+ updated.pricePerUnit = item.targetObligationAmount;
+ updated.numberOfUnits = 1;
+ }
+ return updated;
+ }
+ return d;
+ });
+
+ if (supabase) {
+ const { error: updateError } = await supabase.from('subprojects').update({ details: updatedDetails }).eq('id', sp.id);
+ if (updateError) throw updateError;
+ }
+ setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, details: updatedDetails } : s));
+
+ } else if (item.sourceType === 'Activity') {
+ const act = activities.find(a => a.id === item.sourceId);
+ if (!act) throw new Error("Activity not found");
+
+ const updatedExpenses = act.expenses.map(e => {
+ if (e.id === item.detailId) {
+ const updated = {
+ ...e,
+ actualObligationDate: item.actualObligationMonth,
+ actualObligationAmount: item.actualObligationAmount,
+ actualDisbursementDate: item.actualDisbursementMonth,
+ actualDisbursementAmount: item.actualDisbursementAmount
+ };
+ // Update targets if Proposed
+ if (item.status === 'Proposed') {
+ updated.obligationMonth = item.targetObligationMonth;
+ updated.disbursementMonth = item.targetDisbursementMonth;
+ updated.amount = item.targetObligationAmount;
+ }
+ return updated;
+ }
+ return e;
+ });
+
+ if (supabase) {
+ // Don't include obligations/disbursements in the direct update of activities table
+ // as they are stored in the centralized tables and causing schema cache errors
+ const { error: updateError } = await supabase.from('activities').update({ expenses: updatedExpenses }).eq('id', act.id);
+ if (updateError) throw updateError;
+ }
+ setActivities(prev => prev.map(a => a.id === act.id ? { ...a, expenses: updatedExpenses } : a));
+
+ } else if (item.sourceType === 'Staffing') {
+ const s = staffingReqs.find(req => req.id === item.sourceId);
+ if (!s) throw new Error("Staffing Requirement not found");
+
+ let payload: any = {};
+ let updatedExpenses = normalizeStaffingExpenses(s.expenses || []);
+
+ if (staffingExpenseItemId(item.detailId)) {
+ updatedExpenses = updatedExpenses.map(e => {
+ if (e.id === item.detailId) {
+ const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
+ const updatedExpense: any = {
+ ...e,
+ actualObligationDate: item.actualObligationMonth,
+ actualObligationAmount: item.actualObligationAmount,
+ actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
+ actualDisbursementAmount: disbursementSummary.total,
+ disbursements: item.disbursements || []
+ };
+ SHORT_MONTHS.forEach(m => {
+ updatedExpense[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
+ });
+ // Update targets if Proposed
+ if (item.status === 'Proposed') {
+ updatedExpense.obligationDate = item.targetObligationMonth;
+ updatedExpense.amount = item.targetObligationAmount;
+ }
+ return updatedExpense;
+ }
+ return e;
+ });
+
+ // Aggregate totals for the root
+ let totalActualObli = 0;
+ let totalActualDisb = 0;
+ const monthlyTotals: any = {};
+ SHORT_MONTHS.forEach(m => monthlyTotals[`actualDisbursement${m}`] = 0);
+
+ updatedExpenses.forEach(e => {
+ totalActualObli += toFiniteNumber(e.actualObligationAmount);
+ totalActualDisb += toFiniteNumber(e.actualDisbursementAmount);
+ SHORT_MONTHS.forEach(m => {
+ monthlyTotals[`actualDisbursement${m}`] += toFiniteNumber((e as any)[`actualDisbursement${m}`]);
+ });
+ });
+
+ payload = {
+ expenses: updatedExpenses,
+ actualObligationAmount: totalActualObli,
+ actualDisbursementAmount: totalActualDisb,
+ actualObligationDate: item.actualObligationMonth || s.actualObligationDate,
+ actualDisbursementDate: item.actualDisbursementMonth || s.actualDisbursementDate,
+ ...monthlyTotals
+ };
+
+ if (item.status === 'Proposed') {
+ payload.obligationDate = item.targetObligationMonth;
+ payload.annualSalary = item.targetObligationAmount;
+ }
+
+ } else {
+ const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
+ payload = {
+ actualObligationDate: item.actualObligationMonth,
+ actualObligationAmount: item.actualObligationAmount,
+ actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
+ actualDisbursementAmount: disbursementSummary.total
+ };
+ SHORT_MONTHS.forEach(m => {
+ payload[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
+ });
+ if (item.status === 'Proposed') {
+ payload.obligationDate = item.targetObligationMonth;
+ payload.annualSalary = item.targetObligationAmount;
+ }
+ }
+
+ const actualDateBasis = getProgramManagementPhysicalDateBasis(payload);
+ const previousActualDateBasis = getProgramManagementPhysicalDateBasis(s);
+ payload.physical_accomplishment_submitted_at = resolvePhysicalAccomplishmentSubmittedAt({
+ hasPhysicalAccomplishment: !!actualDateBasis,
+ hasChanged: valuesDiffer(previousActualDateBasis, actualDateBasis),
+ previousSubmittedAt: s.physical_accomplishment_submitted_at,
+ submittedAt
+ });
+
+ if (supabase) {
+ const { error: updateError } = await supabase.from('staffing_requirements').update(payload).eq('id', item.sourceId);
+ if (updateError) throw updateError;
+ }
+ setStaffingReqs(prev => prev.map(req => req.id === item.sourceId ? { ...req, ...payload } : req));
+
+ } else if (item.sourceType === 'Other') {
+ const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
+ const payload: any = {
+ actualObligationDate: item.actualObligationMonth,
+ actualObligationAmount: item.actualObligationAmount,
+ actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
+ actualDisbursementAmount: disbursementSummary.total
+ };
+
+ SHORT_MONTHS.forEach(m => {
+ payload[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
+ });
+
+ if (item.status === 'Proposed') {
+ payload.obligationDate = item.targetObligationMonth;
+ payload.disbursementDate = item.targetDisbursementMonth;
+ payload.amount = item.targetObligationAmount;
+ }
+
+ if (supabase) {
+ const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.sourceId);
+ if (updateError) throw updateError;
+ }
+ setOtherProgramExpenses(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
+ } else if (item.sourceType === 'Office') {
+ const payload: any = {
+ actualObligationDate: item.actualObligationMonth,
+ actualObligationAmount: item.actualObligationAmount,
+ actualDisbursementDate: item.actualDisbursementMonth,
+ actualDisbursementAmount: item.actualDisbursementAmount,
+ obligations: item.obligations,
+ disbursements: item.disbursements
+ };
+ if (item.status === 'Proposed') {
+ payload.obligationDate = item.targetObligationMonth;
+ payload.disbursementDate = item.targetDisbursementMonth;
+ payload.pricePerUnit = item.targetObligationAmount;
+ payload.numberOfUnits = 1;
+ }
+ const o = officeReqs.find(req => req.id === item.sourceId);
+ const actualDateBasis = getProgramManagementPhysicalDateBasis(payload);
+ const previousActualDateBasis = getProgramManagementPhysicalDateBasis(o || {});
+ payload.physical_accomplishment_submitted_at = resolvePhysicalAccomplishmentSubmittedAt({
+ hasPhysicalAccomplishment: !!actualDateBasis,
+ hasChanged: valuesDiffer(previousActualDateBasis, actualDateBasis),
+ previousSubmittedAt: o?.physical_accomplishment_submitted_at,
+ submittedAt
+ });
+ if (supabase) {
+ const { error: updateError } = await supabase.from('office_requirements').update(payload).eq('id', item.sourceId);
+ if (updateError) throw updateError;
+ }
+ setOfficeReqs(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
+ }
+
+ // Sync with centralized obligations table
+ await syncObligationsToCentralTable(item);
+ await syncDisbursementsToCentralTable(item);
+ };
+
+ const undoLocalItem = (uniqueId: string) => {
+ const original = originalItems.find(i => i.uniqueId === uniqueId);
+ if (original) {
+ setItems(prev => prev.map(item => item.uniqueId === uniqueId ? original : item));
+ setChangedItems(prev => {
+ const next = new Map(prev);
+ next.delete(uniqueId);
+ return next;
+ });
+ }
+ };
+
+ const handleSort = (key: SortKey) => {
+ setSortConfig(prev => {
+ if (prev?.key === key) {
+ if (prev.direction === 'asc') return { key, direction: 'desc' };
+ return null; // clear sort
+ }
+ return { key, direction: 'asc' };
+ });
+ };
+
+ const SortIcon = (key: SortKey) => {
+ if (sortConfig?.key !== key) return <ArrowUpDown className="fac-sort-icon" />;
+ return sortConfig.direction === 'asc' ? <ArrowUp className="fac-sort-icon is-active" /> : <ArrowDown className="fac-sort-icon is-active" />;
+ };
+
+ const handleSaveAllClick = () => {
+ if (!canEdit || changedItems.size === 0) return;
+ setIsSaveConfirmOpen(true);
+ };
+
+ const confirmSaveAll = async () => {
+ setIsSaveConfirmOpen(false);
+ setIsSavingAll(true);
+ try {
+ const itemsToSave: FinancialItem[] = Array.from(changedItems.values() as Iterable<FinancialItem>);
+ for (const item of itemsToSave) {
+ if (!(await validateFinancialItemForSave(item))) {
+ setIsSavingAll(false);
+ return;
+ }
+ }
+ await Promise.all(itemsToSave.map((item: FinancialItem) => saveItemToDB(item)));
+
+ // Mark as saved and clear changes (but don't lock)
+ setItems(prev => prev.map(item => {
+ if (changedItems.has(item.uniqueId)) {
+ return { ...item, isConfirmed: false };
+ }
+ return item;
+ }));
+ setChangedItems(new Map());
+ setSaveSuccessMessage('Changes saved successfully!');
+ setTimeout(() => setSaveSuccessMessage(''), 3000);
+ } catch (error: any) {
+ console.error("Error saving all changes:", error);
+ alert("Failed to save some changes." + error.message);
+ } finally {
+ setIsSavingAll(false);
+ }
+ };
+
+ const handleConfirmItem = async (item: FinancialItem) => {
+ if (!canEdit) return;
+ if (!(await validateFinancialItemForSave(item))) return;
+
+ setLocalSavingIds(prev => new Set(prev).add(item.uniqueId));
+ try {
+ await saveItemToDB(item);
+
+ updateLocalItem(item.uniqueId, { isConfirmed: false });
+ setChangedItems(prev => {
+ const newMap = new Map(prev);
+ newMap.delete(item.uniqueId);
+ return newMap;
+ });
+
+ } catch (error: any) {
+ console.error("Error saving accomplishment:", error);
+ alert("Failed to save changes:" + (error.message ||"Unknown error"));
+ } finally {
+ setLocalSavingIds(prev => {
+ const newSet = new Set(prev);
+ newSet.delete(item.uniqueId);
+ return newSet;
+ });
+ }
+ };
+
+ // --- Render ---
+
+ return (
+ <div className="data-list-page">
+ <div className="data-list-header">
+ <div>
+ <h2 className="data-list-title">Financial Accomplishment Collection Form</h2>
+ </div>
+ <div className="page-filter-toggle">
+ <span className="page-filter-summary">
+ {[selectedOu === 'All' ? 'All OUs' : selectedOu, selectedTier, selectedFundType, selectedYear].join(' / ')}
+ </span>
+ <button
+ type="button"
+ className={`btn btn-secondary page-filter-button ${filtersOpen ? 'is-open' : ''}`}
+ onClick={() => setFiltersOpen(prev => !prev)}
+ aria-expanded={filtersOpen}
+ aria-controls="financial-accomplishment-filter-panel"
+ >
+ <SlidersHorizontal aria-hidden="true" />
+ <span>Filters</span>
+ <ChevronDown aria-hidden="true" className="page-filter-button__chevron" />
+ </button>
+ </div>
+ </div>
+
+ <div
+ id="financial-accomplishment-filter-panel"
+ className={`report-filter-panel dashboard-filter-panel page-filter-panel ${filtersOpen ? 'is-open' : ''}`}
+ hidden={!filtersOpen}
+ >
+ <div className="report-filter-grid">
+ <div className="report-filter">
+ <label htmlFor="financial-ou-filter" className="form-label">OU</label>
+ <select
+ id="financial-ou-filter"
+ value={selectedOu}
+ onChange={(event) => setSelectedOu(event.target.value)}
+ disabled={!canViewAll}
+ className="form-control"
+ >
+ <option value="All">All OUs</option>
+ {operatingUnits.map(ou => (
+ <option key={ou} value={ou}>{ou}</option>
+ ))}
+ </select>
+ </div>
+ <div className="report-filter">
+ <label htmlFor="financial-tier-filter" className="form-label">Tier</label>
+ <select
+ id="financial-tier-filter"
+ value={selectedTier}
+ onChange={(event) => setSelectedTier(event.target.value)}
+ className="form-control"
+ >
+ <option value="All">All Tiers</option>
+ {tiers.map(tier => (
+ <option key={tier} value={tier}>{tier}</option>
+ ))}
+ </select>
+ </div>
+ <div className="report-filter">
+ <label htmlFor="financial-fund-type-filter" className="form-label">Fund Type</label>
+ <select
+ id="financial-fund-type-filter"
+ value={selectedFundType}
+ onChange={(event) => setSelectedFundType(event.target.value)}
+ className="form-control"
+ >
+ <option value="All">All Fund Types</option>
+ {fundTypes.map(fundType => (
+ <option key={fundType} value={fundType}>{fundType}</option>
+ ))}
+ </select>
+ </div>
+ <div className="report-filter">
+ <label htmlFor="financial-year-filter" className="form-label">Year</label>
+ <select
+ id="financial-year-filter"
+ value={(selectedYear || defaultYear).toString()}
+ onChange={(event) => setSelectedYear(Number(event.target.value))}
+ className="form-control"
+ >
+ {availableYears.map(year => (
+ <option key={year} value={year}>{year}</option>
+ ))}
+ </select>
+ </div>
+ </div>
+ </div>
+
+ {isLoading ? (
+ <LoadingState label="Loading financial data..." />
+ ) : (
+ <div className="data-table-card">
+ <section className="financial-accomplishment-summary-grid" aria-label="Financial accomplishment summary">
+ {financialSummaryCards.map(card => (
+ <div key={card.label} className={`financial-accomplishment-summary-card financial-accomplishment-summary-card--${card.tone}`}>
+ <div className="financial-accomplishment-summary-card__header">
+ <span>{card.label}</span>
+ </div>
+ <strong>{formatCurrency(card.value)}</strong>
+ <small>{card.indicator}</small>
+ </div>
+ ))}
+ </section>
+ <div className="data-table-scroll financial-accomplishment-table-scroll custom-scrollbar">
+ <table className="data-table financial-accomplishment-table ">
+ <colgroup>
+ <col className="fac-width-particulars" />
+ {Array.from({ length: 8 }).map((_, index) => (
+ <col key={`financial-col-${index}`} className="fac-width-financial" />
+ ))}
+ <col className="fac-width-action" />
+ </colgroup>
+ <thead>
+ <tr>
+ <th rowSpan={2} className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars financial-accomplishment-sticky-head fac-header-particulars px-4 py-3 text-center align-middle">Particulars / UACS</th>
+ {/* Target Obligation */}
+ <th colSpan={2} className="fac-col-target-obligation px-4 py-2 text-center border-l border-b ">Target Obligation</th>
+
+ {/* Actual Obligation */}
+ <th colSpan={2} className="fac-col-actual-obligation px-4 py-2 text-center border-l border-b ">Actual Obligation</th>
+
+ {/* Target Disbursement */}
+ <th colSpan={2} className="fac-col-target-disbursement px-4 py-2 text-center border-l border-b ">Target Disbursement</th>
+
+ {/* Actual Disbursement */}
+ <th colSpan={2} className="fac-col-actual-disbursement px-4 py-2 text-center border-l border-b ">Actual Disbursement</th>
+
+ <th rowSpan={2} className="fac-header-action fac-col-action px-4 py-3 text-center align-middle">Action</th>
+ </tr>
+ <tr>
+ {/* Target Obligation */}
+ <th className="fac-col-target-obligation px-2 py-2 text-center border-l cursor-pointer " onClick={() => handleSort('targetObligationAmount')}>
+ Amount {SortIcon('targetObligationAmount')}
+ </th>
+ <th className="fac-col-target-obligation px-2 py-2 text-center cursor-pointer " onClick={() => handleSort('targetObligationMonth')}>
+ Date {SortIcon('targetObligationMonth')}
+ </th>
+
+ <th className="fac-col-actual-obligation px-2 py-2 text-center border-l " colSpan={2}>
+ Obligations
+ </th>
+
+ {/* Target Disbursement */}
+ <th className="fac-col-target-disbursement px-2 py-2 text-center border-l cursor-pointer " onClick={() => handleSort('targetDisbursementAmount')}>
+ Amount {SortIcon('targetDisbursementAmount')}
+ </th>
+ <th className="fac-col-target-disbursement px-2 py-2 text-center cursor-pointer " onClick={() => handleSort('targetDisbursementMonth')}>
+ Date {SortIcon('targetDisbursementMonth')}
+ </th>
+
+ {/* Actual Disbursement */}
+ <th className="fac-col-actual-disbursement px-2 py-2 text-center border-l " colSpan={2}>
+ Disbursements
+ </th>
+ </tr>
+ </thead>
+ <tbody className="fac-table-body">
+ {groupedItems.map((typeGroup) => {
+ const isTypeExpanded = expandedObjectTypes.includes(typeGroup.objectType);
+ const objectTypeTotalTargetObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetObli), 0);
+ const objectTypeTotalActualObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualObli), 0);
+ const objectTypeTotalTargetDisb = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetDisb), 0);
+ const objectTypeTotalActualDisb = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualDisb), 0);
+ return (
+ <React.Fragment key={typeGroup.objectType}>
+ {/* Level 1: Object Type Header (Container) */}
+ <tr className="fac-row-object">
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3">
+ <button onClick={() => toggleObjectType(typeGroup.objectType)} className="fac-drill-button group w-full">
+ <span className="fac-expand-toggle" aria-hidden="true">{isTypeExpanded ? '-' : '+'}</span>
+ <span className="fac-drill-text">{typeGroup.objectType}</span>
+ </button>
+ </td>
+ <td className="fac-col-target-obligation fac-collapsed-total px-4 py-3 text-center border-l ">
+ {formatCurrency(objectTypeTotalTargetObli)}
+ </td>
+ <td className="fac-col-target-obligation px-4 py-3 text-center ">-</td>
+ <td className="fac-col-actual-obligation fac-collapsed-total px-4 py-3 text-center border-l " colSpan={2}>{formatCurrency(objectTypeTotalActualObli)}</td>
+ <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-3 text-center border-l ">{formatCurrency(objectTypeTotalTargetDisb)}</td>
+ <td className="fac-col-target-disbursement px-4 py-3 text-center ">-</td>
+ <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-3 text-center border-l " colSpan={2}>{formatCurrency(objectTypeTotalActualDisb)}</td>
+ <td className="fac-col-action px-4 py-3"></td>
+ </tr>
+
+ {/* Level 2: UACS Groups */}
+ {isTypeExpanded && typeGroup.uacsGroups.map((group) => {
+ const isExpanded = expandedGroups.includes(group.key);
+ // Determine if all items have same month to display in group header
+ return (
+ <React.Fragment key={group.key}>
+ {/* Group Header Row (UACS) */}
+ <tr className="fac-row-uacs">
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3">
+ <button onClick={() => toggleGroup(group.key)} className="fac-drill-button group text-left w-full" title={`${group.uacsCode} ${group.description}`}>
+ <span className="fac-expand-toggle" aria-hidden="true">{isExpanded ? '-' : '+'}</span>
+ <span className="fac-drill-text" title={`${group.uacsCode} ${group.description}`}>
+ <span className="fac-uacs-code mr-2">{group.uacsCode}</span>
+ <span className="fac-uacs-description">{group.description}</span>
+ </span>
+ </button>
+ </td>
+ {/* Targets Total */}
+ <td className="fac-col-target-obligation fac-collapsed-total px-4 py-3 text-center border-l ">{formatCurrency(group.totalTargetObli)}</td>
+ <td className="fac-col-target-obligation px-4 py-3 text-center ">-</td>
+
+ {/* Actual Obli Total & Batch */}
+ <td className="fac-col-actual-obligation px-4 py-3 text-center border-l " colSpan={2}>
+ {formatCurrency(group.totalActualObli)}
+ </td>
+
+ {/* Target Disb Total */}
+ <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-3 text-center border-l ">{formatCurrency(group.totalTargetDisb)}</td>
+ <td className="fac-col-target-disbursement px-4 py-3 text-center ">-</td>
+
+ {/* Actual Disb Total & Batch */}
+ <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-3 text-center border-l " colSpan={2}>{formatCurrency(group.totalActualDisb)}</td>
+ <td className="fac-col-action px-4 py-3"></td>
+ </tr>
+
+ {/* Expanded Content (Subgroups) */}
+ {isExpanded && Object.entries(group.subGroups).map(([subKey, sourceGroups]) => {
+ // Fix: Explicitly cast items to FinancialItem[] to resolve unknown type errors (length, map, etc.)
+ const typedSourceGroups = sourceGroups as { sourceId: number, sourceName: string, items: FinancialItem[], targetObligationAmount: number, actualObligationAmount: number, targetDisbursementAmount: number, actualDisbursementAmount: number }[];
+ if (typedSourceGroups.length === 0) return null;
+ const subId = `${group.key}-${subKey}`;
+ const isSubExpanded = expandedSubGroups.includes(subId);
+ const subGroupTotalTargetObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetObligationAmount), 0);
+ const subGroupTotalActualObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualObligationAmount), 0);
+ const subGroupTotalTargetDisb = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetDisbursementAmount), 0);
+ const subGroupTotalActualDisb = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualDisbursementAmount), 0);
+
+ return (
+ <React.Fragment key={subId}>
+ <tr className="fac-row-category border-b ">
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-2">
+ <button onClick={() => toggleSubGroup(subId)} className="fac-drill-button ">
+ <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSubExpanded ? '-' : '+'}</span>
+ <span className="fac-drill-text">{subKey}</span>
+ </button>
+ </td>
+ <td className="fac-col-target-obligation fac-collapsed-total px-4 py-2 text-center border-l ">
+ {formatCurrency(subGroupTotalTargetObli)}
+ </td>
+ <td className="fac-col-target-obligation px-4 py-2 text-center ">-</td>
+ <td className="fac-col-actual-obligation fac-collapsed-total px-4 py-2 text-center border-l " colSpan={2}>{formatCurrency(subGroupTotalActualObli)}</td>
+ <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-2 text-center border-l ">{formatCurrency(subGroupTotalTargetDisb)}</td>
+ <td className="fac-col-target-disbursement px-4 py-2 text-center ">-</td>
+ <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-2 text-center border-l " colSpan={2}>{formatCurrency(subGroupTotalActualDisb)}</td>
+ <td className="fac-col-action px-4 py-2"></td>
+ </tr>
+ {isSubExpanded && typedSourceGroups.map(sourceGroup => {
+ const sourceId = `${subId}-${sourceGroup.sourceId}`;
+ const isSourceExpanded = expandedRows.includes(sourceId);
+
+ const sortedItems = sortConfig ? [...sourceGroup.items].sort((a, b) => {
+ let valA = a[sortConfig.key];
+ let valB = b[sortConfig.key];
+ if (valA === valB) return 0;
+ if (valA === undefined || valA === null) return 1;
+ if (valB === undefined || valB === null) return -1;
+ if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+ if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+ return 0;
+ }) : sourceGroup.items;
+
+ return (
+ <React.Fragment key={sourceId}>
+ <tr className="fac-row-source border-b ">
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-1.5 ">
+ <button onClick={() => toggleRowExpansion(sourceId)} className="fac-drill-button " title={sourceGroup.sourceName}>
+ <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSourceExpanded ? '-' : '+'}</span>
+ <span className="fac-drill-text leading-tight" title={sourceGroup.sourceName}>{sourceGroup.sourceName}</span>
+ </button>
+ </td>
+ <td className="fac-col-target-obligation fac-collapsed-total px-2 py-1.5 text-center border-l ">{formatCurrency(sourceGroup.targetObligationAmount)}</td>
+ <td className="fac-col-target-obligation px-2 py-1.5 text-center ">-</td>
+ <td className="fac-col-actual-obligation fac-collapsed-total px-2 py-1.5 text-center border-l " colSpan={2}>{formatCurrency(sourceGroup.actualObligationAmount)}</td>
+ <td className="fac-col-target-disbursement fac-collapsed-total px-2 py-1.5 text-center border-l ">{formatCurrency(sourceGroup.targetDisbursementAmount)}</td>
+ <td className="fac-col-target-disbursement px-2 py-1.5 text-center ">-</td>
+ <td className="fac-col-actual-disbursement fac-collapsed-total px-2 py-1.5 text-center border-l " colSpan={2}>{formatCurrency(sourceGroup.actualDisbursementAmount)}</td>
+ <td className="fac-col-action px-4 py-1.5 text-right"></td>
+ </tr>
+ {isSourceExpanded && sortedItems.map(item => {
+ const isBreakdownExpanded = expandedRows.includes(item.uniqueId);
+ const isChanged = changedItems.has(item.uniqueId);
+ const contextDescription = getContextDescription(item);
+ const isTagged = isTaggedExclusion(item);
+ const taggedLabel = item.isCancelled ? 'Cancelled' : item.isSavings ? 'Savings' : item.isRealignment ? 'Realignment' : '';
+ const itemFinancialDecision = getFinancialStatusDecision(item);
+ const canEditFinancialItem = canEdit && itemFinancialDecision.allowed;
+
+ return (
+ <React.Fragment key={item.uniqueId}>
+ <tr className={`fac-row-item border-b ${isTagged ? 'is-tagged-exclusion' : ''} ${isChanged ? 'is-changed ' : ''}`}>
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-1.5 ">
+ <button
+ onClick={() => handleTitleClick(item)}
+ className="fac-item-title text-left "
+ title={`${item.sourceType === 'Subproject' && item.budgetParticular ? item.budgetParticular : item.expenseParticular}${contextDescription ? ` - ${contextDescription}` : ''}${taggedLabel ? ` (${taggedLabel})` : ''}`}
+ >
+ <span className="fac-item-primary block leading-tight">
+ <span>{item.sourceType === 'Subproject' && item.budgetParticular ? item.budgetParticular : item.expenseParticular}</span>
+ {taggedLabel && <span className="fac-tagged-badge">{taggedLabel}</span>}
+ </span>
+ {contextDescription && (
+ <span className="fac-item-description mt-0.5 block leading-tight no-underline">
+ {contextDescription}
+ </span>
+ )}
+ </button>
+ </td>
+
+ {/* Target Obli */}
+ <td className={`fac-col-target-obligation px-2 py-1.5 text-center border-l ${isTagged ? 'fac-target-excluded fac-target-excluded-amount' : ''}`}>
+ {item.status === 'Proposed' ? (
+ <FormattedAmountInput
+ value={toFiniteNumber(item.targetObligationAmount)}
+ onValueChange={(value) => updateLocalItem(item.uniqueId, { targetObligationAmount: value })}
+ disabled={!canEditFinancialItem}
+ className="form-control form-control--compact fac-number-input"
+ placeholder="0.00"
+ emptyWhenZero
+ />
+ ) : (
+ formatCurrency(item.targetObligationAmount)
+ )}
+ </td>
+ <td className={`fac-col-target-obligation px-2 py-1.5 text-center ${isTagged ? 'fac-target-excluded' : ''}`}>
+ {item.targetObligationMonth === 'Monthly' ? (
+ 'Monthly'
+ ) : item.status === 'Proposed' ? (
+ <MonthYearPicker
+ value={item.targetObligationMonth}
+ onChange={(val) => updateLocalItem(item.uniqueId, { targetObligationMonth: val })}
+ disabled={!canEditFinancialItem}
+ className="h-7 py-0"
+ />
+ ) : (
+ item.targetObligationMonth ? new Date(item.targetObligationMonth).toLocaleDateString(undefined, {month:'long', year:'numeric'}) : '-'
+ )}
+ </td>
+
+ {/* Actual Obli */}
+ <td className="fac-col-actual-obligation px-2 py-1.5 border-l " colSpan={2}>
+ <ObligationsEditor
+ obligations={item.obligations || []}
+ onChange={(newObs, total) => updateLocalItem(item.uniqueId, { obligations: newObs, actualObligationAmount: total })}
+ defaultYear={selectedYear?.toString()}
+ readOnly={!canEditFinancialItem}
+ validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
+ />
+ </td>
+
+ {/* Target Disb */}
+ <td className={`fac-col-target-disbursement px-2 py-1.5 text-center border-l ${isTagged ? 'fac-target-excluded fac-target-excluded-amount' : ''}`}>
+ {item.status === 'Proposed' ? (
+ <FormattedAmountInput
+ value={toFiniteNumber(item.targetDisbursementAmount)}
+ onValueChange={(value) => updateLocalItem(item.uniqueId, { targetDisbursementAmount: value })}
+ disabled={!canEditFinancialItem}
+ className="form-control form-control--compact fac-number-input"
+ placeholder="0.00"
+ emptyWhenZero
+ />
+ ) : (
+ formatCurrency(item.targetDisbursementAmount)
+ )}
+ </td>
+ <td className={`fac-col-target-disbursement px-2 py-1.5 text-center ${isTagged ? 'fac-target-excluded' : ''}`}>
+ {item.targetDisbursementMonth === 'Monthly' ? (
+ 'Monthly'
+ ) : item.status === 'Proposed' ? (
+ <MonthYearPicker
+ value={item.targetDisbursementMonth}
+ onChange={(val) => updateLocalItem(item.uniqueId, { targetDisbursementMonth: val })}
+ disabled={!canEditFinancialItem}
+ className="h-7 py-0"
+ />
+ ) : (
+ item.targetDisbursementMonth ? (item.targetDisbursementMonth.includes('-') ? new Date(item.targetDisbursementMonth).toLocaleDateString(undefined, {month:'long', year:'numeric'}) : item.targetDisbursementMonth) : '-'
+ )}
+ </td>
+
+ {/* Actual Disbursement */}
+ <td className="fac-col-actual-disbursement px-2 py-1.5 border-l " colSpan={2}>
+ <DisbursementsEditor
+ disbursements={item.disbursements || []}
+ onChange={(newDibs, total) => updateLocalItem(item.uniqueId, { disbursements: newDibs, actualDisbursementAmount: total })}
+ defaultYear={selectedYear?.toString()}
+ readOnly={!canEditFinancialItem}
+ validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
+ />
+ </td>
+
+ <td className="fac-col-action px-4 py-1.5 text-right">
+ <div className="flex items-center gap-1 justify-end">
+ <button
+ onClick={() => toggleRowExpansion(item.uniqueId)}
+ className={`fac-breakdown-button ${isBreakdownExpanded ? 'is-expanded' : ''}`}
+ title={isBreakdownExpanded ? 'Hide breakdown' : 'Show breakdown'}
+ aria-label={isBreakdownExpanded ? 'Hide breakdown' : 'Show breakdown'}
+ aria-expanded={isBreakdownExpanded}
+ >
+ {isBreakdownExpanded ? 'Collapse' : 'Expand'}
+ </button>
+ {canEdit && (
+ <>
+ {isChanged && !localSavingIds.has(item.uniqueId) && (
+ <button
+ onClick={() => undoLocalItem(item.uniqueId)}
+ className="table-action table-action--warning table-action--icon"
+ title="Undo changes"
+ >
+ <Undo2 className="w-4 h-4" />
+ </button>
+ )}
+ <button
+ onClick={() => handleConfirmItem(item)}
+ disabled={localSavingIds.has(item.uniqueId) || !canEditFinancialItem}
+ className="btn btn-primary btn-sm fac-save-button"
+ title={canEditFinancialItem ? 'Save row' : itemFinancialDecision.message}
+ >
+ {localSavingIds.has(item.uniqueId) ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+ </button>
+ </>
+ )}
+ </div>
+ </td>
+ </tr>
+ {/* Expandable Breakdown (Monthly or Obligations) */}
+ {isBreakdownExpanded && (
+ <tr className="fac-row-breakdown animate-fadeIn">
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-4"></td>
+ <td colSpan={9} className="px-4 py-4 border-l-4 ">
+ <div className="flex flex-col lg:flex-row gap-6">
+ {/* Multi-Obligation Section */}
+ <div className="flex-1">
+ <h4 className="fac-breakdown-title">
+ <ListFilter className="w-4 h-4" />
+ Multi-Obligation Records
+ </h4>
+ <ObligationListEditor
+ obligations={item.obligations}
+ onChange={(obs) => updateLocalItem(item.uniqueId, { obligations: obs })}
+ readOnly={!canEditFinancialItem}
+ hideHeaderAddButton
+ validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
+ />
+ </div>
+
+ {/* Monthly Disbursement Section (If supported) */}
+ <div className="flex-1">
+ <h4 className="fac-breakdown-title">
+ <ListFilter className="w-4 h-4" />
+ Multi-Disbursement Records
+ </h4>
+ <DisbursementListEditor
+ disbursements={item.disbursements || []}
+ onChange={(newDb) => {
+ updateLocalItem(item.uniqueId, { disbursements: newDb });
+ }}
+ readOnly={!canEditFinancialItem}
+ hideHeaderAddButton
+ validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
+ />
+ </div>
+ </div>
+ </td>
+ </tr>
+ )}
+ </React.Fragment>
+ );
+ })}
+ </React.Fragment>
+ );
+ })}
+ </React.Fragment>
+ );
+ })}
+ </React.Fragment>
+ );
+ })}
+ </React.Fragment>
+ )
+ })}
+ {groupedItems.length === 0 && (
+ <tr>
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-8"></td>
+ <td colSpan={9} className="px-6 py-8 text-center italic">No financial items found for the selected criteria.</td>
+ </tr>
+ )}
+ </tbody>
+ <tfoot>
+ <tr>
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3 text-right ">GRAND TOTAL</td>
+ <td className="fac-col-target-obligation px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.targetObli)}</td>
+ <td className="fac-col-target-obligation px-4 py-3"></td>
+ <td className="fac-col-actual-obligation px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.actualObli)}</td>
+ <td className="fac-col-actual-obligation px-4 py-3"></td>
+ <td className="fac-col-target-disbursement px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.targetDisb)}</td>
+ <td className="fac-col-target-disbursement px-4 py-3"></td>
+ <td className="fac-col-actual-disbursement px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.actualDisb)}</td>
+ <td className="fac-col-actual-disbursement px-4 py-3"></td>
+ <td className="fac-col-action px-4 py-3"></td>
+ </tr>
+ </tfoot>
+ </table>
+ </div>
+ </div>
+ )}
+
+ {/* Global Save Bar */}
+ {changedItems.size > 0 && (
+ <div className="financial-savebar animate-in slide-in-from-bottom duration-300">
+ <div className="financial-savebar__status">
+ <span>
+ <span className="status-badge status-badge--approved status-badge--compact">
+ {changedItems.size}
+ </span>
+ Unsaved changes in financial accomplishments
+ </span>
+ </div>
+ <div className="financial-savebar__actions">
+ <button
+ onClick={() => {
+ setChangedItems(new Map());
+ // We don't reload items here to avoid losing all progress,
+ // but we clear the highlight
+ setItems(prev => prev.map(item => ({ ...item })));
+ }}
+ className="btn btn-secondary"
+ >
+ Discard Changes
+ </button>
+ <button
+ onClick={handleSaveAllClick}
+ disabled={isSavingAll}
+ className="btn btn-primary"
+ >
+ {isSavingAll ? (
+ <>
+ <svg className="animate-spin h-4 w-4 " xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+ <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+ <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+ </svg>
+ Saving Changes...
+ </>
+ ) : 'Save All Changes'}
+ </button>
+ </div>
+ </div>
+ )}
+
+ {/* Save Confirmation Modal */}
+ {isSaveConfirmOpen && (
+ <ConfirmDialog
+ title="Confirm Save"
+ description={`Are you sure you want to save ${changedItems.size} changes? This action will update the database.`}
+ confirmLabel="Yes, Save Changes"
+ onConfirm={confirmSaveAll}
+ onCancel={() => setIsSaveConfirmOpen(false)}
+ />
+ )}
+
+ {/* Success Message Toast */}
+ {saveSuccessMessage && (
+ <div className="app-toast app-toast--success animate-in slide-in-from-bottom-5">
+ <CheckCircle className="w-5 h-5" />
+ <span>{saveSuccessMessage}</span>
+ </div>
+ )}
+ {monthLockMessage && (
+ <div className="app-toast app-toast--warning animate-in slide-in-from-bottom-5" role="status">
+ <span>{monthLockMessage}</span>
+ </div>
+ )}
+ </div>
+ );
 };
 
 export default FinancialAccomplishment;

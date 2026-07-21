@@ -1,13 +1,22 @@
-// Author: 4K
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    ChevronDown,
+    LogOut,
+    Monitor,
+    Moon,
+    RefreshCw,
+    Settings2,
+    Sun,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { SettingsIcon } from '../constants';
+import { ThemePreference } from '../lib/theme';
 import { supabase } from '../supabaseClient';
 
 interface HeaderProps {
     toggleSidebar: () => void;
-    toggleDarkMode: () => void;
     isDarkMode: boolean;
+    themePreference: ThemePreference;
+    onThemePreferenceChange: (preference: ThemePreference) => void;
     setCurrentPage: (page: string, options?: { resetReports?: boolean }) => void;
     onRefreshData?: () => Promise<void> | void;
     onClearLocalCache?: () => Promise<void> | void;
@@ -17,130 +26,77 @@ interface HeaderProps {
     cacheStatus?: string | null;
 }
 
-const SunIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-);
-
-const MoonIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-    </svg>
-);
-
-const UserCircleIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-);
-
-const RefreshIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5.75 15.25A7.5 7.5 0 0 0 18.5 18M18.25 8.75A7.5 7.5 0 0 0 5.5 6" />
-    </svg>
-);
+const themeOptions: Array<{
+    value: ThemePreference;
+    label: string;
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+}> = [
+    { value: 'light', label: 'Light', icon: Sun },
+    { value: 'dark', label: 'Dark', icon: Moon },
+    { value: 'system', label: 'System', icon: Monitor },
+];
 
 const Header: React.FC<HeaderProps> = ({
     toggleSidebar,
-    toggleDarkMode,
     isDarkMode,
+    themePreference,
+    onThemePreferenceChange,
     setCurrentPage,
     onRefreshData,
     onClearLocalCache,
     isRefreshingData = false,
     lastDataRefreshAt = null,
     dataRefreshError = null,
-    cacheStatus = null
+    cacheStatus = null,
 }) => {
     const { currentUser, logout } = useAuth();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const menuRef = useRef<HTMLDivElement>(null);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [dbStatus, setDbStatus] = useState<'connected' | 'offline' | 'loading'>('loading');
+    const menuRef = useRef<HTMLDivElement>(null);
     const failureCountRef = useRef(0);
 
     useEffect(() => {
-        const timer = setInterval(() => setCurrentDate(new Date()), 60000);
-        return () => clearInterval(timer);
+        const timer = window.setInterval(() => setCurrentDate(new Date()), 60000);
+        return () => window.clearInterval(timer);
     }, []);
 
-    // Check Database Connection
     useEffect(() => {
         const checkDb = async (isRetry = false) => {
             if (!supabase) {
                 setDbStatus('offline');
                 return;
             }
-            try {
-                // Heartbeat check: Efficiently check connection without heavy data transfer
-                const fetchPromise = supabase.from('users').select('id', { head: true, count: 'exact' }).limit(1);
-                const timeoutPromise = new Promise<{ error: any }>((_, reject) =>
-                    setTimeout(() => reject(new Error("Network Threshold Exceeded")), 15000)
-                );
 
-                const { error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+            try {
+                const fetchPromise = supabase.from('users').select('id', { head: true, count: 'exact' }).limit(1);
+                const timeoutPromise = new Promise<{ error: unknown }>((_, reject) =>
+                    window.setTimeout(() => reject(new Error('Network Threshold Exceeded')), 15000)
+                );
+                const { error } = await Promise.race([fetchPromise, timeoutPromise]) as { error?: unknown };
 
                 if (!error) {
                     setDbStatus('connected');
                     failureCountRef.current = 0;
-                } else {
-                    throw error;
+                    return;
                 }
-            } catch (err: any) {
+                throw error;
+            } catch (error) {
                 failureCountRef.current += 1;
-                console.warn(`Connection heartbeat failed (${failureCountRef.current}/3):`, err.message || err);
+                console.warn(`Connection heartbeat failed (${failureCountRef.current}/3):`, error);
 
                 if (failureCountRef.current >= 3) {
                     setDbStatus('offline');
                 } else if (!isRetry) {
-                    setTimeout(() => checkDb(true), 2500);
+                    window.setTimeout(() => checkDb(true), 2500);
                 }
             }
         };
 
-        checkDb();
-
-        const intervalId = setInterval(() => checkDb(false), 60000);
-        return () => clearInterval(intervalId);
+        void checkDb();
+        const intervalId = window.setInterval(() => void checkDb(false), 60000);
+        return () => window.clearInterval(intervalId);
     }, []);
-
-    const formattedDate = currentDate.toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
-
-    const dbStatusClass = dbStatus === 'connected'
-        ? 'app-topbar__status--connected'
-        : dbStatus === 'offline'
-            ? 'app-topbar__status--offline'
-            : 'app-topbar__status--loading';
-
-    const dbStatusLabel = dbStatus === 'connected' ? 'System Online' : dbStatus === 'offline' ? 'Offline Mode' : 'Connecting...';
-    const dbStatusTitle = dbStatus === 'connected'
-        ? 'System Online - connected to Supabase'
-        : dbStatus === 'offline'
-            ? 'Offline Mode - using local data until refresh succeeds'
-            : 'Connecting to Supabase...';
-
-    const formatRefreshTime = (value: string | null) => {
-        if (!value) return 'Not refreshed yet';
-        const parsed = new Date(value);
-        if (Number.isNaN(parsed.getTime())) return 'Not refreshed yet';
-        return parsed.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit'
-        });
-    };
-
-    const refreshTitle = dataRefreshError
-        ? `Refresh failed: ${dataRefreshError}`
-        : lastDataRefreshAt
-            ? `Refresh Data - Last refreshed ${formatRefreshTime(lastDataRefreshAt)}`
-            : 'Refresh Data';
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -148,128 +104,175 @@ const Header: React.FC<HeaderProps> = ({
                 setIsMenuOpen(false);
             }
         };
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsMenuOpen(false);
+        };
 
         document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
         };
     }, []);
+
+    const formattedDate = currentDate.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+
+    const formatRefreshTime = (value: string | null) => {
+        if (!value) return 'Not refreshed yet';
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return 'Not refreshed yet';
+        return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    };
+
+    const dbStatusLabel = dbStatus === 'connected'
+        ? 'System online'
+        : dbStatus === 'offline'
+            ? 'Offline mode'
+            : 'Connecting';
+    const refreshTitle = dataRefreshError
+        ? `Refresh failed: ${dataRefreshError}`
+        : lastDataRefreshAt
+            ? `Sync data · Last updated ${formatRefreshTime(lastDataRefreshAt)}`
+            : 'Sync data';
+    const initials = (currentUser?.fullName || currentUser?.username || '4K')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
 
     return (
         <header className="app-topbar">
             <div className="app-topbar__left">
                 <button
+                    type="button"
                     onClick={toggleSidebar}
-                    className="app-icon-button"
-                    aria-label="Toggle sidebar"
-                    title="Toggle sidebar"
+                    className="app-icon-button app-topbar__menu-toggle"
+                    aria-label="Open navigation"
+                    title="Open navigation"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
-                    </svg>
+                    <span className="app-topbar__hamburger" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                    </span>
                 </button>
-
-                <span className="app-topbar__date">
-                    {formattedDate}
-                </span>
+                <div className="app-topbar__context">
+                    <span className="app-topbar__product">4KIS</span>
+                    <span className="app-topbar__date">{formattedDate}</span>
+                </div>
             </div>
 
             <div className="app-topbar__actions">
                 <div
-                    className={`app-topbar__status ${dbStatusClass}`}
-                    title={dbStatusTitle}
+                    className={`app-topbar__status app-topbar__status--${dbStatus}`}
+                    title={dbStatusLabel}
                     aria-label={dbStatusLabel}
                     role="status"
                 >
-                    <span className="app-topbar__status-dot"></span>
+                    <span className="app-topbar__status-dot" />
+                    <span className="app-topbar__status-label">{dbStatusLabel}</span>
                 </div>
 
-                <div className="app-topbar__sync">
-                    <span className="app-topbar__refresh-time hidden xl:inline">
-                        {isRefreshingData
-                            ? 'Refreshing...'
-                            : cacheStatus
-                                ? cacheStatus
-                            : lastDataRefreshAt
-                                ? `Updated ${formatRefreshTime(lastDataRefreshAt)}`
-                                : 'Manual refresh'}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => { void onRefreshData?.(); }}
-                        className={`app-icon-button app-topbar__refresh ${isRefreshingData ? 'is-loading' : ''} ${dataRefreshError ? 'has-error' : ''}`}
-                        aria-label="Refresh data"
-                        title={refreshTitle}
-                        disabled={!onRefreshData || isRefreshingData}
-                    >
-                        <RefreshIcon />
-                    </button>
-                </div>
+                <span className="app-topbar__refresh-time">
+                    {isRefreshingData
+                        ? 'Syncing…'
+                        : cacheStatus || (lastDataRefreshAt ? `Updated ${formatRefreshTime(lastDataRefreshAt)}` : 'Ready')}
+                </span>
+                <button
+                    type="button"
+                    onClick={() => void onRefreshData?.()}
+                    className={`app-topbar__action app-topbar__refresh ${isRefreshingData ? 'is-loading' : ''} ${dataRefreshError ? 'has-error' : ''}`}
+                    aria-label="Sync data"
+                    title={refreshTitle}
+                    disabled={!onRefreshData || isRefreshingData}
+                >
+                    <RefreshCw aria-hidden="true" />
+                    <span>Sync</span>
+                </button>
 
                 {currentUser && (
                     <div className="app-topbar__user" ref={menuRef}>
-                        <div
+                        <button
+                            type="button"
                             className="app-topbar__user-trigger"
-                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            onClick={() => setIsMenuOpen(open => !open)}
+                            aria-expanded={isMenuOpen}
+                            aria-haspopup="menu"
                         >
-                            <div className="app-topbar__user-text hidden sm:block">
-                                <p>Hello, {currentUser.fullName}</p>
-                                <span>{currentUser.role} | {currentUser.operatingUnit}</span>
-                            </div>
-                            <button
-                                className="app-topbar__avatar"
-                                aria-label="Open user menu"
-                            >
-                                <UserCircleIcon className="h-8 w-8" />
-                            </button>
-                        </div>
+                            <span className="app-topbar__avatar" aria-hidden="true">{initials}</span>
+                            <span className="app-topbar__user-text">
+                                <strong>{currentUser.fullName}</strong>
+                                <small>{currentUser.role} · {currentUser.operatingUnit}</small>
+                            </span>
+                            <ChevronDown className="app-topbar__user-chevron" aria-hidden="true" />
+                        </button>
 
                         {isMenuOpen && (
-                            <div className="app-topbar__menu animate-fadeIn">
-                                <div className="sm:hidden app-topbar__menu-info">
+                            <div className="app-topbar__menu" role="menu">
+                                <div className="app-topbar__menu-info">
                                     <p>{currentUser.fullName}</p>
-                                    <span>{currentUser.role}</span>
+                                    <span>{currentUser.role} · {currentUser.operatingUnit}</span>
                                 </div>
 
-                                <div className="xl:hidden app-topbar__menu-status flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${
-                                        dbStatus === 'connected' ? 'bg-green-500' :
-                                        dbStatus === 'offline' ? 'bg-red-500' :
-                                        'bg-gray-500'
-                                    }`}></span>
-                                    <span>{dbStatus === 'connected' ? 'Online' : 'Offline'}</span>
+                                <div className="app-theme-selector">
+                                    <span className="app-theme-selector__label">Theme</span>
+                                    <div className="app-theme-selector__options" role="group" aria-label="Theme preference">
+                                        {themeOptions.map(option => {
+                                            const Icon = option.icon;
+                                            const isActive = themePreference === option.value;
+                                            return (
+                                                <button
+                                                    key={option.value}
+                                                    type="button"
+                                                    className={`app-theme-selector__option ${isActive ? 'is-active' : ''}`}
+                                                    onClick={() => onThemePreferenceChange(option.value)}
+                                                    aria-pressed={isActive}
+                                                    title={`${option.label} theme`}
+                                                >
+                                                    <Icon aria-hidden="true" />
+                                                    <span>{option.label}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <small>{themePreference === 'system' ? `Following system · ${isDarkMode ? 'Dark' : 'Light'}` : `${themePreference === 'dark' ? 'Dark' : 'Light'} selected`}</small>
                                 </div>
 
                                 <button
+                                    type="button"
                                     onClick={() => { setCurrentPage('/settings'); setIsMenuOpen(false); }}
                                     className="app-topbar__menu-item"
+                                    role="menuitem"
                                 >
-                                    <SettingsIcon className="h-4 w-4" />
+                                    <Settings2 aria-hidden="true" />
                                     User Settings
-                                </button>
-                                <button
-                                    onClick={toggleDarkMode}
-                                    className="app-topbar__menu-item"
-                                >
-                                    {isDarkMode ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
-                                    {isDarkMode ? 'Set Light Mode' : 'Set Dark Mode'}
                                 </button>
                                 {onClearLocalCache && (
                                     <button
+                                        type="button"
                                         onClick={() => { void onClearLocalCache(); setIsMenuOpen(false); }}
                                         className="app-topbar__menu-item"
+                                        role="menuitem"
                                     >
-                                        <RefreshIcon className="h-4 w-4" />
+                                        <RefreshCw aria-hidden="true" />
                                         Clear Local Cache
                                     </button>
                                 )}
                                 <button
+                                    type="button"
                                     onClick={() => { logout(); setIsMenuOpen(false); }}
                                     className="app-topbar__menu-item app-topbar__menu-item--danger"
+                                    role="menuitem"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                    </svg>
+                                    <LogOut aria-hidden="true" />
                                     Logout
                                 </button>
                             </div>

@@ -83,6 +83,15 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
         if (isOpen) scrollToBottom();
     }, [messages, isOpen]);
 
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsOpen(false);
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [isOpen]);
+
     // Handle Link Clicks with Query Params
     const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
         e.preventDefault();
@@ -133,7 +142,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
         
         return boldParts.map((part, index) => {
             if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={index} className="font-bold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>;
+                return <strong key={index} className="ai-message__strong">{part.slice(2, -2)}</strong>;
             }
             
             const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -152,7 +161,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         key={`${index}-${match.index}`} 
                         href={linkUrl} 
                         onClick={(e) => handleLinkClick(e, linkUrl)}
-                        className="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold cursor-pointer"
+                        className="ai-message__link"
                     >
                         {linkText}
                     </a>
@@ -792,33 +801,33 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
             const isExceeded = ceiling > 0 && totalAllocation > ceiling;
 
             return (
-                <div className="space-y-4 p-2">
-                    <div className="flex justify-between items-center border-b pb-2">
-                        <h4 className="font-bold text-emerald-700 dark:text-emerald-400">Target Quick Stats</h4>
-                        <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 rounded text-emerald-700 dark:text-emerald-300">{filters.year} | {filters.tier}</span>
+                <div className="ai-insight">
+                    <div className="ai-insight__header">
+                        <h4>Target Quick Stats</h4>
+                        <span className="ai-insight__badge">{filters.year} | {filters.tier}</span>
                     </div>
 
-                    <div className={`p-3 rounded-lg border ${isExceeded ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}>
-                        <div className="text-xs text-gray-500 uppercase font-bold mb-1">Total Allocation</div>
-                        <div className="text-2xl font-black text-gray-900 dark:text-white">
+                    <div className={`ai-insight__metric ${isExceeded ? 'is-danger' : ''}`}>
+                        <div className="ai-insight__label">Total Allocation</div>
+                        <div className="ai-insight__value">
                             ₱{totalAllocation.toLocaleString()}
                         </div>
                         {ceiling > 0 && (
-                            <div className="mt-1 flex items-center gap-2">
-                                <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className="ai-insight__progress-row">
+                                <div className="ai-insight__progress">
                                     <div 
-                                        className={`h-full ${isExceeded ? 'bg-red-500' : 'bg-emerald-500'}`} 
+                                        className={isExceeded ? 'is-danger' : ''}
                                         style={{ width: `${Math.min(100, (totalAllocation / ceiling) * 100)}%` }}
                                     />
                                 </div>
-                                <span className={`text-[10px] font-bold ${isExceeded ? 'text-red-600' : 'text-emerald-600'}`}>
+                                <span className={isExceeded ? 'is-danger' : ''}>
                                     {((totalAllocation / ceiling) * 100).toFixed(1)}% of Ceiling
                                 </span>
                             </div>
                         )}
                         {isExceeded && (
-                            <div className="mt-2 text-[10px] text-red-600 font-bold flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <div className="ai-insight__warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                                 </svg>
                                 Allocation exceeds budget ceiling!
@@ -826,55 +835,46 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">Subprojects</div>
-                            <div className="text-lg font-bold">{fSubprojects.length}</div>
+                    <div className="ai-insight__stat-grid">
+                        <div className="ai-insight__stat">
+                            <small>Subprojects</small><strong>{fSubprojects.length}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">Trainings</div>
-                            <div className="text-lg font-bold">{fTrainings.length}</div>
+                        <div className="ai-insight__stat">
+                            <small>Trainings</small><strong>{fTrainings.length}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">IPOs w/ SPs</div>
-                            <div className="text-lg font-bold">{iposWithTargetSP}</div>
+                        <div className="ai-insight__stat">
+                            <small>IPOs w/ SPs</small><strong>{iposWithTargetSP}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">IPOs w/ Trainings</div>
-                            <div className="text-lg font-bold">{iposWithTargetTrainings}</div>
+                        <div className="ai-insight__stat">
+                            <small>IPOs w/ Trainings</small><strong>{iposWithTargetTrainings}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600 col-span-2">
-                            <div className="text-[10px] text-gray-500 uppercase">ADs w/ SPs</div>
-                            <div className="text-lg font-bold">{adsWithTargetSP}</div>
+                        <div className="ai-insight__stat ai-insight__stat--wide">
+                            <small>ADs w/ SPs</small><strong>{adsWithTargetSP}</strong>
                         </div>
                     </div>
 
-                    <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Allocation per Component</div>
+                    <div className="ai-insight__breakdown">
+                        <div className="ai-insight__label">Allocation per Component</div>
                         {Object.entries(componentAllocation).map(([name, amt]) => (
-                            <div key={name} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 dark:border-gray-700 last:border-0">
-                                <span className="text-gray-600 dark:text-gray-400 truncate pr-2">{name}</span>
-                                <div className="text-right shrink-0">
-                                    <div className="font-bold">₱{(amt / 1000000).toFixed(2)}M</div>
-                                    <div className="text-[10px] text-gray-400">{((amt / totalAllocation) * 100).toFixed(1)}%</div>
-                                </div>
+                            <div key={name} className="ai-insight__breakdown-row">
+                                <span>{name}</span><span><strong>₱{(amt / 1000000).toFixed(2)}M</strong><small>{((amt / totalAllocation) * 100).toFixed(1)}%</small></span>
                             </div>
                         ))}
                     </div>
 
-                    <div className="pt-2 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+                    <div className="ai-insight__actions">
                         <button 
                             onClick={() => setQuickStatsStep(6)}
-                            className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded transition-colors flex items-center justify-center gap-1"
+                            className="ai-chat-action ai-chat-action--primary"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                             </svg>
                             Refresh Stats
                         </button>
                         <button 
                             onClick={startQuickStats}
-                            className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-bold rounded transition-colors"
+                            className="ai-chat-action ai-chat-action--secondary"
                         >
                             New Query
                         </button>
@@ -968,78 +968,57 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
             const adsWithCompletedSP = new Set(fIPOs.filter(i => completedSPs.some(s => s.indigenousPeopleOrganization === i.name)).map(i => i.ancestralDomainNo)).size;
 
             return (
-                <div className="space-y-4 p-2">
-                    <div className="flex justify-between items-center border-b pb-2">
-                        <h4 className="font-bold text-blue-700 dark:text-blue-400">Accomplishment Quick Stats</h4>
-                        <span className="text-xs bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded text-blue-700 dark:text-blue-300">{filters.year}</span>
+                <div className="ai-insight ai-insight--info">
+                    <div className="ai-insight__header">
+                        <h4>Accomplishment Quick Stats</h4><span className="ai-insight__badge">{filters.year}</span>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3">
-                        <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                            <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Total Obligated</div>
-                            <div className="text-xl font-black text-gray-900 dark:text-white">₱{totalObligated.toLocaleString()}</div>
-                            <div className="text-[10px] text-blue-600 font-bold mt-1">
+                    <div className="ai-insight__metric-grid">
+                        <div className="ai-insight__metric"><div className="ai-insight__label">Total Obligated</div><div className="ai-insight__value">₱{totalObligated.toLocaleString()}</div><div className="ai-insight__comparison">
                                 {totalAllocation > 0 ? ((totalObligated / totalAllocation) * 100).toFixed(1) : 0}% vs Allocation
                             </div>
                         </div>
-                        <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                            <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Total Disbursed</div>
-                            <div className="text-xl font-black text-gray-900 dark:text-white">₱{totalDisbursed.toLocaleString()}</div>
-                            <div className="text-[10px] text-emerald-600 font-bold mt-1">
+                        <div className="ai-insight__metric"><div className="ai-insight__label">Total Disbursed</div><div className="ai-insight__value">₱{totalDisbursed.toLocaleString()}</div><div className="ai-insight__comparison is-success">
                                 {totalObligated > 0 ? ((totalDisbursed / totalObligated) * 100).toFixed(1) : 0}% vs Obligated
                             </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">Completed SPs</div>
-                            <div className="text-lg font-bold">{completedSPs.length}</div>
+                    <div className="ai-insight__stat-grid">
+                        <div className="ai-insight__stat"><small>Completed SPs</small><strong>{completedSPs.length}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">Completed Trainings</div>
-                            <div className="text-lg font-bold">{completedTrainings.length}</div>
+                        <div className="ai-insight__stat"><small>Completed Trainings</small><strong>{completedTrainings.length}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">IPOs w/ Comp. SP</div>
-                            <div className="text-lg font-bold">{iposWithCompletedSP}</div>
+                        <div className="ai-insight__stat"><small>IPOs w/ Comp. SP</small><strong>{iposWithCompletedSP}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600">
-                            <div className="text-[10px] text-gray-500 uppercase">IPOs w/ Comp. Trng</div>
-                            <div className="text-lg font-bold">{iposWithCompletedTrainings}</div>
+                        <div className="ai-insight__stat"><small>IPOs w/ Comp. Trng</small><strong>{iposWithCompletedTrainings}</strong>
                         </div>
-                        <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600 col-span-2">
-                            <div className="text-[10px] text-gray-500 uppercase">ADs w/ Comp. SP</div>
-                            <div className="text-lg font-bold">{adsWithCompletedSP}</div>
+                        <div className="ai-insight__stat ai-insight__stat--wide"><small>ADs w/ Comp. SP</small><strong>{adsWithCompletedSP}</strong>
                         </div>
                     </div>
 
-                    <div className="space-y-1">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Obligation per Component</div>
+                    <div className="ai-insight__breakdown">
+                        <div className="ai-insight__label">Obligation per Component</div>
                         {Object.entries(componentObligated).map(([name, amt]) => (
-                            <div key={name} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 dark:border-gray-700 last:border-0">
-                                <span className="text-gray-600 dark:text-gray-400 truncate pr-2">{name}</span>
-                                <div className="text-right shrink-0">
-                                    <div className="font-bold">₱{(amt / 1000000).toFixed(2)}M</div>
-                                    <div className="text-[10px] text-gray-400">{totalObligated > 0 ? ((amt / totalObligated) * 100).toFixed(1) : 0}%</div>
-                                </div>
+                            <div key={name} className="ai-insight__breakdown-row">
+                                <span>{name}</span><span><strong>₱{(amt / 1000000).toFixed(2)}M</strong><small>{totalObligated > 0 ? ((amt / totalObligated) * 100).toFixed(1) : 0}%</small></span>
                             </div>
                         ))}
                     </div>
 
-                    <div className="pt-2 border-t border-gray-100 dark:border-gray-700 flex gap-2">
+                    <div className="ai-insight__actions">
                         <button 
                             onClick={() => setQuickStatsStep(6)}
-                            className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded transition-colors flex items-center justify-center gap-1"
+                            className="ai-chat-action ai-chat-action--info"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                             </svg>
                             Refresh Stats
                         </button>
                         <button 
                             onClick={startQuickStats}
-                            className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-bold rounded transition-colors"
+                            className="ai-chat-action ai-chat-action--secondary"
                         >
                             New Query
                         </button>
@@ -1054,8 +1033,10 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
             {/* Chat Bubble Trigger */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="fixed bottom-6 right-6 z-50 p-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                className="ai-chat-trigger"
                 aria-label="Toggle AI Chat"
+                aria-expanded={isOpen}
+                aria-controls="ai-chat-panel"
             >
                 {isOpen ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1070,24 +1051,26 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
 
             {/* Chat Window */}
             {isOpen && (
-                <div className="fixed bottom-24 right-6 z-50 w-80 md:w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-fadeIn h-[500px]">
+                <section
+                    id="ai-chat-panel"
+                    className="ai-chat-panel animate-fadeIn"
+                    role="dialog"
+                    aria-modal="false"
+                    aria-labelledby="ai-chat-title"
+                >
                     {/* Header */}
-                    <div className="bg-emerald-600 p-4 text-white flex items-center gap-2 shadow-sm">
+                    <div className="ai-chat-panel__header">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                         </svg>
-                        <h3 className="font-bold">4K Assistant</h3>
+                        <h3 id="ai-chat-title">4K Assistant</h3>
                     </div>
 
                     {/* Messages Area */}
-                    <div className="flex-1 p-4 overflow-y-auto bg-gray-50 dark:bg-gray-900 custom-scrollbar space-y-3">
+                    <div className="ai-chat-panel__messages custom-scrollbar">
                         {messages.map((msg, idx) => (
-                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[85%] p-3 rounded-lg text-sm leading-relaxed ${
-                                    msg.role === 'user' 
-                                        ? 'bg-emerald-600 text-white rounded-tr-none shadow-md' 
-                                        : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-tl-none shadow-sm'
-                                }`}>
+                            <div key={idx} className={`ai-message-row ${msg.role === 'user' ? 'is-user' : 'is-assistant'}`}>
+                                <div className={`ai-message ${msg.role === 'user' ? 'ai-message--user' : 'ai-message--assistant'}`}>
                                     {msg.type === 'quickstats' ? renderQuickStats(quickStatsFilters) : (msg.role === 'model' ? renderMessage(msg.text) : msg.text)}
                                 </div>
                             </div>
@@ -1095,10 +1078,10 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         
                         {/* Quick Stats Options */}
                         {quickStatsStep === 0 && messages.length === 1 && (
-                            <div className="flex justify-start">
+                            <div className="ai-message-row is-assistant">
                                 <button 
                                     onClick={startQuickStats}
-                                    className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors flex items-center gap-2"
+                                    className="ai-chat-action ai-chat-action--primary"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -1109,19 +1092,19 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
 
                         {quickStatsStep === 1 && (
-                            <div className="flex flex-wrap gap-2 justify-start">
+                            <div className="ai-chat-options">
                                 {filterYears.map(y => (
                                     <button 
                                         key={y} 
                                         onClick={() => selectQuickStatsFilter('year', y)}
-                                        className="px-3 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 transition-colors shadow-sm"
+                                        className="ai-chat-option"
                                     >
                                         {y}
                                     </button>
                                 ))}
                                 <button 
                                     onClick={goBackQuickStats}
-                                    className="px-3 py-1 bg-gray-100 dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-full text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 transition-all"
+                                    className="ai-chat-option ai-chat-option--back"
                                 >
                                     ← Cancel
                                 </button>
@@ -1129,19 +1112,19 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
 
                         {quickStatsStep === 2 && (
-                            <div className="flex flex-wrap gap-2 justify-start">
+                            <div className="ai-chat-options">
                                 {fundTypes.map(ft => (
                                     <button 
                                         key={ft} 
                                         onClick={() => selectQuickStatsFilter('fundType', ft)}
-                                        className="px-3 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 transition-colors shadow-sm"
+                                        className="ai-chat-option"
                                     >
                                         {ft}
                                     </button>
                                 ))}
                                 <button 
                                     onClick={goBackQuickStats}
-                                    className="px-3 py-1 bg-gray-100 dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-full text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 transition-all"
+                                    className="ai-chat-option ai-chat-option--back"
                                 >
                                     ← Back
                                 </button>
@@ -1149,19 +1132,19 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
 
                         {quickStatsStep === 3 && (
-                            <div className="flex flex-wrap gap-2 justify-start">
+                            <div className="ai-chat-options">
                                 {tiers.map(t => (
                                     <button 
                                         key={t} 
                                         onClick={() => selectQuickStatsFilter('tier', t)}
-                                        className="px-3 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 transition-colors shadow-sm"
+                                        className="ai-chat-option"
                                     >
                                         {t}
                                     </button>
                                 ))}
                                 <button 
                                     onClick={goBackQuickStats}
-                                    className="px-3 py-1 bg-gray-100 dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-full text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 transition-all"
+                                    className="ai-chat-option ai-chat-option--back"
                                 >
                                     ← Back
                                 </button>
@@ -1169,10 +1152,10 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
 
                         {quickStatsStep === 4 && (
-                            <div className="flex flex-wrap gap-2 justify-start">
+                            <div className="ai-chat-options">
                                 <button 
                                     onClick={() => selectQuickStatsFilter('ou', 'All')}
-                                    className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs hover:bg-emerald-700 transition-colors shadow-sm"
+                                    className="ai-chat-option is-selected"
                                 >
                                     All Units
                                 </button>
@@ -1180,14 +1163,14 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                                     <button 
                                         key={ou} 
                                         onClick={() => selectQuickStatsFilter('ou', ou)}
-                                        className="px-3 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-xs hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-300 transition-colors shadow-sm"
+                                        className="ai-chat-option"
                                     >
                                         {ou}
                                     </button>
                                 ))}
                                 <button 
                                     onClick={goBackQuickStats}
-                                    className="px-3 py-1 bg-gray-100 dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-full text-xs font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 transition-all"
+                                    className="ai-chat-option ai-chat-option--back"
                                 >
                                     ← Back
                                 </button>
@@ -1195,22 +1178,22 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
 
                         {quickStatsStep === 5 && (
-                            <div className="flex gap-2 justify-start">
+                            <div className="ai-chat-options">
                                 <button 
                                     onClick={() => selectQuickStatsFilter('type', 'Targets')}
-                                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm"
+                                    className="ai-chat-action ai-chat-action--primary"
                                 >
                                     Targets
                                 </button>
                                 <button 
                                     onClick={() => selectQuickStatsFilter('type', 'Accomplishments')}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm"
+                                    className="ai-chat-action ai-chat-action--info"
                                 >
                                     Accomplishments
                                 </button>
                                 <button 
                                     onClick={goBackQuickStats}
-                                    className="px-4 py-2 bg-gray-100 dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded-lg text-sm font-bold text-gray-600 dark:text-gray-200 hover:bg-gray-200 transition-all"
+                                    className="ai-chat-action ai-chat-action--secondary"
                                 >
                                     ← Back
                                 </button>
@@ -1218,11 +1201,9 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         )}
 
                         {isLoading && (
-                            <div className="flex justify-start">
-                                <div className="bg-white dark:bg-gray-700 p-3 rounded-lg rounded-tl-none border border-gray-200 dark:border-gray-600 shadow-sm flex gap-1 items-center">
-                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
-                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+                            <div className="ai-message-row is-assistant">
+                                <div className="ai-message ai-message--assistant ai-message--loading" aria-label="Assistant is typing">
+                                    <span></span><span></span><span></span>
                                 </div>
                             </div>
                         )}
@@ -1230,25 +1211,26 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                     </div>
 
                     {/* Input Area */}
-                    <form onSubmit={handleSend} className="p-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+                    <form onSubmit={handleSend} className="ai-chat-panel__composer">
                         <input
                             type="text"
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             placeholder="Ask about Budget, Subprojects..."
-                            className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-gray-700 dark:text-white"
+                            className="form-control"
                         />
                         <button 
                             type="submit" 
                             disabled={isLoading || !inputText.trim()}
-                            className="p-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="btn-primary btn-icon"
+                            aria-label="Send message"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                             </svg>
                         </button>
                     </form>
-                </div>
+                </section>
             )}
         </>
     );

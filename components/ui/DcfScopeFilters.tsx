@@ -193,7 +193,7 @@ export const DcfScopeFilterPanel: React.FC<DcfScopeFilterPanelProps> = ({ idPref
                 </select>
             </div>
         </div>
-        <p className="mt-3 text-xs font-semibold text-gray-500 dark:text-gray-400">
+        <p className="page-filter-panel__note">
             This page loads records for the selected DCF scope. Table search and column filters apply within this loaded data.
         </p>
     </div>

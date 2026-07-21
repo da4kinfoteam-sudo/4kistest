@@ -502,7 +502,7 @@ const WFPReport: React.FC<WFPReportProps> = ({ data, uacsCodes, selectedYear, se
         return (
              <tr onClick={() => toggleRow(rowKey)} className="report-table__row report-table__row--summary cursor-pointer">
                 <td className={`${dataCellClass} ${indentClasses[indentLevel]}`}>
-                    <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400">{isExpanded ? '−' : '+'}</span> {label}
+                    <span className="wfp-report__expand">{isExpanded ? '−' : '+'}</span> {label}
                 </td>
                 <td className={`${dataCellClass} text-center`}>{formatNumber(totals.totalPhysicalTarget)}</td>
                 <td className={`${dataCellClass} text-right`}>{formatCurrencyWhole(totals.mooeCost)}</td>
@@ -565,7 +565,7 @@ const WFPReport: React.FC<WFPReportProps> = ({ data, uacsCodes, selectedYear, se
                 </div>
             </div>
             <div id="wfp-report" className="report-table-scroll">
-                <table className="report-table min-w-full border-collapse text-xs">
+                <table className="report-table wfp-report-table">
                     <thead>
                         <tr>
                             <th rowSpan={2} className="report-table__head-cell align-bottom">Program/Activity/Project</th>

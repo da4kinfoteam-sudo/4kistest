@@ -1874,7 +1874,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={headers.length} className="text-center italic text-gray-500 dark:text-gray-400">
+                                        <td colSpan={headers.length} className="data-table__empty-cell">
                                             No records found for the selected filters.
                                         </td>
                                     </tr>
@@ -1899,7 +1899,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
         <div className="physical-dashboard dashboard-view">
             <section className="physical-dashboard-hero report-card">
                 <div>
-                    <h2>Physical Accomplishment Dashboard</h2>
+                    <h2 className="dashboard-module-title">Physical Accomplishment Dashboard</h2>
                 </div>
                 <div className="physical-dashboard-controls">
                     <button
@@ -2068,7 +2068,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
                                 ))}
                                 {summaryBaseRows.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="text-center italic text-gray-500 dark:text-gray-400">No province data available.</td>
+                                        <td colSpan={6} className="data-table__empty-cell">No province data available.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -2191,7 +2191,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={6} className="text-center italic text-gray-500 dark:text-gray-400">
+                                        <td colSpan={6} className="data-table__empty-cell">
                                             No recent submissions available.
                                         </td>
                                     </tr>

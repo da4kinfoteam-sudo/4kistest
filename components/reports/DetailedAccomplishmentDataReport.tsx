@@ -867,15 +867,15 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
             <div className="report-card__header print-hidden">
                 <div>
                     <h3 className="report-card__title">Detailed Accomplishment Data</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="detailed-report__meta">
                         Rows: {displayRows.length} | Quarter: {selectedQuarter === 'All' ? 'All Quarters' : selectedQuarter}
                         {isReportAdmin && ` | Controller: ${controllerStats.visible} visible, ${controllerStats.hidden} hidden`}
                     </p>
                     {controllerError && isReportAdmin && (
-                        <p className="mt-1 text-xs font-bold text-red-600 dark:text-red-400">{controllerError}</p>
+                        <p className="detailed-report__message detailed-report__message--error" role="alert">{controllerError}</p>
                     )}
                     {controllerMessage && isReportAdmin && (
-                        <p className="mt-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">{controllerMessage}</p>
+                        <p className="detailed-report__message detailed-report__message--success" role="status">{controllerMessage}</p>
                     )}
                 </div>
                 <div className="report-card__actions">
@@ -927,16 +927,16 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
             {isReportAdmin && controllerOpen && (
                 <section
                     id="detailed-accomplishment-display-controller"
-                    className="print-hidden mb-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900/60"
+                    className="print-hidden detailed-controller"
                 >
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="detailed-controller__header">
                         <div>
-                            <h4 className="text-sm font-black text-gray-900 dark:text-white">Display Controller</h4>
-                            <p className="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                            <h4 className="detailed-controller__title">Display Controller</h4>
+                            <p className="detailed-controller__description">
                                 Controls which Performance Indicator Level 3 entries appear in this report for all users.
                             </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="detailed-controller__actions">
                             <button
                                 type="button"
                                 onClick={resetDraftToShowAll}
@@ -967,24 +967,24 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
                         </div>
                     </div>
 
-                    <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                        <label className="relative block">
+                    <div className="detailed-controller__toolbar">
+                        <label className="detailed-controller__search">
                             <span className="sr-only">Search Level 3 items</span>
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                            <Search aria-hidden="true" />
                             <input
                                 type="search"
                                 value={controllerSearch}
                                 onChange={(event) => setControllerSearch(event.target.value)}
-                                className="form-control pl-9"
+                                className="form-control detailed-controller__search-input"
                                 placeholder="Search Level 3 items..."
                             />
                         </label>
-                        <div className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                        <div className={`detailed-controller__save-state ${controllerHasChanges ? 'has-changes' : ''}`}>
                             {controllerHasChanges ? 'Unsaved changes' : 'Saved settings active'}
                         </div>
                     </div>
 
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="detailed-controller__groups">
                         {DISPLAY_SOURCE_GROUPS.map(sourceGroup => {
                             const groupOptions = filteredLevel3Options.filter(option => option.sourceGroup === sourceGroup);
                             const groupHidden = draftSettings.hiddenSourceGroups.includes(sourceGroup);
@@ -993,11 +993,11 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
                             const visibleExactCount = allGroupOptions.length - hiddenExactCount;
 
                             return (
-                                <div key={sourceGroup} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                <article key={sourceGroup} className="detailed-controller__group">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div>
-                                            <h5 className="text-xs font-black uppercase tracking-wide text-gray-800 dark:text-gray-100">{sourceGroup}</h5>
-                                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                                            <h5 className="detailed-controller__group-title">{sourceGroup}</h5>
+                                            <p className="detailed-controller__group-meta">
                                                 {groupHidden ? 'Group hidden' : `${visibleExactCount} visible, ${hiddenExactCount} hidden`}
                                             </p>
                                         </div>
@@ -1021,36 +1021,36 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
                                         </div>
                                     </div>
 
-                                    <div className="mt-3 max-h-72 space-y-2 overflow-auto pr-1">
+                                    <div className="detailed-controller__options">
                                         {groupOptions.length > 0 ? groupOptions.map(option => {
                                             const isVisible = !groupHidden && !draftSettings.hiddenLevel3Keys.includes(option.key);
                                             return (
                                                 <label
                                                     key={option.key}
-                                                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${isVisible ? 'border-emerald-100 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-900/10' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50'}`}
+                                                    className={`detailed-controller__option ${isVisible ? 'is-visible' : 'is-hidden'}`}
                                                 >
                                                     <input
                                                         type="checkbox"
                                                         checked={isVisible}
                                                         onChange={(event) => setLevel3Visible(option.key, event.target.checked)}
                                                         disabled={groupHidden}
-                                                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-40"
+                                                        className="form-checkbox"
                                                     />
                                                     <span className="min-w-0 flex-1">
-                                                        <span className="block text-sm font-bold text-gray-800 dark:text-gray-100">{option.label}</span>
-                                                        <span className="mt-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                                                        <span className="detailed-controller__option-title">{option.label}</span>
+                                                        <span className="detailed-controller__option-meta">
                                                             {option.rowCount} row{option.rowCount === 1 ? '' : 's'}
                                                         </span>
                                                     </span>
                                                 </label>
                                             );
                                         }) : (
-                                            <p className="rounded-lg border border-dashed border-gray-300 p-4 text-center text-xs font-semibold text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                                            <p className="detailed-controller__empty">
                                                 No Level 3 items match the search.
                                             </p>
                                         )}
                                     </div>
-                                </div>
+                                </article>
                             );
                         })}
                     </div>
@@ -1092,7 +1092,7 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
                             </tr>
                         )) : (
                             <tr>
-                                <td colSpan={columns.length} className="text-center text-gray-500 dark:text-gray-400 py-8">
+                                <td colSpan={columns.length} className="data-table__empty-cell">
                                     {quarterFilteredRows.length > 0
                                         ? 'No rows match the saved display controller and current filters.'
                                         : 'No accomplishment data found for the current filters.'}

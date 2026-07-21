@@ -1,10 +1,11 @@
 // Author: 4K
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Database, LoaderCircle, LogIn } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 
 const Login: React.FC = () => {
-    const { login, usersList } = useAuth();
+    const { login } = useAuth();
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -15,10 +16,10 @@ const Login: React.FC = () => {
     const checkConnection = async () => {
         if (!supabase) {
             setDbStatus('offline');
-            setConnError("Database client not initialized.");
+            setConnError('Database client not initialized.');
             return;
         }
-        
+
         try {
             const { error: dbError } = await supabase.from('users').select('id', { head: true, count: 'exact' }).limit(1);
             if (!dbError) {
@@ -28,9 +29,9 @@ const Login: React.FC = () => {
                 setDbStatus('offline');
                 setConnError(dbError.message);
             }
-        } catch (e: any) {
+        } catch (connectionError: any) {
             setDbStatus('offline');
-            setConnError(e.message);
+            setConnError(connectionError.message);
         }
     };
 
@@ -38,8 +39,8 @@ const Login: React.FC = () => {
         checkConnection();
     }, []);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
         setError('');
         setIsLoading(true);
 
@@ -47,8 +48,7 @@ const Login: React.FC = () => {
             let user = null;
 
             if (supabase) {
-                // Direct database lookup
-                let { data, error: dbError } = await supabase
+                const { data, error: dbError } = await supabase
                     .from('users')
                     .select('*')
                     .or(`username.eq."${identifier}",email.eq."${identifier}"`)
@@ -56,13 +56,13 @@ const Login: React.FC = () => {
                     .maybeSingle();
 
                 if (dbError) {
-                    console.error("Direct Auth Error:", dbError);
+                    console.error('Direct Auth Error:', dbError);
                 } else if (data) {
                     user = data;
                 }
             }
 
-            // Fallback for hardcoded admin
+            // Preserve the existing local fallback for test environments.
             if (!user && identifier === 'admin' && password === 'admin') {
                 user = {
                     id: 99999,
@@ -71,7 +71,7 @@ const Login: React.FC = () => {
                     email: 'admin@system.local',
                     role: 'Super Admin' as any,
                     operatingUnit: 'NPMO',
-                    password: 'admin'
+                    password: 'admin',
                 };
             }
 
@@ -80,8 +80,8 @@ const Login: React.FC = () => {
             } else {
                 setError('Invalid credentials. Access denied.');
             }
-        } catch (err) {
-            console.error("Login exception:", err);
+        } catch (loginError) {
+            console.error('Login exception:', loginError);
             setError('System error during validation.');
         } finally {
             setIsLoading(false);
@@ -89,76 +89,69 @@ const Login: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 px-4 transition-colors duration-200">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl max-w-md w-full animate-fadeIn border border-gray-200 dark:border-gray-700">
-                <div className="flex flex-col items-center mb-8">
-                    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-full mb-4 shadow-sm border border-gray-100 dark:border-gray-600">
-                        <img 
-                            src="/assets/4klogo.png" 
-                            alt="DA 4K Logo" 
-                            className="h-20 w-20 object-contain"
-                        />
-                    </div>
-                    <h1 className="text-2xl font-black text-gray-900 dark:text-white text-center tracking-tight">4K Information System</h1>
-                    <div className="flex flex-col items-center gap-1 mt-3">
-                        <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full ${dbStatus === 'online' ? 'bg-emerald-500' : 'bg-red-400'}`}></span>
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                {dbStatus === 'online' ? 'Connected' : 'Offline'}
-                            </p>
-                        </div>
-                        {connError && (
-                            <p className="text-[9px] text-red-500 text-center font-bold uppercase tracking-tighter">
-                                {connError}
-                            </p>
-                        )}
-                    </div>
+        <main className="login-page">
+            <section className="login-brand" aria-label="4K Information System">
+                <div className="login-brand__identity">
+                    <img src="/assets/4klogo.png" alt="DA 4K Logo" />
+                    <span>Department of Agriculture</span>
                 </div>
-                
-                {error && (
-                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl mb-6 text-xs font-bold text-center" role="alert">
-                        {error}
-                    </div>
-                )}
+                <div className="login-brand__message">
+                    <p className="login-brand__eyebrow">Kabuhayan at Kaunlaran ng Kababayang Katutubo</p>
+                    <h1>One workspace for 4K program delivery.</h1>
+                    <p>Monitor investments, field activities, partner organizations, and accomplishments from a consistent national view.</p>
+                </div>
+                <p className="login-brand__footer">4K Program Management Office</p>
+            </section>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Username</label>
-                        <input 
-                            type="text" 
-                            required 
-                            value={identifier} 
-                            onChange={(e) => setIdentifier(e.target.value)}
-                            className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm text-gray-900 dark:text-white"
-                            placeholder="Username or Email"
-                        />
+            <section className="login-panel animate-fadeIn">
+                <div className="login-card">
+                    <div className="login-card__header">
+                        <div>
+                            <p className="login-card__eyebrow">Secure access</p>
+                            <h2>Sign in to 4KIS</h2>
+                            <p>Use your assigned username or email address.</p>
+                        </div>
+                        <div className={`login-connection login-connection--${dbStatus}`} role="status">
+                            <Database aria-hidden="true" />
+                            <span>{dbStatus === 'online' ? 'Connected' : 'Offline'}</span>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Password</label>
-                        <input 
-                            type="password" 
-                            required 
-                            value={password} 
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm text-gray-900 dark:text-white"
-                            placeholder="Password"
-                        />
-                    </div>
-                    <button 
-                        type="submit" 
-                        disabled={isLoading}
-                        className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                    >
-                        {isLoading ? 'Verifying...' : 'Initialize Session'}
-                    </button>
-                </form>
-                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
-                    <p className="text-[9px] text-center font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                        Protected System Architecture • PMO 4K
-                    </p>
+
+                    {connError && <p className="login-connection-error">{connError}</p>}
+                    {error && <div className="login-alert" role="alert">{error}</div>}
+
+                    <form onSubmit={handleSubmit} className="login-form">
+                        <label className="login-field">
+                            <span>Username or email</span>
+                            <input
+                                type="text"
+                                required
+                                value={identifier}
+                                onChange={event => setIdentifier(event.target.value)}
+                                placeholder="Username or Email"
+                                autoComplete="username"
+                            />
+                        </label>
+                        <label className="login-field">
+                            <span>Password</span>
+                            <input
+                                type="password"
+                                required
+                                value={password}
+                                onChange={event => setPassword(event.target.value)}
+                                placeholder="Password"
+                                autoComplete="current-password"
+                            />
+                        </label>
+                        <button type="submit" disabled={isLoading} className="btn btn-primary btn-lg login-submit">
+                            {isLoading ? <LoaderCircle className="login-submit__spinner" aria-hidden="true" /> : <LogIn aria-hidden="true" />}
+                            {isLoading ? 'Verifying…' : 'Sign in'}
+                        </button>
+                    </form>
+                    <p className="login-card__footnote">Protected information system · Authorized personnel only</p>
                 </div>
-            </div>
-        </div>
+            </section>
+        </main>
     );
 };
 

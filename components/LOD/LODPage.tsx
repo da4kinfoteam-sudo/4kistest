@@ -6,6 +6,7 @@ import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePagination } from '../mainfunctions/TableHooks';
 import { useLogAction } from '../../hooks/useLogAction';
+import { DataTablePagination, LoadingState } from '../ui/enterprise';
 
 interface LODPageProps {
     ipos: IPO[];
@@ -262,7 +263,7 @@ const LODPage: React.FC<LODPageProps> = ({ ipos, onSelectIpo }) => {
                 </div>
 
                 {loading ? (
-                    <div className="text-center py-12 text-gray-500">Loading assessments...</div>
+                    <LoadingState title="Loading assessments" message="Preparing Level of Development records." />
                 ) : (
                     <>
                         <div className="data-table-scroll">
@@ -284,26 +285,19 @@ const LODPage: React.FC<LODPageProps> = ({ ipos, onSelectIpo }) => {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <button 
                                                     onClick={() => onSelectIpo(ipo)}
-                                                    className="table-link font-medium"
+                                                    className="table-link"
                                                 >
                                                     {ipo.name}
                                                 </button>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            <td className="data-table__muted-cell">
                                                 {ipo.region}
                                             </td>
                                             {years.map(year => {
                                                 const level = getLodForIpoYear(ipo.id, year);
                                                 return (
                                                     <td key={year} className="px-6 py-4 whitespace-nowrap text-center">
-                                                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold
-                                                            ${level === '-' ? 'bg-gray-100 text-gray-400 dark:bg-gray-700' : 
-                                                              level >= 4 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' :
-                                                              level >= 3 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                                                              level >= 2 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                                                              'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                                                            }
-                                                        `}>
+                                                        <span className={`lod-level-badge ${level === '-' ? 'lod-level-badge--none' : `lod-level-badge--${level}`}`}>
                                                             {level}
                                                         </span>
                                                     </td>
@@ -316,23 +310,15 @@ const LODPage: React.FC<LODPageProps> = ({ ipos, onSelectIpo }) => {
                         </div>
 
                         {/* Pagination */}
-                        <div className="data-table-pagination flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-gray-700 dark:text-gray-300">Show</span>
-                                <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="data-table-select py-1 pl-2 pr-8">
-                                    {[10, 20, 50, 100].map(size => ( <option key={size} value={size}>{size}</option> ))}
-                                </select>
-                                <span className="text-gray-700 dark:text-gray-300">entries</span>
-                            </div>
-                             <div className="flex items-center gap-4 text-sm">
-                                <span className="text-gray-700 dark:text-gray-300">Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filteredIPOs.length)} to {Math.min(currentPage * itemsPerPage, filteredIPOs.length)} of {filteredIPOs.length} entries</span>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
-                                    <span className="px-2 font-medium">{currentPage} / {totalPages}</span>
-                                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
-                                </div>
-                            </div>
-                        </div>
+                        <DataTablePagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            totalItems={filteredIPOs.length}
+                            itemsPerPage={itemsPerPage}
+                            onPageChange={setCurrentPage}
+                            onItemsPerPageChange={setItemsPerPage}
+                            pageSizeOptions={[10, 20, 50, 100]}
+                        />
                     </>
                 )}
             </div>

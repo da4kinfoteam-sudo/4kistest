@@ -20,7 +20,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
     const isLocked = !canEdit;
 
     const [selectedYear, setSelectedYear] = useState<number>(initialYear ?? new Date().getFullYear());
-    
+
     // Structure
     const [sections, setSections] = useState<LodSection[]>([]);
     const [questions, setQuestions] = useState<LodQuestion[]>([]);
@@ -30,7 +30,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
     // Data
     const [assessment, setAssessment] = useState<LodAssessment | null>(null);
     const [answers, setAnswers] = useState<LodAnswer[]>([]);
-    
+
     // UI State
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -110,7 +110,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
                 ansData.forEach(a => {
                     const qId = Number(a.question_id);
                     const cId = a.choice_id ? Number(a.choice_id) : null;
-                    
+
                     if (cId !== null) initialAnswers[qId] = cId;
                     if (a.remarks) initialRemarks[qId] = a.remarks;
                     initialActuals[qId] = a.actual_value ?? '';
@@ -143,7 +143,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
                 .select('id')
                 .eq('ipo_id', ipo.id)
                 .limit(1);
-            
+
             if (prevAssessments && prevAssessments.length > 0) {
                 setIsCarriedOver(true);
             }
@@ -205,11 +205,11 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
             // Let's assume section.weight is a percentage (e.g., 40 for 40%) or raw weight.
             // If all section weights sum to 100, we can treat them as percentages.
             // Formula: (SectionScore / SectionMaxScore) * SectionWeight
-            
+
             if (sectionMaxScore > 0) {
                 const sectionPercentage = sectionScore / sectionMaxScore;
                 totalWeightedScore += (sectionPercentage * section.weight);
-                totalMaxWeightedScore += section.weight; 
+                totalMaxWeightedScore += section.weight;
             }
         });
 
@@ -217,7 +217,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
         // Or if totalMaxWeightedScore is e.g. 100, then totalWeightedScore is the final score (0-100).
         // If totalMaxWeightedScore is e.g. 1 (0.4 + 0.6), then totalWeightedScore is 0-1.
         // Let's normalize to 0-100 scale for level comparison.
-        
+
         let finalScore = 0;
         if (totalMaxWeightedScore > 0) {
             // Normalize to 100 if weights are like 40, 60 (sum=100) -> score is already 0-100
@@ -312,11 +312,11 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
                 const choiceId = Number(cId);
                 const question = questions.find(q => q.id === qId);
                 const choice = choices.find(c => c.id === choiceId);
-                
+
                 const points = choice ? (Number(choice.points) || 0) : 0;
                 const weight = question ? (Number(question.weight) || 1) : 1;
                 const remark = localAnswerRemarks[qId] || null;
-                
+
                 const actual = localActualValues[qId];
                 const total = localTotalValues[qId];
 
@@ -347,7 +347,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
             const { error: ansError } = await supabase
                 .from('lod_answers')
                 .upsert(answersPayload, { onConflict: 'assessment_id,question_id' });
-            
+
             if (ansError) {
                 console.error('Error saving answers:', ansError);
                 alert(`Assessment saved but error saving detailed answers: ${ansError.message || JSON.stringify(ansError)}`);
@@ -355,7 +355,7 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
         }
 
         logAction('Updated LOD Assessment', `IPO: ${ipo.name}, Year: ${selectedYear}, Level: ${manualLevel || level}`);
-        
+
         // Refresh
         await fetchAssessmentData();
         setSaving(false);
@@ -403,20 +403,20 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
     };
 
     return (
-        <div className="max-w-5xl mx-auto space-y-6 pb-12">
+        <div className="lod-assessment detail-page">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 mb-2">← Back to List</button>
-                    <h2 className="text-3xl font-bold text-gray-800 dark:text-white">{ipo.name}</h2>
-                    <p className="text-gray-500">{ipo.location}</p>
+            <div className="detail-header">
+                <div className="detail-heading">
+                    <button onClick={onBack} className="btn btn-link">← Back to List</button>
+                    <h2 className="detail-title">{ipo.name}</h2>
+                    <p className="detail-meta">{ipo.location}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <label className="font-medium text-gray-700 dark:text-gray-300">Assessment Year:</label>
-                    <select 
-                        value={selectedYear} 
+                <div className="form-check-group">
+                    <label className="form-label form-label--inline">Assessment Year:</label>
+                    <select
+                        value={selectedYear}
                         onChange={(e) => setSelectedYear(Number(e.target.value))}
-                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white font-bold"
+                        className="form-control lod-assessment__year"
                     >
                         {Array.from(new Set([selectedYear, ...Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i + 1)]))
                             .sort((a, b) => b - a)
@@ -428,34 +428,34 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
             </div>
 
             {/* Score Card */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border-l-4 border-emerald-500">
-                    <h4 className="text-sm font-bold text-gray-500 uppercase">Level of Development</h4>
-                    <div className="flex items-end gap-2 mt-2">
-                        <span className="text-5xl font-bold text-emerald-600 dark:text-emerald-400">{currentLevel}</span>
-                        <span className="text-sm text-gray-400 mb-2">/ 5</span>
+            <div className="detail-metric-grid">
+                <div className="detail-metric lod-assessment-metric lod-assessment-metric--primary">
+                    <h4 className="detail-metric-label">Level of Development</h4>
+                    <div className="lod-assessment-metric__value">
+                        <span>{currentLevel}</span>
+                        <small>/ 5</small>
                     </div>
-                    {manualLevel !== '' && <p className="text-xs text-orange-500 mt-1 font-medium">(Manually Overridden)</p>}
+                    {manualLevel !== '' && <p className="form-help form-help--warning">(Manually Overridden)</p>}
                 </div>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border-l-4 border-blue-500">
-                    <h4 className="text-sm font-bold text-gray-500 uppercase">Total Score</h4>
-                    <div className="flex items-end gap-2 mt-2">
-                        <span className="text-4xl font-bold text-blue-600 dark:text-blue-400">{totalScore.toFixed(1)}</span>
-                        <span className="text-sm text-gray-400 mb-2">/ {maxPossibleScore.toFixed(1)}</span>
+                <div className="detail-metric lod-assessment-metric lod-assessment-metric--info">
+                    <h4 className="detail-metric-label">Total Score</h4>
+                    <div className="lod-assessment-metric__value">
+                        <span>{totalScore.toFixed(1)}</span>
+                        <small>/ {maxPossibleScore.toFixed(1)}</small>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border-l-4 border-purple-500">
-                    <h4 className="text-sm font-bold text-gray-500 uppercase">Status & Assessor</h4>
+                <div className="detail-metric lod-assessment-metric lod-assessment-metric--status">
+                    <h4 className="detail-metric-label">Status & Assessor</h4>
                     <div className="mt-2 space-y-1">
                         <div className="flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${assessment ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                            <span className={`status-badge status-badge--compact ${assessment ? 'status-badge--completed' : 'status-badge--pending'}`}>
                                 {assessment ? 'Completed' : 'Pending'}
                             </span>
-                            {assessment && <span className="text-xs text-gray-500">{new Date(assessment.updated_at!).toLocaleDateString()}</span>}
+                            {assessment && <span className="detail-meta">{new Date(assessment.updated_at!).toLocaleDateString()}</span>}
                         </div>
                         {assessment?.assessor_name && (
-                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-                                <span className="text-gray-400 font-normal text-xs block uppercase">Assessed By:</span>
+                            <p className="lod-assessment-metric__assessor">
+                                <span className="detail-label">Assessed By:</span>
                                 {assessment.assessor_name}
                             </p>
                         )}
@@ -464,16 +464,16 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
             </div>
 
             {/* Questionnaire */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-                    <h3 className="text-xl font-bold text-gray-800 dark:text-white">Assessment Questionnaire</h3>
-                    <p className="text-sm text-gray-500">Complete the following sections to determine the LOD.</p>
+            <div className="detail-card lod-questionnaire">
+                <div className="lod-questionnaire__header">
+                    <h3 className="detail-card-title">Assessment Questionnaire</h3>
+                    <p className="detail-meta">Complete the following sections to determine the LOD.</p>
                 </div>
 
                 {loading ? (
-                    <div className="p-12 text-center text-gray-500">Loading assessment data...</div>
+                    <div className="detail-empty">Loading assessment data...</div>
                 ) : (
-                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                    <div className="lod-questionnaire__sections">
                         {sections.map(section => {
                             const sectionQuestions = questions.filter(q => q.section_id === section.id);
                             if (sectionQuestions.length === 0) return null;
@@ -482,81 +482,81 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
                             const sectionScore = calculateSectionScore(section.id);
 
                             return (
-                                <div key={section.id} className="overflow-hidden">
-                                    <button 
+                                <div key={section.id} className="lod-questionnaire__section">
+                                    <button
                                         onClick={() => toggleSection(section.id)}
-                                        className="w-full px-6 py-4 flex items-center justify-between bg-gray-50/30 dark:bg-gray-900/20 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                                        className="lod-questionnaire__toggle"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+                                            <div className="lod-questionnaire__section-number">
                                                 {section.order}
                                             </div>
-                                            <h4 className="text-lg font-bold text-gray-800 dark:text-white">{section.title}</h4>
+                                            <h4 className="lod-questionnaire__section-title">{section.title}</h4>
                                         </div>
                                         <div className="flex items-center gap-4">
-                                            <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                                Section Score: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{sectionScore.toFixed(2)}</span>
-                                                <span className="text-gray-400 ml-1">/ {section.weight}</span>
+                                            <div className="lod-questionnaire__score">
+                                                Section Score: <strong>{sectionScore.toFixed(2)}</strong>
+                                                <span className="lod-questionnaire__weight-total">/ {section.weight}</span>
                                             </div>
-                                            <svg 
-                                                xmlns="http://www.w3.org/2000/svg" 
-                                                className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} 
-                                                fill="none" 
-                                                viewBox="0 0 24 24" 
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                className={`lod-questionnaire__chevron ${isExpanded ? 'is-open' : ''}`}
+                                                fill="none"
+                                                viewBox="0 0 24 24"
                                                 stroke="currentColor"
                                             >
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                             </svg>
                                         </div>
                                     </button>
-                                    
+
                                     {isExpanded && (
                                         <div className="p-6 pt-2 space-y-6">
                                             {sectionQuestions.map(question => {
                                                 const qChoices = choices.filter(c => c.question_id === question.id);
                                                 return (
-                                                    <div key={question.id} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 pb-4 last:pb-0">
+                                                    <div key={question.id} className="lod-questionnaire__question-block">
                                                         <div className="flex gap-3 mb-2">
                                                             <div className="flex-1">
-                                                                <p className="text-gray-900 dark:text-white font-medium leading-tight">
-                                                                    {question.text} 
-                                                                    <span className="text-xs text-gray-400 font-normal ml-2">(Weight: {question.weight})</span>
+                                                                <p className="lod-questionnaire__question">
+                                                                    {question.text}
+                                                                    <span className="lod-questionnaire__weight">(Weight: {question.weight})</span>
                                                                 </p>
                                                                 {question.description && (
-                                                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-wrap leading-relaxed italic">
+                                                                    <p className="lod-questionnaire__description">
                                                                         {question.description}
                                                                     </p>
                                                                 )}
 
                                                                 {/* Calculation Fields */}
                                                                 {question.is_calculation_mode && (
-                                                                    <div className="mt-3 bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                                                                    <div className="lod-questionnaire__calculation">
                                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                                             <div>
-                                                                                <label className="block text-xs font-bold text-blue-700 dark:text-blue-400 uppercase mb-1">{question.actual_label || 'Actual Value'}</label>
-                                                                                <input 
+                                                                                <label className="form-label form-label--compact">{question.actual_label || 'Actual Value'}</label>
+                                                                                <input
                                                                                     type="number"
                                                                                     value={localActualValues[question.id] ?? ''}
                                                                                     onChange={(e) => setLocalActualValues(prev => ({ ...prev, [question.id]: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                                                    className="w-full px-3 py-1.5 text-sm border border-blue-200 dark:border-blue-800 rounded bg-white dark:bg-gray-800 focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50"
+                                                                                    className="form-control form-control--compact"
                                                                                     placeholder="Enter actual number"
                                                                                     disabled={isLocked}
                                                                                 />
                                                                             </div>
                                                                             <div>
-                                                                                <label className="block text-xs font-bold text-blue-700 dark:text-blue-400 uppercase mb-1">{question.total_label || 'Total Value'}</label>
-                                                                                <input 
+                                                                                <label className="form-label form-label--compact">{question.total_label || 'Total Value'}</label>
+                                                                                <input
                                                                                     type="number"
                                                                                     value={localTotalValues[question.id] ?? ''}
                                                                                     onChange={(e) => setLocalTotalValues(prev => ({ ...prev, [question.id]: e.target.value === '' ? '' : Number(e.target.value) }))}
-                                                                                    className="w-full px-3 py-1.5 text-sm border border-blue-200 dark:border-blue-800 rounded bg-white dark:bg-gray-800 focus:ring-1 focus:ring-blue-500 outline-none disabled:opacity-50"
+                                                                                    className="form-control form-control--compact"
                                                                                     placeholder="Enter total number"
                                                                                     disabled={isLocked}
                                                                                 />
                                                                             </div>
                                                                         </div>
                                                                         {Number(localActualValues[question.id]) >= 0 && Number(localTotalValues[question.id]) > 0 && (
-                                                                            <div className="mt-2 text-sm font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                                                                            <div className="lod-questionnaire__result">
                                                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                                                                 </svg>
@@ -568,16 +568,16 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
 
                                                                 {/* Specific Answer Field */}
                                                                 {question.is_specific_answer_mode && (
-                                                                    <div className="mt-3 bg-purple-50/50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-900/30">
-                                                                        <label className="block text-xs font-bold text-purple-700 dark:text-purple-400 uppercase mb-1">{question.specific_answer_label || 'Specific Answer'}</label>
-                                                                        <input 
+                                                                    <div className="lod-questionnaire__calculation lod-questionnaire__calculation--specific">
+                                                                        <label className="form-label form-label--compact">{question.specific_answer_label || 'Specific Answer'}</label>
+                                                                        <input
                                                                             type="text"
                                                                             value={localSpecificValues[question.id] || ''}
                                                                             onChange={(e) => {
                                                                                 if (isLocked) return;
                                                                                 setLocalSpecificValues(prev => ({ ...prev, [question.id]: e.target.value }));
                                                                             }}
-                                                                            className="w-full px-3 py-1.5 text-sm border border-purple-200 dark:border-purple-800 rounded bg-white dark:bg-gray-800 focus:ring-1 focus:ring-purple-500 outline-none disabled:opacity-50"
+                                                                            className="form-control form-control--compact"
                                                                             placeholder="Enter specific answer"
                                                                             disabled={isLocked}
                                                                         />
@@ -586,33 +586,28 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
                                                             </div>
                                                         </div>
 
-                                                        <div className="ml-8 grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                                                        <div className="lod-choice-grid">
                                                             {qChoices.map(choice => (
-                                                                <label key={choice.id} className={`flex items-center p-2 rounded-lg border cursor-pointer transition-colors
-                                                                    ${Number(localAnswers[question.id]) === Number(choice.id) 
-                                                                        ? 'bg-emerald-50 border-emerald-500 dark:bg-emerald-900/20 dark:border-emerald-500' 
-                                                                        : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700'
-                                                                    }
-                                                                `}>
-                                                                    <input 
-                                                                        type="radio" 
-                                                                        name={`q-${question.id}`} 
+                                                                <label key={choice.id} className={`lod-choice ${Number(localAnswers[question.id]) === Number(choice.id) ? 'is-selected' : ''}`}>
+                                                                    <input
+                                                                        type="radio"
+                                                                        name={`q-${question.id}`}
                                                                         value={choice.id}
                                                                         checked={Number(localAnswers[question.id]) === Number(choice.id)}
                                                                         onChange={() => handleAnswerChange(question.id, choice.id)}
-                                                                        className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 disabled:opacity-50"
+                                                                        className="form-checkbox"
                                                                         disabled={isLocked}
                                                                     />
-                                                                    <span className="ml-3 text-sm text-gray-700 dark:text-gray-300 flex-1">{choice.text}</span>
-                                                                    <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-600 px-1.5 py-0.5 rounded">{Number(choice.points.toFixed(1))} pts</span>
+                                                                    <span className="lod-choice__text">{choice.text}</span>
+                                                                    <span className="status-badge status-badge--neutral status-badge--compact">{Number(choice.points.toFixed(1))} pts</span>
                                                                 </label>
                                                             ))}
                                                         </div>
                                                         <div className="ml-8">
-                                                            <textarea 
+                                                            <textarea
                                                                 value={localAnswerRemarks[question.id] || ''}
                                                                 onChange={(e) => handleAnswerRemarkChange(question.id, e.target.value)}
-                                                                className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-transparent focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:text-gray-300 resize-none h-12 disabled:opacity-50"
+                                                                className="form-control lod-questionnaire__remarks"
                                                                 placeholder="Add remarks (optional)..."
                                                                 disabled={isLocked}
                                                             />
@@ -630,23 +625,23 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
 
                 {/* Admin Overrides & Actions */}
                 {isLocked && (
-                    <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border-t border-amber-200 dark:border-amber-800 flex items-center gap-3 text-amber-800 dark:text-amber-400">
+                    <div className="notice notice--warning">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                         </svg>
-                        <p className="text-sm font-medium">
+                        <p>
                             You have view-only access to this assessment. Request Level of Development edit permission to modify LOD records.
                         </p>
                     </div>
                 )}
-                <div className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+                <div className="form-section lod-questionnaire__footer">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Overall Remarks / Notes</label>
-                            <textarea 
+                            <label className="form-label">Overall Remarks / Notes</label>
+                            <textarea
                                 value={remarks}
                                 onChange={(e) => setRemarks(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white h-24 disabled:opacity-50"
+                                className="form-control lod-questionnaire__overall-remarks"
                                 placeholder="Enter any observations or notes..."
                                 disabled={isLocked}
                             />
@@ -654,59 +649,59 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
                         {isLodAdmin && (
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Manual Level Override (Admin Only)</label>
+                                    <label className="form-label">Manual Level Override (Admin Only)</label>
                                     <div className="flex items-center gap-2">
-                                        <input 
-                                            type="number" 
+                                        <input
+                                            type="number"
                                             min="1" max="5"
                                             value={manualLevel}
                                             onChange={(e) => setManualLevel(e.target.value === '' ? '' : Number(e.target.value))}
-                                            className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+                                            className="form-control lod-assessment__manual-level"
                                             placeholder="Auto"
                                         />
-                                        <span className="text-xs text-gray-500">Leave empty to use computed level.</span>
+                                        <span className="form-help">Leave empty to use computed level.</span>
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap gap-4">
-                                    <label className="flex items-center gap-2 cursor-pointer group">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={isCarriedOver} 
+                                    <label className="form-check">
+                                        <input
+                                            type="checkbox"
+                                            checked={isCarriedOver}
                                             onChange={(e) => setIsCarriedOver(e.target.checked)}
-                                            className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                                            className="form-checkbox"
                                         />
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Carried over from previous year</span>
+                                        <span>Carried over from previous year</span>
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer group">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={isDropped} 
+                                    <label className="form-check">
+                                        <input
+                                            type="checkbox"
+                                            checked={isDropped}
                                             onChange={(e) => setIsDropped(e.target.checked)}
-                                            className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                            className="form-checkbox"
                                         />
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">IPO is Dropped</span>
+                                        <span>IPO is Dropped</span>
                                     </label>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    <div className="flex justify-end gap-4">
-                        <button 
+                    <div className="form-footer">
+                        <button
                             onClick={onBack}
-                            className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
+                            className="btn btn-secondary"
                         >
                             Cancel
                         </button>
                         {!isLocked && (
-                            <button 
+                            <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="px-6 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                className="btn btn-primary"
                             >
                                 {saving ? (
                                     <>
-                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
@@ -721,22 +716,22 @@ const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => 
 
             {/* Success Modal */}
             {showSuccessModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center animate-in fade-in zoom-in duration-300">
-                        <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="modal-backdrop" role="presentation">
+                    <section className="modal-card lod-success-modal animate-in fade-in zoom-in duration-300" role="dialog" aria-modal="true" aria-labelledby="lod-success-title">
+                        <div className="lod-success-modal__icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="lod-success-modal__check" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </svg>
                         </div>
-                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Success!</h3>
-                        <p className="text-gray-500 dark:text-gray-400 mb-8">The LOD assessment for {ipo.name} has been saved successfully.</p>
-                        <button 
+                        <h3 id="lod-success-title">Success!</h3>
+                        <p>The LOD assessment for {ipo.name} has been saved successfully.</p>
+                        <button
                             onClick={() => setShowSuccessModal(false)}
-                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-200 dark:shadow-none"
+                            className="btn btn-primary btn-block"
                         >
                             Great, thanks!
                         </button>
-                    </div>
+                    </section>
                 </div>
             )}
         </div>

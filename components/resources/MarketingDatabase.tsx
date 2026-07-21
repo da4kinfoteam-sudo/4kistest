@@ -9,6 +9,7 @@ import LocationPicker, { parseLocation } from '../LocationPicker';
 import useLocalStorageState from '../../hooks/useLocalStorageState';
 import { supabase } from '../../supabaseClient';
 import { summarizeMarketPartnerSales } from '../../lib/marketSalesAggregation';
+import { ConfirmDialog, DataTablePagination } from '../ui/enterprise';
 
 declare const XLSX: any;
 
@@ -39,12 +40,12 @@ const REGION_CODE_MAP: Record<string, string> = {
 };
 
 const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
 );
 
-const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm text-gray-900 dark:text-white";
+const commonInputClasses = "form-control";
 
 interface MarketingDatabaseProps {
     partners: MarketingPartner[];
@@ -391,95 +392,95 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
 
     if (view === 'add') {
         return (
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg animate-fadeIn max-w-5xl mx-auto border border-gray-100 dark:border-gray-700">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Add New Marketing Partner</h2>
-                    <button onClick={() => setView('list')} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-bold">Cancel</button>
+            <div className="form-page">
+                <div className="data-list-header">
+                    <h2 className="data-list-title">Add New Marketing Partner</h2>
+                    <button type="button" onClick={() => setView('list')} className="btn btn-secondary">Back to list</button>
                 </div>
-                <form onSubmit={handleSubmit} className="space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <h3 className="font-bold text-emerald-600 border-b pb-1">Company Profile</h3>
-                            <div><label className="block text-sm font-medium">Company Name</label><input type="text" name="companyName" value={formData.companyName} onChange={handleInputChange} required className={commonInputClasses} /></div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-medium">Buyer Type</label><select name="buyerType" value={formData.buyerType} onChange={handleInputChange} className={commonInputClasses}>{BUYER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                <div><label className="block text-sm font-medium">Owner / Contact</label><input type="text" name="ownerName" value={formData.ownerName} onChange={handleInputChange} className={commonInputClasses} /></div>
+                <form onSubmit={handleSubmit} className="form-stack form-stack--spacious">
+                    <div className="form-grid form-grid--two">
+                        <section className="form-section form-stack">
+                            <h3 className="form-section__title">Company Profile</h3>
+                            <div><label className="form-label">Company Name</label><input type="text" name="companyName" value={formData.companyName} onChange={handleInputChange} required className={commonInputClasses} /></div>
+                            <div className="form-grid form-grid--two form-grid--compact">
+                                <div><label className="form-label">Buyer Type</label><select name="buyerType" value={formData.buyerType} onChange={handleInputChange} className={commonInputClasses}>{BUYER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                <div><label className="form-label">Owner / Contact</label><input type="text" name="ownerName" value={formData.ownerName} onChange={handleInputChange} className={commonInputClasses} /></div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-medium">Contact Number</label><input type="text" name="contactNumber" value={formData.contactNumber} onChange={handleInputChange} className={commonInputClasses} /></div>
-                                <div><label className="block text-sm font-medium">Email Address</label><input type="email" name="email" value={formData.email} onChange={handleInputChange} className={commonInputClasses} /></div>
+                            <div className="form-grid form-grid--two form-grid--compact">
+                                <div><label className="form-label">Contact Number</label><input type="text" name="contactNumber" value={formData.contactNumber} onChange={handleInputChange} className={commonInputClasses} /></div>
+                                <div><label className="form-label">Email Address</label><input type="email" name="email" value={formData.email} onChange={handleInputChange} className={commonInputClasses} /></div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-1">Company Location</label>
+                                <label className="form-label">Company Location</label>
                                 <LocationPicker value={formData.location} onChange={handleLocationChange} />
                             </div>
-                        </div>
+                        </section>
 
-                        <div className="space-y-4">
-                            <h3 className="font-bold text-emerald-600 border-b pb-1">Preferences</h3>
+                        <section className="form-section form-stack">
+                            <h3 className="form-section__title">Preferences</h3>
                             <div>
-                                <label className="block text-sm font-medium mb-2">Preferred Payment Methods</label>
-                                <div className="flex flex-wrap gap-2">
+                                <label className="form-label">Preferred Payment Methods</label>
+                                <div className="form-choice-group">
                                     {PAYMENT_METHODS.map(m => (
-                                        <button key={m} type="button" onClick={() => handlePaymentToggle(m)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${formData.paymentMethods.includes(m) ? 'bg-emerald-100 border-emerald-500 text-emerald-700' : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-500'}`}>{m}</button>
+                                        <button key={m} type="button" onClick={() => handlePaymentToggle(m)} className={`form-choice-button ${formData.paymentMethods.includes(m) ? 'is-selected' : ''}`} aria-pressed={formData.paymentMethods.includes(m)}>{m}</button>
                                     ))}
                                 </div>
                             </div>
-                            <div><label className="block text-sm font-medium">Remarks</label><textarea name="remarks" value={formData.remarks} onChange={handleInputChange} rows={3} className={commonInputClasses} /></div>
-                        </div>
+                            <div><label className="form-label">Remarks</label><textarea name="remarks" value={formData.remarks} onChange={handleInputChange} rows={3} className={commonInputClasses} /></div>
+                        </section>
                     </div>
 
-                    <div className="space-y-4 border-t pt-6">
-                        <h3 className="font-bold text-emerald-600">Commodity Requirements</h3>
-                        <div className="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                                <div><label className="block text-xs font-bold uppercase text-gray-500">Type</label><select name="type" value={tempCommodity.type} onChange={handleTempCommodityChange} className={commonInputClasses}><option value="">Select Type</option>{referenceCommodityTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                <div><label className="block text-xs font-bold uppercase text-gray-500">Commodity Name</label><select name="name" value={tempCommodity.name} onChange={handleTempCommodityChange} disabled={!tempCommodity.type} className={commonInputClasses}><option value="">Select Commodity</option>{tempCommodity.type && commodityCategories[tempCommodity.type]?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                                <div><label className="block text-xs font-bold uppercase text-gray-500">Source Region</label>
+                    <section className="form-section form-stack">
+                        <h3 className="form-section__title">Commodity Requirements</h3>
+                        <div className="form-subsection">
+                            <div className="form-grid form-grid--four form-grid--compact">
+                                <div><label className="form-label">Type</label><select name="type" value={tempCommodity.type} onChange={handleTempCommodityChange} className={commonInputClasses}><option value="">Select Type</option>{referenceCommodityTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                <div><label className="form-label">Commodity Name</label><select name="name" value={tempCommodity.name} onChange={handleTempCommodityChange} disabled={!tempCommodity.type} className={commonInputClasses}><option value="">Select Commodity</option>{tempCommodity.type && commodityCategories[tempCommodity.type]?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                                <div><label className="form-label">Source Region</label>
                                     <select name="sourceRegion" value={tempCommodity.sourceRegion} onChange={handleTempCommodityChange} className={commonInputClasses}>
                                         <option value="">Select Region</option>
                                         {philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}
                                     </select>
                                 </div>
-                                <div><label className="block text-xs font-bold uppercase text-gray-500">Source Province</label><select name="sourceProvince" value={tempCommodity.sourceProvince} onChange={handleTempCommodityChange} className={commonInputClasses} disabled={provinceOptions.length === 0}><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                                <div><label className="form-label">Source Province</label><select name="sourceProvince" value={tempCommodity.sourceProvince} onChange={handleTempCommodityChange} className={commonInputClasses} disabled={provinceOptions.length === 0}><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="block text-xs font-bold uppercase text-gray-500">Quality Standard</label><input type="text" name="qualityStandard" value={tempCommodity.qualityStandard} onChange={handleTempCommodityChange} className={commonInputClasses} placeholder="Grade A, Organic, etc." /></div>
+                            <div className="form-grid form-grid--two form-grid--compact">
+                                <div><label className="form-label">Quality Standard</label><input type="text" name="qualityStandard" value={tempCommodity.qualityStandard} onChange={handleTempCommodityChange} className={commonInputClasses} placeholder="Grade A, Organic, etc." /></div>
                                 <div>
-                                    <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Monthly Volume (Kg/Month)</label>
-                                    <div className="grid grid-cols-6 gap-2">
+                                    <label className="form-label">Monthly Volume (Kg/Month)</label>
+                                    <div className="form-month-grid">
                                         {MONTHS.map(m => (
-                                            <div key={m}><label className="block text-[10px] text-gray-400">{m}</label><input type="number" 
+                                            <div key={m} className="form-month-field"><label>{m}</label><input type="number"
                                             // @ts-ignore
-                                            value={tempCommodity[`volume${m}`] || ''} onChange={e => setTempCommodity({...tempCommodity, [`volume${m}`]: parseFloat(e.target.value) || 0})} className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:border-gray-600" /></div>
+                                            value={tempCommodity[`volume${m}`] || ''} onChange={e => setTempCommodity({...tempCommodity, [`volume${m}`]: parseFloat(e.target.value) || 0})} className="form-control form-control--compact" /></div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-                            <div className="mt-4 flex justify-end gap-2">
-                                {editingCommodityIdx !== null && <button type="button" onClick={resetTempCommodity} className="px-4 py-1 text-xs font-bold bg-gray-200 text-gray-700 rounded">Cancel Edit</button>}
-                                <button type="button" onClick={saveTempCommodity} className="px-6 py-2 bg-emerald-600 text-white rounded font-bold text-sm hover:bg-emerald-700">{editingCommodityIdx !== null ? 'Update Item' : 'Add Requirement'}</button>
+                            <div className="form-action-row">
+                                {editingCommodityIdx !== null && <button type="button" onClick={resetTempCommodity} className="btn btn-secondary btn-compact">Cancel Edit</button>}
+                                <button type="button" onClick={saveTempCommodity} className="btn btn-primary">{editingCommodityIdx !== null ? 'Update Item' : 'Add Requirement'}</button>
                             </div>
                         </div>
 
-                        <div className="space-y-2 mt-4 max-h-60 overflow-y-auto">
+                        <div className="form-repeat-list">
                             {formData.commodityNeeds.map((c, i) => (
-                                <div key={i} className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 flex justify-between items-center shadow-sm">
+                                <div key={i} className="form-repeat-card">
                                     <div>
-                                        <p className="font-bold text-gray-800 dark:text-white">{c.name} <span className="text-xs font-normal text-gray-400">({c.type})</span></p>
-                                        <p className="text-xs text-gray-500">{c.sourceProvince || 'Any Province'}, {c.sourceRegion}</p>
+                                        <p className="form-repeat-card__title">{c.name} <span className="data-table__subline">({c.type})</span></p>
+                                        <p className="form-repeat-card__meta">{c.sourceProvince || 'Any Province'}, {c.sourceRegion}</p>
                                     </div>
-                                    <div className="flex gap-4">
-                                        <button type="button" onClick={() => handleEditCommodity(i)} className="text-emerald-600 font-bold text-xs">Edit</button>
-                                        <button type="button" onClick={() => setFormData(prev => ({...prev, commodityNeeds: prev.commodityNeeds.filter((_, idx) => idx !== i)}))} className="text-red-600 font-bold text-xs">Delete</button>
+                                    <div className="form-repeat-card__actions">
+                                        <button type="button" onClick={() => handleEditCommodity(i)} className="table-action">Edit</button>
+                                        <button type="button" onClick={() => setFormData(prev => ({...prev, commodityNeeds: prev.commodityNeeds.filter((_, idx) => idx !== i)}))} className="table-action table-action--danger">Delete</button>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </section>
 
-                    <div className="pt-6 flex justify-end border-t">
-                        <button type="submit" className="px-10 py-3 bg-emerald-600 text-white rounded-md font-bold hover:bg-emerald-700 shadow-lg">Save Partner Profile</button>
+                    <div className="form-footer">
+                        <button type="submit" className="btn btn-primary">Save Partner Profile</button>
                     </div>
                 </form>
             </div>
@@ -487,36 +488,25 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
     }
 
     return (
-        <div className="space-y-6">
+        <div className="data-list-page">
             {isMultiDeleteModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full">
-                        <h3 className="text-lg font-bold mb-4">Confirm Bulk Deletion</h3>
-                        <p className="text-sm text-gray-500 mb-6">Are you sure you want to delete {selectedIds.length} partners? This action cannot be undone.</p>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setIsMultiDeleteModalOpen(false)} className="px-4 py-2 text-sm bg-gray-100 rounded">Cancel</button>
-                            <button onClick={handleMultiDelete} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Delete All</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm bulk deletion"
+                    description={`Delete ${selectedIds.length} selected partner${selectedIds.length === 1 ? '' : 's'}? This action cannot be undone.`}
+                    confirmLabel="Delete selected"
+                    onCancel={() => setIsMultiDeleteModalOpen(false)}
+                    onConfirm={handleMultiDelete}
+                />
             )}
 
             {deletePartner && canDelete && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full">
-                        <h3 className="text-lg font-bold text-red-600 dark:text-red-400 mb-4">Delete Market Partner</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-300 mb-2">
-                            Delete <span className="font-bold text-gray-800 dark:text-white">{deletePartner.companyName}</span>?
-                        </p>
-                        <p className="text-xs text-gray-400 mb-6">
-                            This will remove the partner profile, commodity needs, and market linkage records stored under this partner.
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setDeletePartner(null)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 rounded">Cancel</button>
-                            <button onClick={handleDeletePartner} className="px-4 py-2 text-sm bg-red-600 text-white rounded">Delete Partner</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Delete market partner"
+                    description={`Delete ${deletePartner.companyName}? This removes the profile, commodity needs, and market-linkage records stored under this partner.`}
+                    confirmLabel="Delete partner"
+                    onCancel={() => setDeletePartner(null)}
+                    onConfirm={handleDeletePartner}
+                />
             )}
 
             <div className="data-list-header">
@@ -535,20 +525,20 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                 <div className="data-table-toolbar">
                 <div className="data-toolbar-row">
                     <div className="data-toolbar-group">
-                        <div className="flex-1 min-w-[200px]">
+                        <div className="data-toolbar-search">
                             <input 
                                 type="text" 
                                 placeholder="Search by company, owner, or commodity..." 
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className={`data-table-search ${commonInputClasses} mt-0`}
+                                className={`data-table-search ${commonInputClasses}`}
                             />
                         </div>
-                        <div className="w-full md:w-64">
+                        <div className="data-toolbar-filter">
                             <select 
                                 value={regionFilter} 
                                 onChange={(e) => setRegionFilter(e.target.value)} 
-                                className={`data-table-select ${commonInputClasses} mt-0`}
+                                className={`data-table-select ${commonInputClasses}`}
                             >
                                 <option value="All">All Regions</option>
                                 {philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}
@@ -568,10 +558,10 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                                     <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
                                     <span className="btn-text">Template</span>
                                 </button>
-                                <label className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : 'cursor-pointer'}`} title={isUploading ? 'Uploading...' : 'Upload XLSX'}>
+                                <label className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : ''}`} title={isUploading ? 'Uploading...' : 'Upload XLSX'}>
                                     <Upload className="btn-symbol" aria-hidden="true" />
                                     <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload XLSX'}</span>
-                                    <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} />
+                                    <input type="file" className="file-input-hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} />
                                 </label>
                             </>
                         )}
@@ -589,68 +579,68 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                 </div>
 
                 <div className="data-table-scroll">
-                    <table className="data-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <table className="data-table">
                         <thead>
                             <tr>
-                                {isSelectionMode && <th className="px-6 py-3 text-left w-10"><input type="checkbox" onChange={(e) => handleSelectAll(e, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(p => selectedIds.includes(p.id))} className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" /></th>}
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Region</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Company Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Commodity Needs</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Owner / Contact</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Total Sales from Market Linkage</th>
-                                <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Workflow Status</th>
-                                {canDelete && <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Action</th>}
+                                {isSelectionMode && <th className="data-table__cell--selection"><input type="checkbox" onChange={(e) => handleSelectAll(e, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(p => selectedIds.includes(p.id))} className="form-checkbox" aria-label="Select all partners on this page" /></th>}
+                                <th>Region</th>
+                                <th>Company Name</th>
+                                <th>Type</th>
+                                <th>Commodity Needs</th>
+                                <th>Owner / Contact</th>
+                                <th>Total Sales from Market Linkage</th>
+                                <th>Workflow Status</th>
+                                {canDelete && <th className="data-table__head--actions">Action</th>}
                             </tr>
                         </thead>
-                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        <tbody>
                             {paginatedData.map((partner) => {
                                 const salesSummary = summarizeMarketPartnerSales(partner);
                                 return (
-                                <tr key={partner.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${selectedIds.includes(partner.id) ? 'bg-blue-50 dark:bg-blue-900/10' : ''}`}>
-                                    {isSelectionMode && <td className="px-6 py-4"><input type="checkbox" checked={selectedIds.includes(partner.id)} onChange={() => handleSelectRow(partner.id)} className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" /></td>}
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 font-medium">{partner.region || 'N/A'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold"><button onClick={() => onSelectPartner(partner)} className="table-link">{partner.companyName}</button><div className="text-[10px] text-gray-400 font-normal mt-0.5">{partner.uid}</div></td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs"><span className={`status-badge ${partner.buyerType === 'Government' ? 'status-badge--info' : 'status-badge--neutral'}`}>{partner.buyerType || 'Private'}</span></td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-wrap gap-1">
+                                <tr key={partner.id} className={selectedIds.includes(partner.id) ? 'data-table__row--selected' : undefined}>
+                                    {isSelectionMode && <td className="data-table__cell--selection"><input type="checkbox" checked={selectedIds.includes(partner.id)} onChange={() => handleSelectRow(partner.id)} className="form-checkbox" aria-label={`Select ${partner.companyName}`} /></td>}
+                                    <td className="data-table__cell--muted data-table__cell--nowrap">{partner.region || 'N/A'}</td>
+                                    <td className="data-table__cell--nowrap"><button onClick={() => onSelectPartner(partner)} className="table-link">{partner.companyName}</button><div className="data-table__subline">{partner.uid}</div></td>
+                                    <td className="data-table__cell--nowrap"><span className={`status-badge ${partner.buyerType === 'Government' ? 'status-badge--info' : 'status-badge--neutral'}`}>{partner.buyerType || 'Private'}</span></td>
+                                    <td>
+                                        <div className="data-table-tags">
                                             {partner.commodityNeeds?.slice(0, 3).map((c, i) => (
-                                                <span key={i} className="px-2 py-0.5 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-md text-[10px] font-bold border border-teal-100 dark:border-teal-800 uppercase">{c.name}</span>
+                                                <span key={i} className="data-table-tag">{c.name}</span>
                                             ))}
-                                            {(partner.commodityNeeds?.length || 0) > 3 && <span className="text-[10px] text-gray-400 font-bold">+{partner.commodityNeeds.length - 3} more</span>}
-                                            {(!partner.commodityNeeds || partner.commodityNeeds.length === 0) && <span className="text-gray-400 text-xs italic">Unspecified</span>}
+                                            {(partner.commodityNeeds?.length || 0) > 3 && <span className="data-table__subline">+{partner.commodityNeeds.length - 3} more</span>}
+                                            {(!partner.commodityNeeds || partner.commodityNeeds.length === 0) && <span className="data-table__cell--soft">Unspecified</span>}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400"><div className="font-bold text-gray-700 dark:text-gray-300">{partner.ownerName}</div><div>{partner.contactNumber}</div></td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                                        <div>{formatCurrency(salesSummary.totalSales)}</div>
-                                        <div className="text-[10px] font-normal text-gray-400">{salesSummary.linkageCount} linkage{salesSummary.linkageCount === 1 ? '' : 's'}</div>
+                                    <td className="data-table__cell--muted data-table__cell--nowrap"><div className="data-table__cell--primary">{partner.ownerName}</div><div>{partner.contactNumber}</div></td>
+                                    <td className="data-table__cell--nowrap">
+                                        <div className="data-table__cell--primary">{formatCurrency(salesSummary.totalSales)}</div>
+                                        <div className="data-table__subline">{salesSummary.linkageCount} linkage{salesSummary.linkageCount === 1 ? '' : 's'}</div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex flex-col gap-1 items-start">
+                                    <td className="data-table__cell--nowrap">
+                                        <div className="data-table-workflow">
                                             {getWorkflowStatusBadge(partner.workflow_status)}
                                             {partner.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                                <div className="flex gap-1 mt-1">
+                                                <div className="data-table-workflow__actions">
                                                     <button 
                                                         onClick={(e) => handleApprove(partner.id, e)} 
                                                         className="action-mini action-mini--approve"
                                                         title="Approve"
                                                     >
-                                                        <Check className="h-3 w-3" />
+                                                        <Check aria-hidden="true" />
                                                     </button>
                                                     <button 
                                                         onClick={(e) => handleReject(partner.id, e)} 
                                                         className="action-mini action-mini--reject"
                                                         title="Reject"
                                                     >
-                                                        <X className="h-3 w-3" />
+                                                        <X aria-hidden="true" />
                                                     </button>
                                                 </div>
                                             )}
                                         </div>
                                     </td>
                                     {canDelete && (
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                                        <td className="data-table__cell--actions data-table__cell--nowrap">
                                             <button
                                                 type="button"
                                                 onClick={(event) => {
@@ -670,15 +660,15 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                     </table>
                 </div>
                 
-                {totalPages > 1 && (
-                    <div className="data-table-pagination py-4 flex items-center justify-between">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Page {currentPage} of {totalPages}</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="px-3 py-1 border rounded disabled:opacity-50">Prev</button>
-                            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages} className="px-3 py-1 border rounded disabled:opacity-50">Next</button>
-                        </div>
-                    </div>
-                )}
+                <DataTablePagination
+                    currentPage={currentPage}
+                    itemsPerPage={itemsPerPage}
+                    totalItems={filteredPartners.length}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={setItemsPerPage}
+                    aria-label="Marketing partners pagination"
+                />
             </div>
         </div>
     );

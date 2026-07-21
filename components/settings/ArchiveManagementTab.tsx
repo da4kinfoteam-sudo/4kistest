@@ -6,6 +6,7 @@ import { TrashItem } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLogAction } from '../../hooks/useLogAction';
 import { format } from 'date-fns';
+import { DataTablePagination } from '../ui/enterprise';
 
 const ArchiveManagementTab: React.FC = () => {
     const { currentUser } = useAuth();
@@ -222,43 +223,40 @@ const ArchiveManagementTab: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
-            </div>
+            <div className="ui-state"><div className="loading-spinner" aria-label="Loading archive" /></div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
+        <div className="archive-management form-stack form-stack--spacious">
+            <header className="section-heading archive-management__header">
                 <div>
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Archive Management</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Recover or permanently delete archived items.</p>
+                    <h3 className="section-heading__title">Archive Management</h3>
+                    <p className="section-heading__helper">Recover or permanently delete archived items.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="archive-management__actions">
                     <button
                         onClick={handleBulkRecover}
                         disabled={selectedIds.length === 0 || isProcessing}
-                        className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                        className="btn-primary"
                     >
                         Recover Selected ({selectedIds.length})
                     </button>
                     <button
                         onClick={handleBulkDelete}
                         disabled={selectedIds.length === 0 || isProcessing}
-                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                        className="btn-danger"
                     >
                         Delete Permanently ({selectedIds.length})
                     </button>
                 </div>
-            </div>
+            </header>
 
-            <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead className="bg-gray-50 dark:bg-gray-900/50">
+            <div className="data-table-card"><div className="data-table-scroll archive-management__table-scroll">
+                    <table className="data-table archive-management__table">
+                        <thead>
                             <tr>
-                                <th className="px-6 py-3 text-left">
+                                <th className="data-table__cell--selection">
                                     <input
                                         type="checkbox"
                                         checked={selectedIds.length === paginatedItems.length && paginatedItems.length > 0}
@@ -269,109 +267,67 @@ const ArchiveManagementTab: React.FC = () => {
                                                 setSelectedIds([]);
                                             }
                                         }}
-                                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                        className="form-checkbox"
                                     />
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name / Title</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Entity Type</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deleted By</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Deleted At</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                                <th>Name / Title</th><th>Entity Type</th><th>Deleted By</th><th>Deleted At</th><th className="data-table__head--actions">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        <tbody>
                             {paginatedItems.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-10 text-center text-gray-500 dark:text-gray-400">
+                                    <td colSpan={6} className="data-table__empty-cell">
                                         No items in the archive.
                                     </td>
                                 </tr>
                             ) : (
                                 paginatedItems.map((item) => (
-                                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                        <td className="px-6 py-4">
+                                    <tr key={item.id} className={selectedIds.includes(item.id) ? 'data-table__row--selected' : undefined}>
+                                        <td className="data-table__cell--selection">
                                             <input
                                                 type="checkbox"
                                                 checked={selectedIds.includes(item.id)}
                                                 onChange={() => handleSelectOne(item.id)}
-                                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                className="form-checkbox"
                                             />
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                                        <td className="data-table__cell--primary data-table__cell--nowrap">
                                             {getItemName(item)}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 capitalize">
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">
                                             {item.entity_type.replace(/_/g, ' ')}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">
                                             {item.deleted_by}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">
                                             {format(new Date(item.deleted_at), 'MMM dd, yyyy HH:mm')}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <td className="data-table__cell--actions data-table__cell--nowrap"><div className="data-table__actions">
                                             <button
                                                 onClick={() => recoverItem(item)}
                                                 disabled={isProcessing}
-                                                className="text-emerald-600 hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-300 mr-4 disabled:opacity-50"
+                                                className="table-action table-action--edit"
                                             >
                                                 Recover
                                             </button>
                                             <button
                                                 onClick={() => permanentlyDeleteItem(item.id)}
                                                 disabled={isProcessing}
-                                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                                                className="table-action table-action--delete"
                                             >
                                                 Delete
                                             </button>
-                                        </td>
+                                        </div></td>
                                     </tr>
                                 ))
                             )}
                         </tbody>
                     </table>
-                </div>
-            </div>
+                </div></div>
 
             {/* Pagination */}
-            <div className="py-4 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-700 dark:text-gray-300">Show</span>
-                    <select 
-                        value={itemsPerPage} 
-                        onChange={(e) => {
-                            setItemsPerPage(Number(e.target.value));
-                            setCurrentPage(1);
-                        }} 
-                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-1 pl-2 pr-8 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                    >
-                        {[10, 20, 50, 100].map(size => ( <option key={size} value={size}>{size}</option> ))}
-                    </select>
-                    <span className="text-gray-700 dark:text-gray-300">entries</span>
-                </div>
-                <div className="flex items-center gap-4 text-sm">
-                    <span className="text-gray-700 dark:text-gray-300">
-                        Showing {items.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, items.length)} of {items.length} entries
-                    </span>
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                            disabled={currentPage === 1} 
-                            className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            Previous
-                        </button>
-                        <span className="px-2 font-medium text-gray-700 dark:text-gray-300">{currentPage} / {totalPages || 1}</span>
-                        <button 
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                            disabled={currentPage === totalPages || totalPages === 0} 
-                            className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                            Next
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <DataTablePagination aria-label="Archive pagination" currentPage={currentPage} totalPages={totalPages} totalItems={items.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={size => { setItemsPerPage(size); setCurrentPage(1); }} />
         </div>
     );
 };

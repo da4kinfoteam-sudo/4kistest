@@ -50,7 +50,7 @@ export const ObligationsEditor: React.FC<ObligationsEditorProps> = ({ obligation
                                 onChange={(val) => handleUpdate(ob.id, 'date', val)}
                                 placeholder="Month"
                                 defaultYear={defaultYear}
-                                className="h-8 text-xs w-full"
+                                className="form-control form-control--compact"
                                 disabled={readOnly}
                                 allowClear
                             />

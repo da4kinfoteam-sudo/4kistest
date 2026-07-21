@@ -4,6 +4,7 @@ import { supabase } from '../../supabaseClient';
 import { LodSection, LodQuestion, LodChoice, LodLevelConfig } from '../../constants';
 import { useLogAction } from '../../hooks/useLogAction';
 import * as XLSX from 'xlsx';
+import { ConfirmDialog, LoadingState } from '../ui/enterprise';
 
 // DnD Kit Imports
 import {
@@ -49,10 +50,10 @@ const SortableItem: React.FC<SortableItemProps> = ({ id, children, disabled }) =
     };
 
     return (
-        <div ref={setNodeRef} style={style} className={isDragging ? 'opacity-50 shadow-2xl' : ''}>
+        <div ref={setNodeRef} style={style} className={isDragging ? 'lod-builder-sortable is-dragging' : 'lod-builder-sortable'}>
             <div className="flex items-start gap-2">
                 {!disabled && (
-                    <div {...attributes} {...listeners} className="mt-3 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
+                    <div {...attributes} {...listeners} className="lod-builder-drag-handle">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
                         </svg>
@@ -703,86 +704,86 @@ const LODManagementTab: React.FC = () => {
         if (e.target) e.target.value = '';
     };
 
-    if (loading) return <div>Loading LOD Settings...</div>;
+    if (loading) return <LoadingState title="Loading LOD settings" message="Preparing score ranges and questionnaire configuration." />;
 
     return (
         <div className="space-y-8 pb-12">
             
             {/* SECTION 1: LOD SCORE COMPUTATION */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                <div className="flex justify-between items-center mb-6">
+            <section className="detail-card lod-management-card">
+                <header className="lod-management-card__header">
                     <div>
-                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">LOD Score Computation</h3>
-                        <p className="text-sm text-gray-500">Set the score ranges for each Level of Development (1-5).</p>
+                        <h3 className="detail-card-title">LOD Score Computation</h3>
+                        <p className="lod-management-card__description">Set the score ranges for each Level of Development (1-5).</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="lod-management-card__actions">
                         {isEditingLevels ? (
                             <>
-                                <button onClick={handleCancelLevels} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-                                <button onClick={handleSaveLevels} className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 shadow-sm">Save Changes</button>
+                                <button type="button" onClick={handleCancelLevels} className="btn btn-secondary">Cancel</button>
+                                <button type="button" onClick={handleSaveLevels} className="btn btn-primary">Save Changes</button>
                             </>
                         ) : (
-                            <button onClick={() => setIsEditingLevels(true)} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm">Edit Ranges</button>
+                            <button type="button" onClick={() => setIsEditingLevels(true)} className="btn btn-primary">Edit Ranges</button>
                         )}
                     </div>
-                </div>
+                </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="lod-level-grid">
                     {editingLevels.map((config, index) => (
-                        <div key={config.id} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-between">
-                            <span className="font-bold text-lg text-gray-700 dark:text-gray-200">Level {config.level}</span>
-                            <div className="flex items-center gap-2">
+                        <div key={config.id} className="lod-level-row">
+                            <span className="lod-level-row__label">Level {config.level}</span>
+                            <div className="lod-level-row__range">
                                 <input 
                                     type="number" 
                                     value={config.min_score}
                                     onChange={(e) => handleLevelChange(index, 'min_score', Number(e.target.value))}
                                     disabled={!isEditingLevels}
-                                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center dark:bg-gray-800 dark:text-white disabled:opacity-60"
+                                    className="form-control form-control--compact lod-level-row__input"
                                 />
-                                <span className="text-gray-400">-</span>
+                                <span aria-hidden="true" className="lod-level-row__separator">–</span>
                                 <input 
                                     type="number" 
                                     value={config.max_score}
                                     onChange={(e) => handleLevelChange(index, 'max_score', Number(e.target.value))}
                                     disabled={!isEditingLevels}
-                                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-center dark:bg-gray-800 dark:text-white disabled:opacity-60"
+                                    className="form-control form-control--compact lod-level-row__input"
                                 />
                             </div>
                         </div>
                     ))}
                 </div>
-            </div>
+            </section>
 
             {/* SECTION 2: QUESTIONNAIRE MANAGEMENT */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-                <div className="flex justify-between items-center mb-6">
+            <section className="detail-card lod-management-card">
+                <header className="lod-management-card__header">
                     <div>
-                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">Questionnaire Management</h3>
-                        <p className="text-sm text-gray-500">Manage sections, questions, choices, and weights.</p>
+                        <h3 className="detail-card-title">Questionnaire Management</h3>
+                        <p className="lod-management-card__description">Manage sections, questions, choices, and weights.</p>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={handleDownloadExcel} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2">
+                    <div className="lod-management-card__actions">
+                        <button type="button" onClick={handleDownloadExcel} className="btn btn-secondary">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
                             Download Questionnaire
                         </button>
-                        <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2">
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn-secondary">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                             </svg>
                             Upload Excel
                         </button>
-                        <input type="file" ref={fileInputRef} onChange={handleUploadExcel} accept=".xlsx, .xls" className="hidden" />
+                        <input type="file" ref={fileInputRef} onChange={handleUploadExcel} accept=".xlsx, .xls" className="file-input-hidden" />
                         
                         {isEditingQuestionnaire && (
                             <>
-                                <button onClick={handleCancelQuestionnaire} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-                                <button onClick={handleSaveQuestionnaire} className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 shadow-sm">Save Changes</button>
+                                <button type="button" onClick={handleCancelQuestionnaire} className="btn btn-secondary">Cancel</button>
+                                <button type="button" onClick={handleSaveQuestionnaire} className="btn btn-primary">Save Changes</button>
                             </>
                         )}
                     </div>
-                </div>
+                </header>
 
                 {/* Sections List */}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndSections}>
@@ -790,12 +791,13 @@ const LODManagementTab: React.FC = () => {
                         <div className="space-y-4">
                             {editingSections.map(section => (
                                 <SortableItem key={section.id} id={section.id}>
-                                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 shadow-sm">
-                                        <div className="bg-gray-50 dark:bg-gray-700/50 p-4 flex justify-between items-center">
+                                    <article className="lod-builder-section">
+                                        <header className="lod-builder-section__header">
                                             <div className="flex items-center gap-4 flex-1">
                                                 <button 
                                                     onClick={() => setExpandedSectionId(expandedSectionId === section.id ? null : section.id)}
-                                                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                                                    className="lod-builder-icon-button"
+                                                    aria-label={expandedSectionId === section.id ? `Collapse ${section.title}` : `Expand ${section.title}`}
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transform transition-transform ${expandedSectionId === section.id ? 'rotate-90' : ''}`} viewBox="0 0 20 20" fill="currentColor">
                                                         <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -808,36 +810,36 @@ const LODManagementTab: React.FC = () => {
                                                             type="text" 
                                                             value={section.title}
                                                             onChange={(e) => handleSectionChange(section.id, 'title', e.target.value)}
-                                                            className="font-bold text-gray-800 dark:text-white bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-500 focus:outline-none px-1 flex-1"
+                                                            className="lod-builder-inline-input lod-builder-section__title"
                                                         />
                                                     </div>
                                                 </div>
                                                 
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-gray-500 uppercase">Weight:</span>
+                                                    <span className="lod-builder-meta-label">Weight:</span>
                                                     <input 
                                                         type="number" 
                                                         value={section.weight}
                                                         onChange={(e) => handleSectionChange(section.id, 'weight', Number(e.target.value))}
-                                                        className="w-16 text-right font-mono bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-500 focus:outline-none"
+                                                        className="lod-builder-inline-input lod-builder-weight-input"
                                                     />
-                                                    <span className="text-gray-500">%</span>
+                                                    <span className="lod-builder-meta-label">%</span>
                                                 </div>
                                             </div>
-                                            <button onClick={() => handleDeleteSection(section.id)} className="ml-4 text-red-400 hover:text-red-600 p-1">
+                                            <button type="button" onClick={() => handleDeleteSection(section.id)} className="lod-builder-icon-button lod-builder-icon-button--danger" aria-label={`Delete ${section.title}`}>
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                 </svg>
                                             </button>
-                                        </div>
+                                        </header>
 
                                         {expandedSectionId === section.id && (
-                                            <div className="p-4 space-y-6 bg-white dark:bg-gray-800">
+                                            <div className="lod-builder-section__body">
                                                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEndQuestions(e, section.id)}>
                                                     <SortableContext items={editingQuestions.filter(q => q.section_id === section.id).map(q => q.id)} strategy={verticalListSortingStrategy}>
                                                         {editingQuestions.filter(q => q.section_id === section.id).map(question => (
                                                             <SortableItem key={question.id} id={question.id} disabled={lockedQuestionIds.has(question.id)}>
-                                                                <div className={`pl-4 border-l-2 ${lockedQuestionIds.has(question.id) ? 'border-gray-100 dark:border-gray-800' : 'border-emerald-500'} transition-colors`}>
+                                                                <article className={`lod-builder-question ${lockedQuestionIds.has(question.id) ? 'is-locked' : 'is-editable'}`}>
                                                                     <div className="flex justify-between items-start mb-3">
                                                                         <div className="flex-1">
                                                                             <div className="flex items-center gap-2 mb-1">
@@ -846,11 +848,11 @@ const LODManagementTab: React.FC = () => {
                                                                                     value={question.text}
                                                                                     disabled={lockedQuestionIds.has(question.id)}
                                                                                     onChange={(e) => handleQuestionChange(question.id, 'text', e.target.value)}
-                                                                                    className={`w-full font-medium text-gray-800 dark:text-gray-200 bg-transparent border-b border-transparent ${!lockedQuestionIds.has(question.id) ? 'hover:border-gray-300 focus:border-emerald-500' : ''} focus:outline-none`}
+                                                                                    className="lod-builder-inline-input lod-builder-question__title"
                                                                                 />
                                                                                 <button 
                                                                                     onClick={() => toggleQuestionLock(question.id)}
-                                                                                    className={`p-1 rounded ${lockedQuestionIds.has(question.id) ? 'text-gray-400 hover:text-blue-500' : 'text-blue-500 hover:text-blue-600'}`}
+                                                                                    className={`lod-builder-icon-button ${lockedQuestionIds.has(question.id) ? '' : 'is-active'}`}
                                                                                     title={lockedQuestionIds.has(question.id) ? "Unlock to edit" : "Lock question"}
                                                                                 >
                                                                                     {lockedQuestionIds.has(question.id) ? (
@@ -870,104 +872,104 @@ const LODManagementTab: React.FC = () => {
                                                                                     disabled={lockedQuestionIds.has(question.id)}
                                                                                     placeholder="Optional description/remarks to guide users"
                                                                                     onChange={(e) => handleQuestionChange(question.id, 'description', e.target.value)}
-                                                                                    className={`w-full text-sm text-gray-500 dark:text-gray-400 bg-transparent border-b border-transparent ${!lockedQuestionIds.has(question.id) ? 'hover:border-gray-300 focus:border-emerald-500' : ''} focus:outline-none italic resize-none min-h-[60px]`}
+                                                                                    className="lod-builder-inline-input lod-builder-question__description"
                                                                                 />
                                                                             </div>
-                                                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                            <div className="lod-builder-weight-row">
                                                                                 <span>Weight:</span>
                                                                                 <input 
                                                                                     type="number" 
                                                                                     value={question.weight}
                                                                                     disabled={lockedQuestionIds.has(question.id)}
                                                                                     onChange={(e) => handleQuestionChange(question.id, 'weight', Number(e.target.value))}
-                                                                                    className="w-12 bg-transparent border-b border-gray-200 focus:border-emerald-500 focus:outline-none text-center"
+                                                                                    className="lod-builder-inline-input lod-builder-weight-input"
                                                                                 />
                                                                             </div>
 
                                                                             {/* New: Calculation and Specific Answer Modes */}
-                                                                            <div className="flex flex-wrap gap-4 mt-2">
-                                                                                <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase cursor-pointer">
+                                                                            <div className="form-check-group lod-builder-mode-options">
+                                                                                <label className="form-check">
                                                                                     <input 
                                                                                         type="checkbox" 
                                                                                         checked={question.is_calculation_mode || false}
                                                                                         disabled={lockedQuestionIds.has(question.id)}
                                                                                         onChange={(e) => handleQuestionChange(question.id, 'is_calculation_mode', e.target.checked)}
-                                                                                        className="h-3 w-3 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                                                                                        className="form-checkbox"
                                                                                     />
                                                                                     Calculation Mode
                                                                                 </label>
-                                                                                <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase cursor-pointer">
+                                                                                <label className="form-check">
                                                                                     <input 
                                                                                         type="checkbox" 
                                                                                         checked={question.is_specific_answer_mode || false}
                                                                                         disabled={lockedQuestionIds.has(question.id)}
                                                                                         onChange={(e) => handleQuestionChange(question.id, 'is_specific_answer_mode', e.target.checked)}
-                                                                                        className="h-3 w-3 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                                                                                        className="form-checkbox"
                                                                                     />
                                                                                     Specific Answer Mode
                                                                                 </label>
                                                                             </div>
 
                                                                             {question.is_calculation_mode && (
-                                                                                <div className="grid grid-cols-2 gap-4 mt-2 bg-gray-50 dark:bg-gray-900/30 p-2 rounded-md">
-                                                                                    <div>
-                                                                                        <label className="block text-[9px] uppercase text-gray-400 font-bold">Actual Value Label</label>
+                                                                                <div className="lod-builder-mode-panel lod-builder-mode-panel--columns">
+                                                                                    <label className="form-field">
+                                                                                        <span className="form-label">Actual Value Label</span>
                                                                                         <input 
                                                                                             type="text" 
                                                                                             value={question.actual_label || ''}
                                                                                             disabled={lockedQuestionIds.has(question.id)}
                                                                                             onChange={(e) => handleQuestionChange(question.id, 'actual_label', e.target.value)}
-                                                                                            className="w-full text-xs bg-transparent border-b border-gray-200 focus:border-emerald-500 focus:outline-none"
+                                                                                            className="form-control form-control--compact"
                                                                                             placeholder="e.g. Actual Participants"
                                                                                         />
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <label className="block text-[9px] uppercase text-gray-400 font-bold">Total Value Label</label>
+                                                                                    </label>
+                                                                                    <label className="form-field">
+                                                                                        <span className="form-label">Total Value Label</span>
                                                                                         <input 
                                                                                             type="text" 
                                                                                             value={question.total_label || ''}
                                                                                             disabled={lockedQuestionIds.has(question.id)}
                                                                                             onChange={(e) => handleQuestionChange(question.id, 'total_label', e.target.value)}
-                                                                                            className="w-full text-xs bg-transparent border-b border-gray-200 focus:border-emerald-500 focus:outline-none"
+                                                                                            className="form-control form-control--compact"
                                                                                             placeholder="e.g. Total Members"
                                                                                         />
-                                                                                    </div>
+                                                                                    </label>
                                                                                 </div>
                                                                             )}
 
                                                                             {question.is_specific_answer_mode && (
-                                                                                <div className="mt-2 bg-gray-50 dark:bg-gray-900/30 p-2 rounded-md">
-                                                                                    <label className="block text-[9px] uppercase text-gray-400 font-bold">Specific Answer Label</label>
+                                                                                <label className="form-field lod-builder-mode-panel">
+                                                                                    <span className="form-label">Specific Answer Label</span>
                                                                                     <input 
                                                                                         type="text" 
                                                                                         value={question.specific_answer_label || ''}
                                                                                         disabled={lockedQuestionIds.has(question.id)}
                                                                                         onChange={(e) => handleQuestionChange(question.id, 'specific_answer_label', e.target.value)}
-                                                                                        className="w-full text-xs bg-transparent border-b border-gray-200 focus:border-emerald-500 focus:outline-none"
+                                                                                        className="form-control form-control--compact"
                                                                                         placeholder="e.g. Average Income"
                                                                                     />
-                                                                                </div>
+                                                                                </label>
                                                                             )}
                                                                         </div>
                                                                         {!lockedQuestionIds.has(question.id) && (
-                                                                            <button onClick={() => handleDeleteQuestion(question.id)} className="text-gray-400 hover:text-red-500 ml-2">×</button>
+                                                                            <button type="button" onClick={() => handleDeleteQuestion(question.id)} className="lod-builder-icon-button lod-builder-icon-button--danger" aria-label="Delete question">×</button>
                                                                         )}
                                                                     </div>
 
                                                                     {/* Choices */}
                                                                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEndChoices(e, question.id)}>
                                                                         <SortableContext items={editingChoices.filter(c => c.question_id === question.id).map(c => c.id)} strategy={verticalListSortingStrategy}>
-                                                                            <div className="ml-6 space-y-2">
+                                                                            <div className="lod-builder-choice-list">
                                                                                 {editingChoices.filter(c => c.question_id === question.id).map(choice => (
                                                                                     <SortableItem key={choice.id} id={choice.id} disabled={lockedQuestionIds.has(question.id)}>
-                                                                                        <div className="flex items-center gap-3 text-sm group">
-                                                                                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300 group-hover:bg-emerald-400"></div>
+                                                                                        <div className="lod-builder-choice-row">
+                                                                                            <span className="lod-builder-choice-row__marker" aria-hidden="true" />
                                                                                             <input 
                                                                                                 type="text" 
                                                                                                 value={choice.text}
                                                                                                 disabled={lockedQuestionIds.has(question.id)}
                                                                                                 onChange={(e) => handleChoiceChange(choice.id, 'text', e.target.value)}
-                                                                                                className={`flex-1 bg-transparent border-b border-transparent ${!lockedQuestionIds.has(choice.id) ? 'hover:border-gray-200 focus:border-emerald-500' : ''} focus:outline-none text-gray-600 dark:text-gray-400`}
+                                                                                                className="lod-builder-inline-input lod-builder-choice-row__text"
                                                                                             />
                                                                                             <div className="flex items-center gap-1">
                                                                                                 <input 
@@ -979,13 +981,13 @@ const LODManagementTab: React.FC = () => {
                                                                                                         const points = (percentage / 100) * question.weight;
                                                                                                         handleChoiceChange(choice.id, 'points', points);
                                                                                                     }}
-                                                                                                    className={`w-12 text-right bg-transparent border-b border-transparent ${!lockedQuestionIds.has(choice.id) ? 'hover:border-gray-200 focus:border-emerald-500' : ''} focus:outline-none text-gray-500`}
+                                                                                                    className="lod-builder-inline-input lod-builder-choice-row__points"
                                                                                                 />
-                                                                                                <span className="text-xs text-gray-400">%</span>
-                                                                                                <span className="text-xs text-gray-400 ml-2">({Number(choice.points.toFixed(1))} pts)</span>
+                                                                                                <span className="lod-builder-meta-label">%</span>
+                                                                                                <span className="lod-builder-meta-label">({Number(choice.points.toFixed(1))} pts)</span>
                                                                                             </div>
                                                                                             {!lockedQuestionIds.has(question.id) && (
-                                                                                                <button onClick={() => handleDeleteChoice(choice.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500">×</button>
+                                                                                                <button type="button" onClick={() => handleDeleteChoice(choice.id)} className="lod-builder-icon-button lod-builder-icon-button--danger lod-builder-choice-row__delete" aria-label="Delete choice">×</button>
                                                                                             )}
                                                                                         </div>
                                                                                     </SortableItem>
@@ -993,7 +995,7 @@ const LODManagementTab: React.FC = () => {
                                                                                 {!lockedQuestionIds.has(question.id) && (
                                                                                     <button 
                                                                                         onClick={() => handleAddChoice(question.id)}
-                                                                                        className="text-xs text-emerald-600 hover:text-emerald-700 font-medium mt-1 flex items-center gap-1"
+                                                                                        className="btn btn-ghost btn-sm lod-builder-add-choice"
                                                                                     >
                                                                                         + Add Choice
                                                                                     </button>
@@ -1001,7 +1003,7 @@ const LODManagementTab: React.FC = () => {
                                                                             </div>
                                                                         </SortableContext>
                                                                     </DndContext>
-                                                                </div>
+                                                                </article>
                                                             </SortableItem>
                                                         ))}
                                                     </SortableContext>
@@ -1009,13 +1011,13 @@ const LODManagementTab: React.FC = () => {
                                                 
                                                 <button 
                                                     onClick={() => handleAddQuestion(section.id)}
-                                                    className="w-full py-2 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 hover:border-emerald-500 hover:text-emerald-600 transition-colors text-sm font-medium"
+                                                    className="btn btn-secondary btn-block lod-builder-add"
                                                 >
                                                     + Add Question to Section
                                                 </button>
                                             </div>
                                         )}
-                                    </div>
+                                    </article>
                                 </SortableItem>
                             ))}
                         </div>
@@ -1024,67 +1026,29 @@ const LODManagementTab: React.FC = () => {
 
                 <button 
                     onClick={handleAddSection}
-                    className="w-full mt-6 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-400 hover:border-emerald-500 hover:text-emerald-600 transition-all font-bold flex items-center justify-center gap-2"
+                    className="btn btn-secondary btn-block lod-builder-add lod-builder-add--section"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
                     </svg>
                     Add New Section
                 </button>
-            </div>
+            </section>
 
-            {/* Confirmation Modal */}
+            {/* Confirmation dialog */}
             {confirmModal.isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className={`p-6 ${confirmModal.type === 'danger' ? 'bg-red-50 dark:bg-red-900/20' : confirmModal.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
-                            <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-full ${confirmModal.type === 'danger' ? 'bg-red-100 text-red-600' : confirmModal.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                                    {confirmModal.type === 'danger' ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                        </svg>
-                                    ) : confirmModal.type === 'success' ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    )}
-                                </div>
-                                <h4 className="text-lg font-bold text-gray-900 dark:text-white">{confirmModal.title}</h4>
-                            </div>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-600 dark:text-gray-400">{confirmModal.message}</p>
-                            <div className="mt-8 flex justify-end gap-3">
-                                {confirmModal.type !== 'success' && confirmModal.type !== 'info' && (
-                                    <button 
-                                        onClick={closeConfirm}
-                                        className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                )}
-                                <button 
-                                    onClick={() => {
-                                        confirmModal.onConfirm();
-                                        closeConfirm();
-                                    }}
-                                    className={`px-6 py-2 rounded-lg font-bold text-white shadow-lg transition-all active:scale-95 ${
-                                        confirmModal.type === 'danger' ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20' : 
-                                        confirmModal.type === 'success' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20' : 
-                                        'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
-                                    }`}
-                                >
-                                    {confirmModal.type === 'success' || confirmModal.type === 'info' ? 'Understood' : 'Confirm'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title={confirmModal.title}
+                    description={confirmModal.message}
+                    confirmLabel={confirmModal.type === 'success' || confirmModal.type === 'info' ? 'Understood' : 'Confirm'}
+                    cancelLabel={confirmModal.type === 'success' || confirmModal.type === 'info' ? 'Close' : 'Cancel'}
+                    tone={confirmModal.type === 'danger' ? 'danger' : 'primary'}
+                    onConfirm={() => {
+                        confirmModal.onConfirm();
+                        closeConfirm();
+                    }}
+                    onCancel={closeConfirm}
+                />
             )}
         </div>
     );

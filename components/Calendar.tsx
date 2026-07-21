@@ -7,9 +7,7 @@ export interface CalendarEvent {
     id: string;
     title: string;
     type: 'Training' | 'Subproject Start' | 'Subproject End' | 'Deadline' | 'Planning' | 'Activity' | 'Holiday';
-    borderColor: string;
-    bgColor: string;
-    textColor: string;
+    tone: 'complete' | 'late' | 'activity' | 'deadline' | 'planning' | 'holiday';
     originalData?: any;
     dataId?: number;
     dataType?: 'Subproject' | 'Training' | 'Activity';
@@ -72,7 +70,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
         fetchHolidays();
     }, [year]);
 
-    const getStatusStyles = (isCompleted: boolean, dateToCheck: string, defaultBorder: string) => {
+    const getStatusTone = (isCompleted: boolean, dateToCheck: string): CalendarEvent['tone'] => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
@@ -80,23 +78,11 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
         const targetDate = new Date(y, m - 1, d);
 
         if (isCompleted) {
-            return {
-                bgColor: 'bg-emerald-100 dark:bg-emerald-900/60',
-                borderColor: 'border-emerald-600',
-                textColor: 'text-emerald-900 dark:text-emerald-100'
-            };
+            return 'complete';
         } else if (targetDate < today) {
-            return {
-                bgColor: 'bg-red-100 dark:bg-red-900/60',
-                borderColor: 'border-red-600',
-                textColor: 'text-red-900 dark:text-red-100'
-            };
+            return 'late';
         } else {
-            return {
-                bgColor: 'bg-white dark:bg-gray-700/50',
-                borderColor: defaultBorder,
-                textColor: 'text-gray-800 dark:text-gray-200'
-            };
+            return 'activity';
         }
     };
 
@@ -125,7 +111,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                 let endLoopDate = new Date(endY, endM - 1, endD);
 
                 const effectiveEndDateStr = endDate;
-                const styles = getStatusStyles(isCompleted, effectiveEndDateStr, 'border-green-500');
+                const tone = getStatusTone(isCompleted, effectiveEndDateStr);
 
                 while (currentLoopDate <= endLoopDate) {
                     const yearStr = currentLoopDate.getFullYear();
@@ -137,7 +123,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                         id: `act-${act.id}-${dateKey}`,
                         title: act.name,
                         type: act.type === 'Training' ? 'Training' : 'Activity',
-                        ...styles,
+                        tone,
                         originalData: act,
                         dataId: act.id,
                         dataType: act.type === 'Training' ? 'Training' : 'Activity'
@@ -154,9 +140,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                     id: `dl-${dl.id}`,
                     title: `Deadline: ${dl.name}`,
                     type: 'Deadline',
-                    borderColor: 'border-orange-500',
-                    bgColor: 'bg-white dark:bg-gray-700/50',
-                    textColor: 'text-gray-800 dark:text-gray-200'
+                    tone: 'deadline'
                 });
             }
         });
@@ -172,9 +156,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                         id: `ps-${ps.id}-${dateStr}`,
                         title: ps.name,
                         type: 'Planning',
-                        borderColor: 'border-purple-400',
-                        bgColor: 'bg-white dark:bg-gray-700/50',
-                        textColor: 'text-gray-800 dark:text-gray-200'
+                        tone: 'planning'
                     });
                     current.setDate(current.getDate() + 1);
                 }
@@ -186,9 +168,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                 id: `hol-${h.date}`,
                 title: h.localName,
                 type: 'Holiday',
-                borderColor: 'border-pink-500',
-                bgColor: 'bg-pink-50 dark:bg-pink-900/30',
-                textColor: 'text-pink-800 dark:text-pink-200'
+                tone: 'holiday'
             });
         });
 
@@ -198,7 +178,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
     const renderCells = () => {
         const cells = [];
         for (let i = 0; i < firstDay; i++) {
-            cells.push(<div key={`empty-${i}`} className="h-24 md:h-32 bg-gray-50 dark:bg-gray-800/30 border border-gray-200 dark:border-gray-700"></div>);
+            cells.push(<div key={`empty-${i}`} className="app-calendar__day app-calendar__day--empty" />);
         }
 
         const today = new Date();
@@ -209,34 +189,31 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
             const dayEvents = eventsByDate[key] || [];
             const isToday = isCurrentMonth && today.getDate() === day;
 
-            const boxClass = isToday 
-                ? 'bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-500 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.5)]' 
-                : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50';
-
-            const numberClass = isToday
-                ? 'text-emerald-700 dark:text-emerald-300 font-bold text-lg'
-                : 'text-gray-700 dark:text-gray-300 font-semibold';
-
             cells.push(
                 <div 
                     key={day} 
-                    onClick={() => onDateClick(new Date(year, month, day), dayEvents)}
-                    className={`h-24 md:h-32 relative group transition-colors cursor-pointer flex flex-col p-1 overflow-hidden ${boxClass}`}
+                    className={`app-calendar__day ${isToday ? 'app-calendar__day--today' : ''}`}
                 >
-                    <span className={`text-sm mb-1 ml-1 ${numberClass}`}>
+                    <button
+                        type="button"
+                        className="app-calendar__date"
+                        onClick={() => onDateClick(new Date(year, month, day), dayEvents)}
+                        aria-label={`${currentDate.toLocaleString('default', { month: 'long' })} ${day}, ${year}${dayEvents.length ? `, ${dayEvents.length} event${dayEvents.length === 1 ? '' : 's'}` : ''}`}
+                    >
                         {day}
-                    </span>
+                    </button>
                     
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pr-0.5">
+                    <div className="app-calendar__events custom-scrollbar">
                         {dayEvents.map((evt, idx) => (
-                            <div 
+                            <button
                                 key={idx} 
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); onEventClick(evt); }}
-                                className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] md:text-xs border-l-4 truncate shadow-sm cursor-pointer hover:brightness-95 ${evt.bgColor} ${evt.borderColor} ${evt.textColor}`}
+                                className={`app-calendar__event app-calendar__event--${evt.tone}`}
                                 title={evt.title}
                             >
-                                <span className="truncate font-medium">{evt.title}</span>
-                            </div>
+                                <span>{evt.title}</span>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -246,49 +223,49 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
     };
 
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-                <button onClick={prevMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+        <div className="app-calendar">
+            <div className="app-calendar__header">
+                <button type="button" onClick={prevMonth} className="btn btn-ghost btn-icon" aria-label="Previous month">
+                    <svg className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
-                <div className="flex items-center gap-4">
-                    <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+                <div className="app-calendar__heading">
+                    <h2>
                         {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </h2>
-                    <button onClick={goToToday} className="text-sm font-medium text-emerald-600 hover:underline">Today</button>
+                    <button type="button" onClick={goToToday} className="btn btn-link">Today</button>
                 </div>
-                <button onClick={nextMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <button type="button" onClick={nextMonth} className="btn btn-ghost btn-icon" aria-label="Next month">
+                    <svg className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
             </div>
 
-            <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+            <div className="app-calendar__weekdays">
                 {daysOfWeek.map(day => (
-                    <div key={day} className="py-2 text-center text-sm font-semibold text-gray-500 dark:text-gray-400">
+                    <div key={day}>
                         {day}
                     </div>
                 ))}
             </div>
 
-            <div className="grid grid-cols-7 flex-1">
+            <div className="app-calendar__grid">
                 {renderCells()}
             </div>
             
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-600 dark:text-gray-400 justify-center">
-                <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 bg-pink-100 border-l-4 border-pink-500 rounded-sm"></span>
+            <div className="app-calendar__legend">
+                <div>
+                    <span className="app-calendar__legend-swatch app-calendar__legend-swatch--holiday" />
                     <span>Holiday</span>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 bg-emerald-100 border-l-4 border-emerald-600 rounded-sm"></span>
+                <div>
+                    <span className="app-calendar__legend-swatch app-calendar__legend-swatch--complete" />
                     <span>Completed</span>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 bg-red-100 border-l-4 border-red-600 rounded-sm"></span>
+                <div>
+                    <span className="app-calendar__legend-swatch app-calendar__legend-swatch--late" />
                     <span>Past Due / Incomplete</span>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <span className="w-4 h-4 bg-white border border-gray-200 border-l-4 border-green-500 rounded-sm"></span>
+                 <div>
+                    <span className="app-calendar__legend-swatch app-calendar__legend-swatch--activity" />
                     <span>Activity</span>
                 </div>
             </div>

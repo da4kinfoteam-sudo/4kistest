@@ -6,6 +6,7 @@ import { objectTypes, GidaArea, ElcacArea, normalizeRegionName, IPO, RefCommodit
 import { supabase } from '../supabaseClient';
 import { parseLocation } from './LocationPicker';
 import { usePagination, useUserAccess } from './mainfunctions/TableHooks';
+import { ConfirmDialog, DataTablePagination, SortableTableHeader } from './ui/enterprise';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -52,7 +53,7 @@ interface ReferencesProps {
 }
 
 const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
     </svg>
 );
@@ -400,20 +401,14 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
     };
 
     const SortableHeader = ({ label, sortKey, tooltip }: { label: string; sortKey: string; tooltip?: string }) => {
-        const isSorted = sortConfig?.key === sortKey;
-        const directionIcon = isSorted ? (sortConfig?.direction === 'ascending' ? '▲' : '▼') : '↕';
         return (
-            <th 
-                className="cursor-pointer group select-none"
-                onClick={() => requestSort(sortKey)}
-                title={tooltip}
-            >
-                <div className="flex items-center gap-1">
-                    {label}
-                    {tooltip && <Info className="h-3 w-3 text-gray-400 group-hover:text-emerald-500 transition-colors" />}
-                    <span className={`text-xs ${isSorted ? 'text-emerald-600 opacity-100' : 'text-gray-400 opacity-0 group-hover:opacity-50'}`}>{directionIcon}</span>
-                </div>
-            </th>
+            <SortableTableHeader
+                label={label}
+                columnKey={sortKey}
+                sortConfig={sortConfig}
+                onSort={requestSort}
+                tooltip={tooltip}
+            />
         );
     };
 
@@ -1783,25 +1778,19 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
         reader.readAsArrayBuffer(file);
     };
 
-    const commonInputClasses = "form-control mt-1";
+    const commonInputClasses = "form-control";
 
     return (
         <div className="data-list-page">
             {/* Multi Delete Modal */}
             {isMultiDeleteModalOpen && canDelete && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
-                        <h3 className="text-lg font-bold text-red-600 dark:text-red-400">Confirm Bulk Deletion</h3>
-                        <p className="my-4 text-gray-700 dark:text-gray-300">
-                            Are you sure you want to delete the <strong>{selectedIds.length}</strong> selected item(s)? 
-                            This action cannot be undone.
-                        </p>
-                        <div className="flex justify-end gap-4">
-                            <button onClick={() => setIsMultiDeleteModalOpen(false)} className="px-4 py-2 rounded-md text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Cancel</button>
-                            <button onClick={confirmMultiDelete} className="px-4 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700">Delete All Selected</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm bulk deletion"
+                    description={`Delete ${selectedIds.length} selected reference item${selectedIds.length === 1 ? '' : 's'}? This action cannot be undone.`}
+                    confirmLabel="Delete selected"
+                    onCancel={() => setIsMultiDeleteModalOpen(false)}
+                    onConfirm={confirmMultiDelete}
+                />
             )}
 
             {/* Header with Title */}
@@ -1811,7 +1800,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
 
             {/* Tab Groups */}
             <div className="data-tabs">
-                <nav className="contents">
+                <nav className="data-tabs__nav">
                     {['DCF Reference', 'Commodity References', 'Intervention References', 'Policy References'].map((group) => (
                         <button
                             key={group}
@@ -1834,7 +1823,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
 
             {/* Sub-Tabs */}
             <div className="data-tabs reference-tabs-secondary">
-                <nav className="contents">
+                <nav className="data-tabs__nav">
                     {activeGroup === 'DCF Reference' && (
                         <>
                             <button onClick={() => { setActiveTab('UACS'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'UACS' ? 'is-active' : ''}`}>UACS Codes</button>
@@ -1874,7 +1863,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                         placeholder="Search..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="data-table-search w-full md:w-80 px-4"
+                        className="data-table-search data-toolbar-search"
                     />
                 </div>
 
@@ -1976,42 +1965,42 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                     </>
                                 ) : activeTab === 'Crop Reference' ? (
                                     <>
-                                        <th className="w-10"></th>
+                                        <th className="data-table__cell--selection"></th>
                                         <SortableHeader label="Name" sortKey="name" tooltip={CROP_TOOLTIPS.name} />
                                         <SortableHeader label="Banner" sortKey="banner_program" tooltip={CROP_TOOLTIPS.banner_program} />
                                         <SortableHeader label="Group" sortKey="commodity_group" tooltip={CROP_TOOLTIPS.commodity_group} />
                                     </>
                                 ) : activeTab === 'Livestock Reference' ? (
                                     <>
-                                        <th className="w-10"></th>
+                                        <th className="data-table__cell--selection"></th>
                                         <SortableHeader label="Name" sortKey="name" tooltip={LIVESTOCK_TOOLTIPS.name} />
                                         <SortableHeader label="Category" sortKey="category" tooltip={LIVESTOCK_TOOLTIPS.category} />
                                         <SortableHeader label="Breed Type" sortKey="breed_type" tooltip={LIVESTOCK_TOOLTIPS.breed_type} />
                                     </>
                                 ) : activeTab === 'Equipment Reference' ? (
                                     <>
-                                        <th className="w-10"></th>
+                                        <th className="data-table__cell--selection"></th>
                                         <SortableHeader label="Name" sortKey="name" tooltip={EQUIPMENT_TOOLTIPS.name} />
                                         <SortableHeader label="Category" sortKey="category" tooltip={EQUIPMENT_TOOLTIPS.category} />
                                         <SortableHeader label="Equipment Type" sortKey="equipment_type" tooltip={EQUIPMENT_TOOLTIPS.equipment_type} />
                                     </>
                                 ) : activeTab === 'Agricultural Input Reference' ? (
                                     <>
-                                        <th className="w-10"></th>
+                                        <th className="data-table__cell--selection"></th>
                                         <SortableHeader label="Name" sortKey="name" tooltip={INPUT_TOOLTIPS.name} />
                                         <SortableHeader label="Type" sortKey="input_type" tooltip={INPUT_TOOLTIPS.input_type} />
                                         <SortableHeader label="Sub-Type" sortKey="sub_type" tooltip={INPUT_TOOLTIPS.sub_type} />
                                     </>
                                 ) : activeTab === 'Infrastructure Reference' ? (
                                     <>
-                                        <th className="w-10"></th>
+                                        <th className="data-table__cell--selection"></th>
                                         <SortableHeader label="Name" sortKey="name" tooltip={INFRASTRUCTURE_TOOLTIPS.name} />
                                         <SortableHeader label="Category" sortKey="category" tooltip={INFRASTRUCTURE_TOOLTIPS.category} />
                                         <SortableHeader label="Structure Type" sortKey="structure_type" tooltip={INFRASTRUCTURE_TOOLTIPS.structure_type} />
                                     </>
                                 ) : activeTab === 'Training Reference' ? (
                                     <>
-                                        <th className="w-10"></th>
+                                        <th className="data-table__cell--selection"></th>
                                         <SortableHeader label="Title" sortKey="title" tooltip={TRAINING_TOOLTIPS.title} />
                                         <SortableHeader label="Category" sortKey="category" tooltip={TRAINING_TOOLTIPS.category} />
                                     </>
@@ -2024,15 +2013,15 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                     </>
                                 )}
                                 {(canEdit || canDelete) && (
-                                    <th className="text-right">
+                                    <th className="data-table__head--actions">
                                         {canDelete && isSelectionMode ? (
-                                            <div className="flex items-center justify-end gap-2">
-                                                <span className="text-xs">Select All</span>
+                                            <div className="data-table__select-all">
+                                                <span className="data-table__subline">Select All</span>
                                                 <input 
                                                     type="checkbox" 
                                                     onChange={handleSelectAll} 
                                                     checked={paginatedData.length > 0 && paginatedData.every((i: any) => selectedIds.includes(i.id))}
-                                                    className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                    className="form-checkbox"
                                                 />
                                             </div>
                                         ) : (
@@ -2049,120 +2038,132 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                          <tr>
                                             {activeTab === 'UACS' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{item.objectType}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.particular}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500 dark:text-gray-300">{item.uacsCode}</td>
-                                                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-300">{item.description}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.objectType}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.particular}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap data-table__cell--mono">{item.uacsCode}</td>
+                                                    <td className="data-table__cell--muted">{item.description}</td>
                                                 </>
                                             ) : activeTab === 'Items' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{item.type}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.particular}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.type}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.particular}</td>
                                                 </>
                                             ) : activeTab === 'Crop Reference' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); setExpandedRowId(expandedRowId === item.id ? null : item.id); }}
-                                                             className="table-toggle"
+                                                            className="table-toggle"
+                                                            aria-label={`${expandedRowId === item.id ? 'Collapse' : 'Expand'} details for ${item.name}`}
+                                                            aria-expanded={expandedRowId === item.id}
                                                         >
-                                                            {expandedRowId === item.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            {expandedRowId === item.id ? <ChevronDown className="btn-symbol" /> : <ChevronRight className="btn-symbol" />}
                                                         </button>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.banner_program}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.commodity_group}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.name}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.banner_program}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.commodity_group}</td>
                                                 </>
                                             ) : activeTab === 'Livestock Reference' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                    <td className="data-table__cell--nowrap">
                                                         <button 
                                                             onClick={() => setExpandedRowId(expandedRowId === item.id ? null : item.id)}
-                                                             className="table-toggle"
+                                                            className="table-toggle"
+                                                            aria-label={`${expandedRowId === item.id ? 'Collapse' : 'Expand'} details for ${item.name}`}
+                                                            aria-expanded={expandedRowId === item.id}
                                                         >
-                                                            {expandedRowId === item.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            {expandedRowId === item.id ? <ChevronDown className="btn-symbol" /> : <ChevronRight className="btn-symbol" />}
                                                         </button>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.category}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.breed_type}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.name}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.category}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.breed_type}</td>
                                                 </>
                                             ) : activeTab === 'Equipment Reference' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                    <td className="data-table__cell--nowrap">
                                                         <button 
                                                             onClick={() => setExpandedRowId(expandedRowId === item.id ? null : item.id)}
-                                                             className="table-toggle"
+                                                            className="table-toggle"
+                                                            aria-label={`${expandedRowId === item.id ? 'Collapse' : 'Expand'} details for ${item.name}`}
+                                                            aria-expanded={expandedRowId === item.id}
                                                         >
-                                                            {expandedRowId === item.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            {expandedRowId === item.id ? <ChevronDown className="btn-symbol" /> : <ChevronRight className="btn-symbol" />}
                                                         </button>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.category}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.equipment_type}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.name}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.category}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.equipment_type}</td>
                                                 </>
                                             ) : activeTab === 'Agricultural Input Reference' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                    <td className="data-table__cell--nowrap">
                                                         <button 
                                                             onClick={() => setExpandedRowId(expandedRowId === item.id ? null : item.id)}
-                                                             className="table-toggle"
+                                                            className="table-toggle"
+                                                            aria-label={`${expandedRowId === item.id ? 'Collapse' : 'Expand'} details for ${item.name}`}
+                                                            aria-expanded={expandedRowId === item.id}
                                                         >
-                                                            {expandedRowId === item.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            {expandedRowId === item.id ? <ChevronDown className="btn-symbol" /> : <ChevronRight className="btn-symbol" />}
                                                         </button>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.input_type}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.sub_type}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.name}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.input_type}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.sub_type}</td>
                                                 </>
                                             ) : activeTab === 'Infrastructure Reference' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                    <td className="data-table__cell--nowrap">
                                                         <button 
                                                             onClick={() => setExpandedRowId(expandedRowId === item.id ? null : item.id)}
-                                                             className="table-toggle"
+                                                            className="table-toggle"
+                                                            aria-label={`${expandedRowId === item.id ? 'Collapse' : 'Expand'} details for ${item.name}`}
+                                                            aria-expanded={expandedRowId === item.id}
                                                         >
-                                                            {expandedRowId === item.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            {expandedRowId === item.id ? <ChevronDown className="btn-symbol" /> : <ChevronRight className="btn-symbol" />}
                                                         </button>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.category}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.structure_type}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.name}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.category}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.structure_type}</td>
                                                 </>
                                             ) : activeTab === 'Training Reference' ? (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                    <td className="data-table__cell--nowrap">
                                                         <button 
                                                             onClick={() => setExpandedRowId(expandedRowId === item.id ? null : item.id)}
-                                                             className="table-toggle"
+                                                            className="table-toggle"
+                                                            aria-label={`${expandedRowId === item.id ? 'Collapse' : 'Expand'} details for ${item.title}`}
+                                                            aria-expanded={expandedRowId === item.id}
                                                         >
-                                                            {expandedRowId === item.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                            {expandedRowId === item.id ? <ChevronDown className="btn-symbol" /> : <ChevronRight className="btn-symbol" />}
                                                         </button>
                                                     </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{item.title}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.category}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.title}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.category}</td>
                                                 </>
                                             ) : (
                                                 <>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">{item.region}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.province}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.municipality}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{item.barangay}</td>
+                                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.region}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.province}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.municipality}</td>
+                                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.barangay}</td>
                                                 </>
                                             )}
                                             {(canEdit || canDelete) && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <td className="data-table__cell--actions data-table__cell--nowrap">
                                                     {canDelete && isSelectionMode ? (
                                                         <input 
                                                             type="checkbox" 
                                                             checked={selectedIds.includes(item.id)} 
                                                             onChange={(e) => { e.stopPropagation(); handleSelectRow(item.id); }} 
                                                             onClick={(e) => e.stopPropagation()}
-                                                            className="mr-3 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                            className="form-checkbox"
                                                         />
                                                     ) : (
                                                         <>
-                                                            <div className="flex justify-end gap-2">
+                                                            <div className="data-table__actions">
                                                                 {canEdit && <button onClick={() => handleOpenEdit(item)} className="table-action table-action--primary">Edit</button>}
                                                                 {canDelete && <button onClick={() => setDeleteItem(item)} className="table-action table-action--danger">Delete</button>}
                                                             </div>
@@ -2172,68 +2173,68 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                             )}
                                         </tr>
                                         {expandedRowId === item.id && activeTab === 'Crop Reference' && (
-                                            <tr className="bg-emerald-50/30 dark:bg-emerald-900/10">
-                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="px-6 py-4">
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+                                            <tr className="data-table__row--selected">
+                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="data-table-detail-cell">
+                                                    <div className="data-table-detail-grid reference-detail-grid--four">
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.min_elevation_masl + " " + CROP_TOOLTIPS.max_elevation_masl}>
-                                                                Elevation Range <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.min_elevation_masl + " " + CROP_TOOLTIPS.max_elevation_masl}>
+                                                                Elevation Range <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.min_elevation_masl} - {item.max_elevation_masl} masl</p>
+                                                            <p className="reference-detail-value">{item.min_elevation_masl} - {item.max_elevation_masl} masl</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.max_slope_percent}>
-                                                                Max Slope <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.max_slope_percent}>
+                                                                Max Slope <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.max_slope_percent}%</p>
+                                                            <p className="reference-detail-value">{item.max_slope_percent}%</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.wet_season_start + " " + CROP_TOOLTIPS.dry_season_start}>
-                                                                Seasonality <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.wet_season_start + " " + CROP_TOOLTIPS.dry_season_start}>
+                                                                Seasonality <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">Wet: {item.wet_season_start} | Dry: {item.dry_season_start}</p>
+                                                            <p className="reference-detail-value">Wet: {item.wet_season_start} | Dry: {item.dry_season_start}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.recommended_soil}>
-                                                                Soil Type <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.recommended_soil}>
+                                                                Soil Type <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.recommended_soil}</p>
+                                                            <p className="reference-detail-value">{item.recommended_soil}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.fertilizer_npk}>
-                                                                Fertilizer (NPK) <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.fertilizer_npk}>
+                                                                Fertilizer (NPK) <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.fertilizer_npk}</p>
+                                                            <p className="reference-detail-value">{item.fertilizer_npk}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.watering_method}>
-                                                                Watering <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.watering_method}>
+                                                                Watering <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.watering_method}</p>
+                                                            <p className="reference-detail-value">{item.watering_method}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.harvest_period_days}>
-                                                                Harvest Period <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.harvest_period_days}>
+                                                                Harvest Period <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.harvest_period_days} days</p>
+                                                            <p className="reference-detail-value">{item.harvest_period_days} days</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.ph_min + " " + CROP_TOOLTIPS.ph_max}>
-                                                                pH Range <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.ph_min + " " + CROP_TOOLTIPS.ph_max}>
+                                                                pH Range <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.ph_min} - {item.ph_max}</p>
+                                                            <p className="reference-detail-value">{item.ph_min} - {item.ph_max}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.climate_type_suitability}>
-                                                                Climate Suitability <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.climate_type_suitability}>
+                                                                Climate Suitability <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.climate_type_suitability}</p>
+                                                            <p className="reference-detail-value">{item.climate_type_suitability}</p>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1" title={CROP_TOOLTIPS.target_yield_ha}>
-                                                                Target Yield <Info className="h-3 w-3" />
+                                                            <p className="reference-detail-label" title={CROP_TOOLTIPS.target_yield_ha}>
+                                                                Target Yield <Info className="form-label__help" />
                                                             </p>
-                                                            <p className="text-gray-900 dark:text-white">{item.target_yield_ha} t/ha</p>
+                                                            <p className="reference-detail-value">{item.target_yield_ha} t/ha</p>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -2241,35 +2242,35 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         )}
 
                                         {expandedRowId === item.id && activeTab === 'Livestock Reference' && (
-                                            <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="px-6 py-4">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Housing & Space</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Space Requirement (sqm): <span className="text-gray-900 dark:text-white font-medium">{item.min_space_sqm_per_head} sqm/head</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Housing System: <span className="text-gray-900 dark:text-white font-medium">{item.housing_type}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Temp Range: <span className="text-gray-900 dark:text-white font-medium">{item.min_temp_celsius}°C - {item.max_temp_celsius}°C</span></p>
+                                            <tr className="data-table-detail-row">
+                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="data-table-detail-cell">
+                                                    <div className="data-table-detail-grid data-table-detail-grid--three">
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Housing & Space</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Space Requirement (sqm): <span className="reference-detail-value">{item.min_space_sqm_per_head} sqm/head</span></p>
+                                                                <p className="reference-detail-line">Housing System: <span className="reference-detail-value">{item.housing_type}</span></p>
+                                                                <p className="reference-detail-line">Temp Range: <span className="reference-detail-value">{item.min_temp_celsius}°C - {item.max_temp_celsius}°C</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Growth & Production</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Gestation/Incubation: <span className="text-gray-900 dark:text-white font-medium">{item.gestation_incubation_days} days</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Market Maturity: <span className="text-gray-900 dark:text-white font-medium">{item.maturity_days} days</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Economic Lifespan: <span className="text-gray-900 dark:text-white font-medium">{item.productive_years} years</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Growth & Production</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Gestation/Incubation: <span className="reference-detail-value">{item.gestation_incubation_days} days</span></p>
+                                                                <p className="reference-detail-line">Market Maturity: <span className="reference-detail-value">{item.maturity_days} days</span></p>
+                                                                <p className="reference-detail-line">Economic Lifespan: <span className="reference-detail-value">{item.productive_years} years</span></p>
                                                                 {item.category === 'Poultry' && (
-                                                                    <p className="text-xs text-gray-500 dark:text-gray-400">Annual Egg Yield: <span className="text-gray-900 dark:text-white font-medium">{item.avg_eggs_per_year}</span></p>
+                                                                    <p className="reference-detail-line">Annual Egg Yield: <span className="reference-detail-value">{item.avg_eggs_per_year}</span></p>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Nutrition & Weight</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Feeding Protocol: <span className="text-gray-900 dark:text-white font-medium">{item.feed_type}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Target FCR: <span className="text-gray-900 dark:text-white font-medium">{item.target_fcr}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Market Weight (kg): <span className="text-gray-900 dark:text-white font-medium">{item.target_weight_kg} kg</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Daily Water (L): <span className="text-gray-900 dark:text-white font-medium">{item.water_liters_per_day} L</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Nutrition & Weight</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Feeding Protocol: <span className="reference-detail-value">{item.feed_type}</span></p>
+                                                                <p className="reference-detail-line">Target FCR: <span className="reference-detail-value">{item.target_fcr}</span></p>
+                                                                <p className="reference-detail-line">Market Weight (kg): <span className="reference-detail-value">{item.target_weight_kg} kg</span></p>
+                                                                <p className="reference-detail-line">Daily Water (L): <span className="reference-detail-value">{item.water_liters_per_day} L</span></p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2278,30 +2279,30 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         )}
 
                                         {expandedRowId === item.id && activeTab === 'Equipment Reference' && (
-                                            <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="px-6 py-4">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Technical Specs</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Power Source: <span className="text-gray-900 dark:text-white font-medium">{item.power_source}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Capacity Rating: <span className="text-gray-900 dark:text-white font-medium">{item.capacity_rating}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Fuel Consumption: <span className="text-gray-900 dark:text-white font-medium">{item.fuel_consumption_rate} L/hr</span></p>
+                                            <tr className="data-table-detail-row">
+                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="data-table-detail-cell">
+                                                    <div className="data-table-detail-grid data-table-detail-grid--three">
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Technical Specs</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Power Source: <span className="reference-detail-value">{item.power_source}</span></p>
+                                                                <p className="reference-detail-line">Capacity Rating: <span className="reference-detail-value">{item.capacity_rating}</span></p>
+                                                                <p className="reference-detail-line">Fuel Consumption: <span className="reference-detail-value">{item.fuel_consumption_rate} L/hr</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Lifecycle & Cost</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Useful Life: <span className="text-gray-900 dark:text-white font-medium">{item.estimated_useful_life_years} years</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Unit Cost Est.: <span className="text-gray-900 dark:text-white font-medium">₱{item.unit_cost_estimate?.toLocaleString()}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Maint. Interval: <span className="text-gray-900 dark:text-white font-medium">{item.maintenance_interval_months} months</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Lifecycle & Cost</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Useful Life: <span className="reference-detail-value">{item.estimated_useful_life_years} years</span></p>
+                                                                <p className="reference-detail-line">Unit Cost Est.: <span className="reference-detail-value">₱{item.unit_cost_estimate?.toLocaleString()}</span></p>
+                                                                <p className="reference-detail-line">Maint. Interval: <span className="reference-detail-value">{item.maintenance_interval_months} months</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Operations</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Required Operators: <span className="text-gray-900 dark:text-white font-medium">{item.required_operators}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Safety Gear: <span className="text-gray-900 dark:text-white font-medium">{item.safety_gear_required}</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Operations</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Required Operators: <span className="reference-detail-value">{item.required_operators}</span></p>
+                                                                <p className="reference-detail-line">Safety Gear: <span className="reference-detail-value">{item.safety_gear_required}</span></p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2310,28 +2311,28 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         )}
 
                                         {expandedRowId === item.id && activeTab === 'Agricultural Input Reference' && (
-                                            <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="px-6 py-4">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Technical Specs</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Standard Unit: <span className="text-gray-900 dark:text-white font-medium">{item.standard_uom}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Shelf Life: <span className="text-gray-900 dark:text-white font-medium">{item.shelf_life_months} months</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Application Rate: <span className="text-gray-900 dark:text-white font-medium">{item.application_rate_per_ha} per ha</span></p>
+                                            <tr className="data-table-detail-row">
+                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="data-table-detail-cell">
+                                                    <div className="data-table-detail-grid data-table-detail-grid--three">
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Technical Specs</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Standard Unit: <span className="reference-detail-value">{item.standard_uom}</span></p>
+                                                                <p className="reference-detail-line">Shelf Life: <span className="reference-detail-value">{item.shelf_life_months} months</span></p>
+                                                                <p className="reference-detail-line">Application Rate: <span className="reference-detail-value">{item.application_rate_per_ha} per ha</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Regulatory & Cost</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Avg. Price (2026): <span className="text-gray-900 dark:text-white font-medium">₱{item.avg_price_2026?.toLocaleString()}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">FPA Reg No.: <span className="text-gray-900 dark:text-white font-medium">{item.fpa_registration_no}</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Regulatory & Cost</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Avg. Price (2026): <span className="reference-detail-value">₱{item.avg_price_2026?.toLocaleString()}</span></p>
+                                                                <p className="reference-detail-line">FPA Reg No.: <span className="reference-detail-value">{item.fpa_registration_no}</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Safety</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Hazchem Rating: <span className="text-gray-900 dark:text-white font-medium">{item.hazchem_rating}</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Safety</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Hazchem Rating: <span className="reference-detail-value">{item.hazchem_rating}</span></p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2340,27 +2341,27 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         )}
 
                                         {expandedRowId === item.id && activeTab === 'Infrastructure Reference' && (
-                                            <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="px-6 py-4">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Technical Specs</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Capacity Rating: <span className="text-gray-900 dark:text-white font-medium">{item.capacity_rating}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Estimated Useful Life: <span className="text-gray-900 dark:text-white font-medium">{item.estimated_useful_life_years} years</span></p>
+                                            <tr className="data-table-detail-row">
+                                                <td colSpan={(canEdit || canDelete) ? 5 : 4} className="data-table-detail-cell">
+                                                    <div className="data-table-detail-grid data-table-detail-grid--three">
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Technical Specs</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Capacity Rating: <span className="reference-detail-value">{item.capacity_rating}</span></p>
+                                                                <p className="reference-detail-line">Estimated Useful Life: <span className="reference-detail-value">{item.estimated_useful_life_years} years</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Lifecycle & Cost</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Unit Cost Estimate: <span className="text-gray-900 dark:text-white font-medium">₱{item.unit_cost_estimate?.toLocaleString()}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Maint. Interval: <span className="text-gray-900 dark:text-white font-medium">{item.maintenance_interval_months} months</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Lifecycle & Cost</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Unit Cost Estimate: <span className="reference-detail-value">₱{item.unit_cost_estimate?.toLocaleString()}</span></p>
+                                                                <p className="reference-detail-line">Maint. Interval: <span className="reference-detail-value">{item.maintenance_interval_months} months</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Compliance</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Required Permits: <span className="text-gray-900 dark:text-white font-medium">{item.required_permits}</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Compliance</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Required Permits: <span className="reference-detail-value">{item.required_permits}</span></p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2368,31 +2369,31 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                             </tr>
                                         )}
                                         {expandedRowId === item.id && activeTab === 'Training Reference' && (
-                                                <tr className="bg-gray-50 dark:bg-gray-800/50">
-                                                    <td colSpan={(canEdit || canDelete) ? 5 : 3} className="px-6 py-4">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Training Details</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Duration: <span className="text-gray-900 dark:text-white font-medium">{item.standard_duration_days} days</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Delivery Mode: <span className="text-gray-900 dark:text-white font-medium">{item.delivery_mode}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Accrediting Body: <span className="text-gray-900 dark:text-white font-medium">{item.accrediting_body}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Certification: <span className="text-gray-900 dark:text-white font-medium">{item.certification_type}</span></p>
+                                                <tr className="data-table-detail-row">
+                                                    <td colSpan={(canEdit || canDelete) ? 5 : 3} className="data-table-detail-cell">
+                                                    <div className="data-table-detail-grid data-table-detail-grid--three">
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Training Details</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Duration: <span className="reference-detail-value">{item.standard_duration_days} days</span></p>
+                                                                <p className="reference-detail-line">Delivery Mode: <span className="reference-detail-value">{item.delivery_mode}</span></p>
+                                                                <p className="reference-detail-line">Accrediting Body: <span className="reference-detail-value">{item.accrediting_body}</span></p>
+                                                                <p className="reference-detail-line">Certification: <span className="reference-detail-value">{item.certification_type}</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Target & Capacity</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Target Audience: <span className="text-gray-900 dark:text-white font-medium">{item.target_audience}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Min Participants: <span className="text-gray-900 dark:text-white font-medium">{item.minimum_participants}</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Target & Capacity</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Target Audience: <span className="reference-detail-value">{item.target_audience}</span></p>
+                                                                <p className="reference-detail-line">Min Participants: <span className="reference-detail-value">{item.minimum_participants}</span></p>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-3">
-                                                            <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Requirements & Content</h4>
-                                                            <div className="space-y-1">
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Facilities: <span className="text-gray-900 dark:text-white font-medium">{item.required_facilities}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Key Modules: <span className="text-gray-900 dark:text-white font-medium">{item.key_modules}</span></p>
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400">Competency: <span className="text-gray-900 dark:text-white font-medium">{item.expected_competency}</span></p>
+                                                        <div className="reference-detail-stack">
+                                                            <h4 className="reference-detail-title">Requirements & Content</h4>
+                                                            <div className="reference-detail-stack reference-detail-stack--compact">
+                                                                <p className="reference-detail-line">Facilities: <span className="reference-detail-value">{item.required_facilities}</span></p>
+                                                                <p className="reference-detail-line">Key Modules: <span className="reference-detail-value">{item.key_modules}</span></p>
+                                                                <p className="reference-detail-line">Competency: <span className="reference-detail-value">{item.expected_competency}</span></p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2402,62 +2403,38 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                     </React.Fragment>
                                 ))
                             ) : (
-                                <tr><td colSpan={(canEdit || canDelete) ? (['UACS', 'GIDA', 'ELCAC', 'Crop Reference', 'Livestock Reference', 'Equipment Reference', 'Agricultural Input Reference', 'Infrastructure Reference', 'Training Reference'].includes(activeTab) ? 5 : 3) : (['UACS', 'GIDA', 'ELCAC', 'Crop Reference', 'Livestock Reference', 'Equipment Reference', 'Agricultural Input Reference', 'Infrastructure Reference'].includes(activeTab) ? 4 : activeTab === 'Training Reference' ? 3 : 2)} className="px-6 py-4 text-center text-sm text-gray-500">No items found.</td></tr>
+                                <tr><td colSpan={(canEdit || canDelete) ? (['UACS', 'GIDA', 'ELCAC', 'Crop Reference', 'Livestock Reference', 'Equipment Reference', 'Agricultural Input Reference', 'Infrastructure Reference', 'Training Reference'].includes(activeTab) ? 5 : 3) : (['UACS', 'GIDA', 'ELCAC', 'Crop Reference', 'Livestock Reference', 'Equipment Reference', 'Agricultural Input Reference', 'Infrastructure Reference'].includes(activeTab) ? 4 : activeTab === 'Training Reference' ? 3 : 2)} className="data-table__empty-cell">No items found.</td></tr>
                             )}
                         </tbody>
                     </table>
                 </div>
 
-                {/* Pagination Controls */}
-                <div className="data-table-pagination flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-gray-700 dark:text-gray-300">Show</span>
-                        <select 
-                            value={itemsPerPage} 
-                            onChange={(e) => setItemsPerPage(Number(e.target.value))} 
-                            className="data-table-select py-1 pl-2 pr-8"
-                        >
-                            {[10, 20, 50, 100].map(size => ( <option key={size} value={size}>{size}</option> ))}
-                        </select>
-                        <span className="text-gray-700 dark:text-gray-300">entries</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                        <span className="text-gray-700 dark:text-gray-300">
-                            Showing {activeData.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, activeData.length)} of {activeData.length} entries
-                        </span>
-                        <div className="flex items-center gap-2">
-                            <button 
-                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                                disabled={currentPage === 1} 
-                                className="px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Previous
-                            </button>
-                            <span className="px-2 font-medium text-gray-700 dark:text-gray-300">{currentPage} / {totalPages}</span>
-                            <button 
-                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                                disabled={currentPage === totalPages} 
-                                className="px-3 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Next
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                {/* Pagination Controls */}                <DataTablePagination
+                    currentPage={currentPage}
+                    itemsPerPage={itemsPerPage}
+                    totalItems={activeData.length}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={setItemsPerPage}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                    aria-label="References pagination"
+                />
             </div>
 
             {/* Add/Edit Modal */}
             {isModalOpen && canEdit && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl ${activeTab === 'Crop Reference' || activeTab === 'Livestock Reference' ? 'max-w-2xl' : 'max-w-md'} w-full p-6 max-h-[90vh] overflow-y-auto`}>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                            {editingItem ? 'Edit' : 'Add New'} {activeTab === 'UACS' ? 'UACS Code' : activeTab === 'Items' ? 'Subproject Item' : activeTab === 'Crop Reference' ? 'Crop Reference' : activeTab === 'Livestock Reference' ? 'Livestock Reference' : activeTab === 'Equipment Reference' ? 'Equipment Reference' : activeTab === 'Agricultural Input Reference' ? 'Agricultural Input Reference' : activeTab === 'Infrastructure Reference' ? 'Infrastructure Reference' : activeTab === 'Training Reference' ? 'Training Reference' : activeTab === 'GIDA' ? 'GIDA Area' : 'ELCAC Area'}
-                        </h3>
-                        <form onSubmit={handleSave} className="space-y-4">
+                <div className="modal-backdrop" role="presentation" onClick={() => setIsModalOpen(false)}>
+                    <section className={`modal-card reference-editor-modal ${activeTab === 'Crop Reference' || activeTab === 'Livestock Reference' ? 'reference-editor-modal--wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="reference-editor-title" onClick={event => event.stopPropagation()}>
+                        <header className="modal-card__header">
+                            <h3 id="reference-editor-title">
+                                {editingItem ? 'Edit' : 'Add New'} {activeTab === 'UACS' ? 'UACS Code' : activeTab === 'Items' ? 'Subproject Item' : activeTab === 'Crop Reference' ? 'Crop Reference' : activeTab === 'Livestock Reference' ? 'Livestock Reference' : activeTab === 'Equipment Reference' ? 'Equipment Reference' : activeTab === 'Agricultural Input Reference' ? 'Agricultural Input Reference' : activeTab === 'Infrastructure Reference' ? 'Infrastructure Reference' : activeTab === 'Training Reference' ? 'Training Reference' : activeTab === 'GIDA' ? 'GIDA Area' : 'ELCAC Area'}
+                            </h3>
+                        </header>
+                        <form onSubmit={handleSave} className="modal-card__body form-stack reference-editor-form">
                             {activeTab === 'UACS' ? (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Object Type</label>
+                                        <label className="form-label">Object Type</label>
                                         <select 
                                             value={uacsForm.objectType}
                                             onChange={e => setUacsForm({...uacsForm, objectType: e.target.value})}
@@ -2467,7 +2444,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Particular</label>
+                                        <label className="form-label">Particular</label>
                                         <input 
                                             type="text" 
                                             required
@@ -2477,7 +2454,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">UACS Code</label>
+                                        <label className="form-label">UACS Code</label>
                                         <input 
                                             type="text" 
                                             required
@@ -2487,7 +2464,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                                        <label className="form-label">Description</label>
                                         <input 
                                             type="text" 
                                             required
@@ -2500,7 +2477,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                             ) : activeTab === 'Items' ? (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Item Type</label>
+                                        <label className="form-label">Item Type</label>
                                         <input 
                                             type="text" 
                                             required
@@ -2517,7 +2494,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         </datalist>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Item Particular</label>
+                                        <label className="form-label">Item Particular</label>
                                         <input 
                                             type="text" 
                                             required
@@ -2528,123 +2505,123 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                     </div>
                                 </>
                             ) : activeTab === 'Crop Reference' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="form-grid form-grid--two">
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.name}>
-                                            Commodities <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.name}>
+                                            Commodities <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.name} onChange={e => setRefCommodityForm({...refCommodityForm, name: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.banner_program}>
-                                            Program Support <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.banner_program}>
+                                            Program Support <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.banner_program} onChange={e => setRefCommodityForm({...refCommodityForm, banner_program: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.commodity_group}>
-                                            Commodity Classification <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.commodity_group}>
+                                            Commodity Classification <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.commodity_group} onChange={e => setRefCommodityForm({...refCommodityForm, commodity_group: e.target.value})} className={commonInputClasses} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="form-grid form-grid--two form-grid--compact">
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.min_elevation_masl}>
-                                                Min Elev (masl) <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.min_elevation_masl}>
+                                                Min Elev (masl) <Info className="form-label__help" />
                                              </label>
                                             <input type="number" required value={refCommodityForm.min_elevation_masl} onChange={e => setRefCommodityForm({...refCommodityForm, min_elevation_masl: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.max_elevation_masl}>
-                                                Max Elev (masl) <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.max_elevation_masl}>
+                                                Max Elev (masl) <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refCommodityForm.max_elevation_masl} onChange={e => setRefCommodityForm({...refCommodityForm, max_elevation_masl: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.max_slope_percent}>
-                                            Max Slope (%) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.max_slope_percent}>
+                                            Max Slope (%) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refCommodityForm.max_slope_percent} onChange={e => setRefCommodityForm({...refCommodityForm, max_slope_percent: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="form-grid form-grid--two form-grid--compact">
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.wet_season_start}>
-                                                Wet Season Start <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.wet_season_start}>
+                                                Wet Season Start <Info className="form-label__help" />
                                             </label>
                                             <input type="text" required value={refCommodityForm.wet_season_start} onChange={e => setRefCommodityForm({...refCommodityForm, wet_season_start: e.target.value})} className={commonInputClasses} />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.dry_season_start}>
-                                                Dry Season Start <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.dry_season_start}>
+                                                Dry Season Start <Info className="form-label__help" />
                                             </label>
                                             <input type="text" required value={refCommodityForm.dry_season_start} onChange={e => setRefCommodityForm({...refCommodityForm, dry_season_start: e.target.value})} className={commonInputClasses} />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.recommended_soil}>
-                                            Soil Suitability <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.recommended_soil}>
+                                            Soil Suitability <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.recommended_soil} onChange={e => setRefCommodityForm({...refCommodityForm, recommended_soil: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.fertilizer_npk}>
-                                            Recommended Fertilizer <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.fertilizer_npk}>
+                                            Recommended Fertilizer <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.fertilizer_npk} onChange={e => setRefCommodityForm({...refCommodityForm, fertilizer_npk: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.watering_method}>
-                                            Watering Method <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.watering_method}>
+                                            Watering Method <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.watering_method} onChange={e => setRefCommodityForm({...refCommodityForm, watering_method: e.target.value})} className={commonInputClasses} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="form-grid form-grid--two form-grid--compact">
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.harvest_period_days}>
-                                                Maturity Period (days) <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.harvest_period_days}>
+                                                Maturity Period (days) <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refCommodityForm.harvest_period_days} onChange={e => setRefCommodityForm({...refCommodityForm, harvest_period_days: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.target_yield_ha}>
-                                                Yield Capacity (t/ha) <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.target_yield_ha}>
+                                                Yield Capacity (t/ha) <Info className="form-label__help" />
                                             </label>
                                             <input type="number" step="0.01" required value={refCommodityForm.target_yield_ha} onChange={e => setRefCommodityForm({...refCommodityForm, target_yield_ha: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="form-grid form-grid--two form-grid--compact">
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.ph_min}>
-                                                pH Min <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.ph_min}>
+                                                pH Min <Info className="form-label__help" />
                                             </label>
                                             <input type="number" step="0.1" required value={refCommodityForm.ph_min} onChange={e => setRefCommodityForm({...refCommodityForm, ph_min: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.ph_max}>
-                                                pH Max <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={CROP_TOOLTIPS.ph_max}>
+                                                pH Max <Info className="form-label__help" />
                                             </label>
                                             <input type="number" step="0.1" required value={refCommodityForm.ph_max} onChange={e => setRefCommodityForm({...refCommodityForm, ph_max: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={CROP_TOOLTIPS.climate_type_suitability}>
-                                            Climate Suitability <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={CROP_TOOLTIPS.climate_type_suitability}>
+                                            Climate Suitability <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refCommodityForm.climate_type_suitability} onChange={e => setRefCommodityForm({...refCommodityForm, climate_type_suitability: e.target.value})} className={commonInputClasses} />
                                     </div>
                                 </div>
                             ) : activeTab === 'Livestock Reference' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="form-grid form-grid--two">
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.name}>
-                                            Breed/Common Name <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.name}>
+                                            Breed/Common Name <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refLivestockForm.name} onChange={e => setRefLivestockForm({...refLivestockForm, name: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.category}>
-                                            Livestock Type <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.category}>
+                                            Livestock Type <Info className="form-label__help" />
                                         </label>
                                         <select 
                                             required 
@@ -2659,290 +2636,290 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.breed_type}>
-                                            Genetics <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.breed_type}>
+                                            Genetics <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refLivestockForm.breed_type} onChange={e => setRefLivestockForm({...refLivestockForm, breed_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.housing_type}>
-                                            Housing System <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.housing_type}>
+                                            Housing System <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refLivestockForm.housing_type} onChange={e => setRefLivestockForm({...refLivestockForm, housing_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.min_space_sqm_per_head}>
-                                            Space Requirement (sqm) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.min_space_sqm_per_head}>
+                                            Space Requirement (sqm) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" step="0.01" required value={refLivestockForm.min_space_sqm_per_head} onChange={e => setRefLivestockForm({...refLivestockForm, min_space_sqm_per_head: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="form-grid form-grid--two form-grid--compact">
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.min_temp_celsius}>
-                                                Min Temp (°C) <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={LIVESTOCK_TOOLTIPS.min_temp_celsius}>
+                                                Min Temp (°C) <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refLivestockForm.min_temp_celsius} onChange={e => setRefLivestockForm({...refLivestockForm, min_temp_celsius: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.max_temp_celsius}>
-                                                Max Temp (°C) <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={LIVESTOCK_TOOLTIPS.max_temp_celsius}>
+                                                Max Temp (°C) <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refLivestockForm.max_temp_celsius} onChange={e => setRefLivestockForm({...refLivestockForm, max_temp_celsius: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.gestation_incubation_days}>
-                                            Gestation/Incubation <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.gestation_incubation_days}>
+                                            Gestation/Incubation <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refLivestockForm.gestation_incubation_days} onChange={e => setRefLivestockForm({...refLivestockForm, gestation_incubation_days: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="form-grid form-grid--two form-grid--compact">
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.maturity_days}>
-                                                Market Maturity <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={LIVESTOCK_TOOLTIPS.maturity_days}>
+                                                Market Maturity <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refLivestockForm.maturity_days} onChange={e => setRefLivestockForm({...refLivestockForm, maturity_days: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                         <div>
-                                            <label className="flex items-center gap-1 text-xs font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.productive_years}>
-                                                Economic Lifespan <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline form-label--compact" title={LIVESTOCK_TOOLTIPS.productive_years}>
+                                                Economic Lifespan <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refLivestockForm.productive_years} onChange={e => setRefLivestockForm({...refLivestockForm, productive_years: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.feed_type}>
-                                            Feeding Protocol <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.feed_type}>
+                                            Feeding Protocol <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refLivestockForm.feed_type} onChange={e => setRefLivestockForm({...refLivestockForm, feed_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.target_fcr}>
-                                            Target FCR <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.target_fcr}>
+                                            Target FCR <Info className="form-label__help" />
                                         </label>
                                         <input type="number" step="0.01" required value={refLivestockForm.target_fcr} onChange={e => setRefLivestockForm({...refLivestockForm, target_fcr: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.target_weight_kg}>
-                                            Market Weight (kg) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.target_weight_kg}>
+                                            Market Weight (kg) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" step="0.01" required value={refLivestockForm.target_weight_kg} onChange={e => setRefLivestockForm({...refLivestockForm, target_weight_kg: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.water_liters_per_day}>
-                                            Daily Water (L) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.water_liters_per_day}>
+                                            Daily Water (L) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" step="0.1" required value={refLivestockForm.water_liters_per_day} onChange={e => setRefLivestockForm({...refLivestockForm, water_liters_per_day: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     {refLivestockForm.category === 'Poultry' && (
                                         <div>
-                                            <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={LIVESTOCK_TOOLTIPS.avg_eggs_per_year}>
-                                                Annual Egg Yield <Info className="h-3 w-3 text-gray-400" />
+                                            <label className="form-label form-label--inline" title={LIVESTOCK_TOOLTIPS.avg_eggs_per_year}>
+                                                Annual Egg Yield <Info className="form-label__help" />
                                             </label>
                                             <input type="number" required value={refLivestockForm.avg_eggs_per_year} onChange={e => setRefLivestockForm({...refLivestockForm, avg_eggs_per_year: Number(e.target.value)})} className={commonInputClasses} />
                                         </div>
                                     )}
                                 </div>
                             ) : activeTab === 'Equipment Reference' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="form-grid form-grid--two">
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.name}>
-                                            Equipment Name <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.name}>
+                                            Equipment Name <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refEquipmentForm.name} onChange={e => setRefEquipmentForm({...refEquipmentForm, name: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.category}>
-                                            Category <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.category}>
+                                            Category <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refEquipmentForm.category} onChange={e => setRefEquipmentForm({...refEquipmentForm, category: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.equipment_type}>
-                                            Equipment Type <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.equipment_type}>
+                                            Equipment Type <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refEquipmentForm.equipment_type} onChange={e => setRefEquipmentForm({...refEquipmentForm, equipment_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.power_source}>
-                                            Power Source <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.power_source}>
+                                            Power Source <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refEquipmentForm.power_source} onChange={e => setRefEquipmentForm({...refEquipmentForm, power_source: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.capacity_rating}>
-                                            Capacity Rating <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.capacity_rating}>
+                                            Capacity Rating <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refEquipmentForm.capacity_rating} onChange={e => setRefEquipmentForm({...refEquipmentForm, capacity_rating: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.fuel_consumption_rate}>
-                                            Fuel Rate (L/hr) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.fuel_consumption_rate}>
+                                            Fuel Rate (L/hr) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" step="0.1" required value={refEquipmentForm.fuel_consumption_rate} onChange={e => setRefEquipmentForm({...refEquipmentForm, fuel_consumption_rate: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.estimated_useful_life_years}>
-                                            Useful Life (yrs) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.estimated_useful_life_years}>
+                                            Useful Life (yrs) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refEquipmentForm.estimated_useful_life_years} onChange={e => setRefEquipmentForm({...refEquipmentForm, estimated_useful_life_years: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.unit_cost_estimate}>
-                                            Est. Unit Cost <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.unit_cost_estimate}>
+                                            Est. Unit Cost <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refEquipmentForm.unit_cost_estimate} onChange={e => setRefEquipmentForm({...refEquipmentForm, unit_cost_estimate: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.maintenance_interval_months}>
-                                            Maint. Interval (mo) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.maintenance_interval_months}>
+                                            Maint. Interval (mo) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refEquipmentForm.maintenance_interval_months} onChange={e => setRefEquipmentForm({...refEquipmentForm, maintenance_interval_months: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.required_operators}>
-                                            Req. Operators <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.required_operators}>
+                                            Req. Operators <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refEquipmentForm.required_operators} onChange={e => setRefEquipmentForm({...refEquipmentForm, required_operators: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={EQUIPMENT_TOOLTIPS.safety_gear_required}>
-                                            Safety Gear <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={EQUIPMENT_TOOLTIPS.safety_gear_required}>
+                                            Safety Gear <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refEquipmentForm.safety_gear_required} onChange={e => setRefEquipmentForm({...refEquipmentForm, safety_gear_required: e.target.value})} className={commonInputClasses} />
                                     </div>
                                 </div>
                             ) : activeTab === 'Agricultural Input Reference' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="form-grid form-grid--two">
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.name}>
-                                            Product Name <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.name}>
+                                            Product Name <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInputForm.name} onChange={e => setRefInputForm({...refInputForm, name: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.input_type}>
-                                            Input Type <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.input_type}>
+                                            Input Type <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInputForm.input_type} onChange={e => setRefInputForm({...refInputForm, input_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.sub_type}>
-                                            Sub-Type <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.sub_type}>
+                                            Sub-Type <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInputForm.sub_type} onChange={e => setRefInputForm({...refInputForm, sub_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.standard_uom}>
-                                            Standard UOM <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.standard_uom}>
+                                            Standard UOM <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInputForm.standard_uom} onChange={e => setRefInputForm({...refInputForm, standard_uom: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.avg_price_2026}>
-                                            Avg Price (2026) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.avg_price_2026}>
+                                            Avg Price (2026) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refInputForm.avg_price_2026} onChange={e => setRefInputForm({...refInputForm, avg_price_2026: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.fpa_registration_no}>
-                                            FPA Reg No. <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.fpa_registration_no}>
+                                            FPA Reg No. <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInputForm.fpa_registration_no} onChange={e => setRefInputForm({...refInputForm, fpa_registration_no: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.shelf_life_months}>
-                                            Shelf Life (mo) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.shelf_life_months}>
+                                            Shelf Life (mo) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refInputForm.shelf_life_months} onChange={e => setRefInputForm({...refInputForm, shelf_life_months: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.application_rate_per_ha}>
-                                            App. Rate (/ha) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.application_rate_per_ha}>
+                                            App. Rate (/ha) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refInputForm.application_rate_per_ha} onChange={e => setRefInputForm({...refInputForm, application_rate_per_ha: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INPUT_TOOLTIPS.hazchem_rating}>
-                                            Hazchem Rating <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INPUT_TOOLTIPS.hazchem_rating}>
+                                            Hazchem Rating <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInputForm.hazchem_rating} onChange={e => setRefInputForm({...refInputForm, hazchem_rating: e.target.value})} className={commonInputClasses} />
                                     </div>
                                 </div>
                             ) : activeTab === 'Infrastructure Reference' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="form-grid form-grid--two">
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.name}>
-                                            Project Name <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.name}>
+                                            Project Name <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInfrastructureForm.name} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, name: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.category}>
-                                            Category <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.category}>
+                                            Category <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInfrastructureForm.category} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, category: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.structure_type}>
-                                            Structure Type <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.structure_type}>
+                                            Structure Type <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInfrastructureForm.structure_type} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, structure_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.capacity_rating}>
-                                            Capacity Rating <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.capacity_rating}>
+                                            Capacity Rating <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refInfrastructureForm.capacity_rating} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, capacity_rating: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.unit_cost_estimate}>
-                                            Unit Cost Estimate <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.unit_cost_estimate}>
+                                            Unit Cost Estimate <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refInfrastructureForm.unit_cost_estimate} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, unit_cost_estimate: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.estimated_useful_life_years}>
-                                            Estimated Useful Life (Years) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.estimated_useful_life_years}>
+                                            Estimated Useful Life (Years) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refInfrastructureForm.estimated_useful_life_years} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, estimated_useful_life_years: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.maintenance_interval_months}>
-                                            Maint. Interval (Months) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.maintenance_interval_months}>
+                                            Maint. Interval (Months) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refInfrastructureForm.maintenance_interval_months} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, maintenance_interval_months: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={INFRASTRUCTURE_TOOLTIPS.required_permits}>
-                                            Required Permits <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={INFRASTRUCTURE_TOOLTIPS.required_permits}>
+                                            Required Permits <Info className="form-label__help" />
                                         </label>
                                         <input type="text" value={refInfrastructureForm.required_permits} onChange={e => setRefInfrastructureForm({...refInfrastructureForm, required_permits: e.target.value})} className={commonInputClasses} placeholder="e.g. ECC, Building Permit" />
                                     </div>
                                 </div>
                             ) : activeTab === 'Training Reference' ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="form-grid form-grid--two">
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.title}>
-                                            Training Title <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.title}>
+                                            Training Title <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refTrainingForm.title} onChange={e => setRefTrainingForm({...refTrainingForm, title: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.category}>
-                                            Category <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.category}>
+                                            Category <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refTrainingForm.category} onChange={e => setRefTrainingForm({...refTrainingForm, category: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.standard_duration_days}>
-                                            Duration (days) <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.standard_duration_days}>
+                                            Duration (days) <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refTrainingForm.standard_duration_days} onChange={e => setRefTrainingForm({...refTrainingForm, standard_duration_days: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.delivery_mode}>
-                                            Delivery Mode <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.delivery_mode}>
+                                            Delivery Mode <Info className="form-label__help" />
                                         </label>
                                         <select value={refTrainingForm.delivery_mode} onChange={e => setRefTrainingForm({...refTrainingForm, delivery_mode: e.target.value})} className={commonInputClasses}>
                                             <option value="Face-to-Face">Face-to-Face</option>
@@ -2951,44 +2928,44 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.accrediting_body}>
-                                            Accrediting Body <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.accrediting_body}>
+                                            Accrediting Body <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refTrainingForm.accrediting_body} onChange={e => setRefTrainingForm({...refTrainingForm, accrediting_body: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.minimum_participants}>
-                                            Min Participants <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.minimum_participants}>
+                                            Min Participants <Info className="form-label__help" />
                                         </label>
                                         <input type="number" required value={refTrainingForm.minimum_participants} onChange={e => setRefTrainingForm({...refTrainingForm, minimum_participants: Number(e.target.value)})} className={commonInputClasses} />
                                     </div>
                                     <div>
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.certification_type}>
-                                            Certification Type <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.certification_type}>
+                                            Certification Type <Info className="form-label__help" />
                                         </label>
                                         <input type="text" required value={refTrainingForm.certification_type} onChange={e => setRefTrainingForm({...refTrainingForm, certification_type: e.target.value})} className={commonInputClasses} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.target_audience}>
-                                            Target Audience <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.target_audience}>
+                                            Target Audience <Info className="form-label__help" />
                                         </label>
                                         <textarea value={refTrainingForm.target_audience} onChange={e => setRefTrainingForm({...refTrainingForm, target_audience: e.target.value})} className={commonInputClasses} rows={2} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.required_facilities}>
-                                            Required Facilities <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.required_facilities}>
+                                            Required Facilities <Info className="form-label__help" />
                                         </label>
                                         <textarea value={refTrainingForm.required_facilities} onChange={e => setRefTrainingForm({...refTrainingForm, required_facilities: e.target.value})} className={commonInputClasses} rows={2} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.key_modules}>
-                                            Key Modules <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.key_modules}>
+                                            Key Modules <Info className="form-label__help" />
                                         </label>
                                         <textarea value={refTrainingForm.key_modules} onChange={e => setRefTrainingForm({...refTrainingForm, key_modules: e.target.value})} className={commonInputClasses} rows={2} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300" title={TRAINING_TOOLTIPS.expected_competency}>
-                                            Expected Competency <Info className="h-3 w-3 text-gray-400" />
+                                        <label className="form-label form-label--inline" title={TRAINING_TOOLTIPS.expected_competency}>
+                                            Expected Competency <Info className="form-label__help" />
                                         </label>
                                         <textarea value={refTrainingForm.expected_competency} onChange={e => setRefTrainingForm({...refTrainingForm, expected_competency: e.target.value})} className={commonInputClasses} rows={2} />
                                     </div>
@@ -2996,7 +2973,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                             ) : activeTab === 'GIDA' ? (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Region</label>
+                                        <label className="form-label">Region</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3006,7 +2983,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Province</label>
+                                        <label className="form-label">Province</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3016,7 +2993,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Municipality</label>
+                                        <label className="form-label">Municipality</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3026,7 +3003,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Barangay</label>
+                                        <label className="form-label">Barangay</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3039,7 +3016,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                             ) : (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Region</label>
+                                        <label className="form-label">Region</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3049,7 +3026,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Province</label>
+                                        <label className="form-label">Province</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3059,7 +3036,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Municipality</label>
+                                        <label className="form-label">Municipality</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3069,7 +3046,7 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Barangay</label>
+                                        <label className="form-label">Barangay</label>
                                         <input 
                                             type="text" 
                                             required
@@ -3080,50 +3057,35 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
                                     </div>
                                 </>
                             )}
-                            <div className="flex justify-end space-x-3 pt-4">
+                            <div className="form-footer">
                                 <button 
                                     type="button" 
                                     onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
+                                    className="btn btn-secondary"
                                 >
                                     Cancel
                                 </button>
                                 <button 
                                     type="submit"
-                                    className="px-4 py-2 bg-emerald-600 text-white rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors"
+                                    className="btn btn-primary"
                                 >
                                     Save
                                 </button>
                             </div>
                         </form>
-                    </div>
+                    </section>
                 </div>
             )}
 
             {/* Delete Confirmation Modal */}
             {deleteItem && canDelete && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Confirm Delete</h3>
-                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                            Are you sure you want to delete this item? This action cannot be undone.
-                        </p>
-                        <div className="flex justify-end space-x-3 pt-4">
-                            <button 
-                                onClick={() => setDeleteItem(null)}
-                                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={handleDeleteConfirm}
-                                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm deletion"
+                    description="Delete this reference item? This action cannot be undone."
+                    confirmLabel="Delete item"
+                    onCancel={() => setDeleteItem(null)}
+                    onConfirm={handleDeleteConfirm}
+                />
             )}
         </div>
     );

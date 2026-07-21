@@ -1,6 +1,6 @@
 // Author: 4K 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronDown, Loader2, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Subproject, Activity, OfficeRequirement, StaffingRequirement, operatingUnits, tiers, fundTypes, filterYears } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
@@ -12,6 +12,7 @@ import { getBudgetLineTag, isBudgetLineExcludedFromTargets } from '../../lib/bud
 import { resolveSubprojectCompletionRollup } from '../../lib/subprojectCompletion';
 import { isMonthTargetOverdue } from '../../lib/dateStatus';
 import type { DataScope } from '../../lib/scopedDataFetch';
+import { ConfirmDialog, LoadingState } from '../ui/enterprise';
 
 interface Props {
     subprojects: Subproject[];
@@ -73,7 +74,7 @@ interface PhysicalItem {
 type PhysicalTag = 'Cancelled' | 'Realignment' | 'Savings' | null;
 type PhysicalSortMode = 'default' | 'target-date-asc' | 'target-date-desc' | 'due-status';
 
-const commonInputClasses = "mt-1 block w-full px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 text-xs text-gray-900 dark:text-white";
+const commonInputClasses = "form-control form-control--compact";
 const physicalNumberFormatter = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 2 });
 
 const formatPhysicalNumber = (value: number) => {
@@ -868,7 +869,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
             value={value} 
             onChange={(e) => onChange(e.target.value)} 
             disabled={disabled}
-            className={`${commonInputClasses} disabled:bg-gray-100 disabled:dark:bg-gray-600 disabled:cursor-not-allowed`}
+            className={commonInputClasses}
         />
     );
 
@@ -878,7 +879,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
             value={value || ''} 
             onChange={(e) => onChange(parseFloat(e.target.value) || 0)} 
             disabled={disabled}
-            className={`${commonInputClasses} text-right disabled:bg-gray-100 disabled:dark:bg-gray-600 disabled:cursor-not-allowed`}
+            className={`${commonInputClasses} form-control--numeric`}
         />
     );
 
@@ -897,7 +898,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                 })}
                 onChange={(e) => onChange(parsePhysicalNumberInput(e.target.value))}
                 disabled={disabled}
-                className={`${commonInputClasses} text-right tabular-nums disabled:bg-gray-100 disabled:dark:bg-gray-600 disabled:cursor-not-allowed`}
+                className={`${commonInputClasses} form-control--numeric`}
             />
         );
     };
@@ -934,7 +935,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
     const renderPhysicalTagBadge = (tag?: string | null) => {
         if (!tag) return null;
-        return <span className={`budget-line-badge budget-line-badge--${tag.toLowerCase()} ml-2`}>{tag}</span>;
+        return <span className={`budget-line-badge physical-accomplishment-tag budget-line-badge--${tag.toLowerCase()}`}>{tag}</span>;
     };
 
     const getPhysicalTagClass = (item: PhysicalItem) => {
@@ -963,14 +964,14 @@ const PhysicalAccomplishment: React.FC<Props> = ({
         const canEditVisibleTarget = isTargetEditable && !item.targetExcluded;
         if (item.sourceType === 'Activity') {
             return canEditVisibleTarget ? (
-                <div className="flex gap-1 justify-center">
+                <div className="physical-accomplishment-gender-inputs">
                     <input type="number" placeholder="M" value={item.targetMale || ''} onChange={(e) => updateLocalItem(item.uniqueId, { targetMale: parseFloat(e.target.value) || 0, targetQty: (parseFloat(e.target.value) || 0) + (item.targetFemale || 0) })} className={`${commonInputClasses} w-12`} />
                     <input type="number" placeholder="F" value={item.targetFemale || ''} onChange={(e) => updateLocalItem(item.uniqueId, { targetFemale: parseFloat(e.target.value) || 0, targetQty: (item.targetMale || 0) + (parseFloat(e.target.value) || 0) })} className={`${commonInputClasses} w-12`} />
                 </div>
             ) : (
-                <div className={`flex flex-col ${targetClass}`}>
+                <div className={`physical-accomplishment-target-summary ${targetClass}`}>
                     <span>{item.targetQty} Pax</span>
-                    <span className="text-[10px] text-gray-400">M:{item.targetMale} F:{item.targetFemale}</span>
+                    <span className="physical-accomplishment-demographic-note">M:{item.targetMale} F:{item.targetFemale}</span>
                 </div>
             );
         }
@@ -1016,16 +1017,16 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                                 </button>
                             )}
                             <div className="min-w-0">
-                                <button onClick={() => handleTitleClick(item)} className="text-left font-medium text-gray-800 dark:text-white hover:text-emerald-600 hover:underline">
+                                <button onClick={() => handleTitleClick(item)} className="physical-accomplishment-title-action">
                                     {item.name}
                                 </button>
                                 {renderPhysicalTagBadge(item.recordTag)}
                                 {renderPhysicalTagBadge(item.lineTag)}
-                                {item.subName && <div className="text-xs text-gray-500">{item.subName}</div>}
+                                {item.subName && <div className="physical-accomplishment-subtitle">{item.subName}</div>}
                             </div>
                         </div>
                     </td>
-                    <td className="px-4 py-2 text-center text-xs text-gray-600 dark:text-gray-400">
+                    <td className="px-4 py-2 text-center">
                         {canEditVisibleTarget && !(item.sourceType === 'Staffing' && item.isParent) ? (
                             <div className="space-y-1">
                                 {renderDateInput(item.targetDateStart || '', (val) => updateLocalItem(item.uniqueId, { targetDateStart: val }), false)}
@@ -1040,10 +1041,10 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                             </>
                         )}
                     </td>
-                    <td className="px-4 py-2 text-center text-xs text-gray-600 dark:text-gray-400">
+                    <td className="px-4 py-2 text-center">
                         {renderTargetUnits(item, isTargetEditable)}
                     </td>
-                    <td className="pac-col-actual px-4 py-2 border-l border-emerald-100 dark:border-emerald-800">
+                    <td className="pac-col-actual px-4 py-2">
                         {!(item.sourceType === 'Staffing' && item.isParent) && (
                             <div className="space-y-1">
                                 {renderDateInput(item.actualDateStart, async (val) => {
@@ -1061,28 +1062,28 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     </td>
                     <td className="pac-col-actual px-4 py-2 text-center">
                         {item.sourceType === 'Activity' ? (
-                            <div className="flex gap-1 justify-center">
+                            <div className="physical-accomplishment-gender-inputs">
                                 {renderActualNumberInput(`${item.uniqueId}-actual-male`, item.actualMale || 0, (val) => updateLocalItem(item.uniqueId, { actualMale: val, actualQty: val + (item.actualFemale || 0) }), isLocked)}
                                 {renderActualNumberInput(`${item.uniqueId}-actual-female`, item.actualFemale || 0, (val) => updateLocalItem(item.uniqueId, { actualFemale: val, actualQty: (item.actualMale || 0) + val }), isLocked)}
                             </div>
                         ) : (
                             item.isParent && item.sourceType === 'Subproject' ? '-'
-                            : (item.sourceType === 'Staffing' && item.isParent ? <span className="text-xs font-bold">{item.actualQty} / {item.targetQty}</span>
+                            : (item.sourceType === 'Staffing' && item.isParent ? <span className=" ">{item.actualQty} / {item.targetQty}</span>
                                 : renderActualNumberInput(`${item.uniqueId}-actual-qty`, item.actualQty, (val) => updateLocalItem(item.uniqueId, { actualQty: val }), isLocked))
                         )}
                     </td>
-                    <td className="px-4 py-2 text-center text-xs font-bold text-emerald-600">
+                    <td className="px-4 py-2 text-center physical-accomplishment-completion">
                         {item.isParent ? '-' : item.targetExcluded ? <span className="physical-accomplishment-empty-cell">Excluded</span> : `${completionRate}%`}
                     </td>
-                    <td className="px-4 py-2 text-center text-xs">
+                    <td className="px-4 py-2 text-center ">
                         {renderDueBadge(item)}
                     </td>
-                    <td className="px-4 py-2 text-xs">
+                    <td className="px-4 py-2 ">
                         {renderCatchUpPlan(item, isLocked)}
                     </td>
                     <td className="px-4 py-2 text-right">
                         {isChanged && (
-                            <button onClick={() => undoLocalItem(item.uniqueId)} className="p-1 text-gray-400 hover:text-red-500 transition-colors" title="Undo Changes">
+                            <button onClick={() => undoLocalItem(item.uniqueId)} className="table-action table-action--danger" title="Undo Changes">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                                 </svg>
@@ -1186,10 +1187,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
             </div>
 
             {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-24">
-                    <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mb-4" />
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">Loading physical data...</p>
-                </div>
+                <LoadingState label="Loading physical data..." />
             ) : (
                 <div className="data-table-card">
                 <section className="financial-accomplishment-summary-grid physical-accomplishment-summary-grid" aria-label="Physical accomplishment summary">
@@ -1218,7 +1216,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     </select>
                 </div>
                 <div className="data-table-scroll financial-accomplishment-table-scroll physical-accomplishment-table-scroll custom-scrollbar">
-                    <table className="data-table physical-accomplishment-table min-w-[1320px] divide-y divide-gray-200 dark:divide-gray-700">
+                    <table className="data-table physical-accomplishment-table">
                         <colgroup>
                             <col className="pac-width-particulars" />
                             <col className="pac-width-date" />
@@ -1232,18 +1230,18 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                         </colgroup>
                         <thead>
                             <tr>
-                                <th className="physical-accomplishment-sticky-col physical-accomplishment-sticky-particulars physical-accomplishment-sticky-head px-4 py-3 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider align-middle">Particulars / Activity</th>
-                                <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Target Date</th>
-                                <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Target Units</th>
-                                <th className="pac-col-actual px-4 py-3 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider border-l border-emerald-200 dark:border-emerald-800">Actual Date</th>
-                                <th className="pac-col-actual px-4 py-3 text-center text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Actual Units</th>
-                                <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">% Completion</th>
-                                <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Due Status</th>
-                                <th className="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Justification / Catch-up Plan</th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                                <th className="physical-accomplishment-sticky-col physical-accomplishment-sticky-particulars physical-accomplishment-sticky-head px-4 py-3 text-center align-middle">Particulars / Activity</th>
+                                <th className="px-4 py-3 text-center">Target Date</th>
+                                <th className="px-4 py-3 text-center">Target Units</th>
+                                <th className="pac-col-actual px-4 py-3 text-center">Actual Date</th>
+                                <th className="pac-col-actual px-4 py-3 text-center">Actual Units</th>
+                                <th className="px-4 py-3 text-center">% Completion</th>
+                                <th className="px-4 py-3 text-center">Due Status</th>
+                                <th className="px-4 py-3 text-center">Justification / Catch-up Plan</th>
+                                <th className="px-4 py-3 text-right">Action</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                        <tbody>
                             {(['Subprojects', 'Activities', 'Program Management'] as const).map(groupKey => {
                                 const groupItems: PhysicalItem[] = groupedDisplay[groupKey] || [];
                                 if (groupItems.length === 0) return null;
@@ -1260,14 +1258,14 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                                                     <span>{groupKey}</span>
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-3 text-center text-xs text-gray-400">-</td>
-                                            <td className="px-4 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-300">{groupItems.length} record{groupItems.length === 1 ? '' : 's'}</td>
-                                            <td className="pac-col-actual px-4 py-3 text-center text-xs border-l border-emerald-100 dark:border-emerald-800">-</td>
-                                            <td className="pac-col-actual px-4 py-3 text-center text-xs">-</td>
-                                            <td className="px-4 py-3 text-center text-xs">-</td>
-                                            <td className="px-4 py-3 text-center text-xs">-</td>
-                                            <td className="px-4 py-3 text-center text-xs">-</td>
-                                            <td className="px-4 py-3 text-right text-xs">-</td>
+                                            <td className="px-4 py-3 text-center physical-accomplishment-empty-cell">-</td>
+                                            <td className="px-4 py-3 text-center">{groupItems.length} record{groupItems.length === 1 ? '' : 's'}</td>
+                                            <td className="pac-col-actual px-4 py-3 text-center">-</td>
+                                            <td className="pac-col-actual px-4 py-3 text-center ">-</td>
+                                            <td className="px-4 py-3 text-center ">-</td>
+                                            <td className="px-4 py-3 text-center ">-</td>
+                                            <td className="px-4 py-3 text-center ">-</td>
+                                            <td className="px-4 py-3 text-right ">-</td>
                                         </tr>
 
                                         {isGroupExpanded && !isProgramManagement && renderPhysicalItemRows(groupItems)}
@@ -1285,14 +1283,14 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                                                                 <span>{subgroupKey}</span>
                                                             </button>
                                                         </td>
-                                                        <td className="px-4 py-3 text-center text-xs text-gray-400">-</td>
-                                                        <td className="px-4 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-300">{subgroupItems.length} record{subgroupItems.length === 1 ? '' : 's'}</td>
-                                                        <td className="pac-col-actual px-4 py-3 text-center text-xs border-l border-emerald-100 dark:border-emerald-800">-</td>
-                                                        <td className="pac-col-actual px-4 py-3 text-center text-xs">-</td>
-                                                        <td className="px-4 py-3 text-center text-xs">-</td>
-                                                        <td className="px-4 py-3 text-center text-xs">-</td>
-                                                        <td className="px-4 py-3 text-center text-xs">-</td>
-                                                        <td className="px-4 py-3 text-right text-xs">-</td>
+                                                        <td className="px-4 py-3 text-center physical-accomplishment-empty-cell">-</td>
+                                                        <td className="px-4 py-3 text-center">{subgroupItems.length} record{subgroupItems.length === 1 ? '' : 's'}</td>
+                                                        <td className="pac-col-actual px-4 py-3 text-center">-</td>
+                                                        <td className="pac-col-actual px-4 py-3 text-center ">-</td>
+                                                        <td className="px-4 py-3 text-center ">-</td>
+                                                        <td className="px-4 py-3 text-center ">-</td>
+                                                        <td className="px-4 py-3 text-center ">-</td>
+                                                        <td className="px-4 py-3 text-right ">-</td>
                                                     </tr>
                                                     {isSubgroupExpanded && renderPhysicalItemRows(subgroupItems)}
                                                 </React.Fragment>
@@ -1301,7 +1299,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                                     </React.Fragment>
                                 );
                             })}
-                            {items.length === 0 && <tr><td colSpan={9} className="text-center py-6 text-gray-500">No data available for the selected filters.</td></tr>}
+                            {items.length === 0 && <tr><td colSpan={9} className="data-table__empty-cell">No data available for the selected filters.</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -1310,18 +1308,18 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
             {/* Global Save Bar */}
             {changedItems.size > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40 flex justify-between items-center px-8">
-                    <div className="flex items-center gap-4">
-                        <span className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 px-3 py-1 rounded-full text-sm font-medium">
+                <div className="financial-savebar">
+                    <div className="financial-savebar__status">
+                        <span className="status-badge status-badge--approved">
                             {changedItems.size} unsaved change{changedItems.size > 1 ? 's' : ''}
                         </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                        <span className="financial-savebar__copy">
                             Please save your changes before leaving this page.
                         </span>
                     </div>
                     <button
                         onClick={handleSaveAllClick}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-medium shadow-sm transition-colors flex items-center gap-2"
+                        className="btn btn-primary"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -1333,35 +1331,18 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
             {/* Save Confirmation Modal */}
             {isSaveConfirmOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl max-w-sm w-full">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Confirm Save</h3>
-                        <p className="text-gray-600 dark:text-gray-300 mb-6">
-                            Are you sure you want to save {changedItems.size} change{changedItems.size > 1 ? 's' : ''}?
-                        </p>
-                        <div className="flex justify-end gap-3">
-                            <button 
-                                onClick={() => setIsSaveConfirmOpen(false)}
-                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-                                disabled={isSavingAll}
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                onClick={confirmSaveAll}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-2"
-                                disabled={isSavingAll}
-                            >
-                                {isSavingAll ? 'Saving...' : 'Confirm Save'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm Save"
+                    description={`Are you sure you want to save ${changedItems.size} change${changedItems.size > 1 ? 's' : ''}?`}
+                    confirmLabel={isSavingAll ? 'Saving…' : 'Confirm Save'}
+                    onConfirm={confirmSaveAll}
+                    onCancel={() => setIsSaveConfirmOpen(false)}
+                />
             )}
 
             {/* Success Toast */}
             {saveSuccessMessage && (
-                <div className="fixed bottom-24 right-8 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fadeIn z-50">
+                <div className="app-toast app-toast--success animate-fadeIn">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
@@ -1369,7 +1350,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                 </div>
             )}
             {monthLockMessage && (
-                <div className="fixed bottom-24 right-8 bg-amber-100 border border-amber-200 text-amber-900 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fadeIn z-50" role="status">
+                <div className="app-toast app-toast--warning animate-fadeIn" role="status">
                     {monthLockMessage}
                 </div>
             )}

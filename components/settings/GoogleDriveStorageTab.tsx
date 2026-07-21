@@ -110,14 +110,14 @@ const GoogleDriveStorageTab: React.FC = () => {
             {message && <p className="drive-panel__message" role="status">{message}</p>}
             {isDriveExpired && (
                 <div className="drive-panel__warning drive-panel__warning--danger" role="alert">
-                    <p className="font-bold">Google Drive connection expired.</p>
+                    <p className="notice__title">Google Drive connection expired.</p>
                     <p>{status?.connectionMessage || 'Ask an Admin to reconnect Google Drive storage.'}</p>
                 </div>
             )}
 
             {!status?.isConfigured && (
                 <div className="drive-panel__warning">
-                    <p className="font-bold">Configuration needed before connecting Google Drive.</p>
+                    <p className="notice__title">Configuration needed before connecting Google Drive.</p>
                     <p>Add these Edge Function environment variables: {status?.missingEnv.join(', ') || 'Google Drive configuration'}.</p>
                 </div>
             )}

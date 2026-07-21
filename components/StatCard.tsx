@@ -5,7 +5,6 @@ interface StatCardProps {
     title: string;
     value: string;
     icon: React.ReactNode;
-    color: string;
     onClick?: () => void;
     onToggle?: (e: React.MouseEvent) => void;
     toggleIcon?: React.ReactNode;
@@ -43,16 +42,23 @@ const compactStatValue = (rawValue: string): string => {
     return `${prefix}${formatCompactNumber(numericValue)}`;
 };
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, onClick, onToggle, toggleIcon }) => {
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, onClick, onToggle, toggleIcon }) => {
     const displayValue = compactStatValue(value);
 
     return (
         <div
-            onClick={onClick}
             className={`stat-card ${onClick ? 'stat-card--clickable' : ''}`}
         >
+            {onClick && (
+                <button
+                    type="button"
+                    className="stat-card__details"
+                    onClick={onClick}
+                    aria-label={`${title}: ${value}. Open details.`}
+                />
+            )}
             <div className="stat-card__top">
-                <div className={`stat-card__icon ${color}`}>
+                <div className="stat-card__icon">
                     {icon}
                 </div>
                 <div className="stat-card__body">

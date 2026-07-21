@@ -508,7 +508,7 @@ const PICSReport: React.FC<PICSReportProps> = ({
                 </div>
             </div>
             <div id="pics-report-table" className="report-table-scroll pics-report-scroll">
-                <table className="pics-report-table min-w-full border-collapse text-xs whitespace-nowrap">
+                <table className="pics-report-table">
                     <thead className="sticky top-0 z-10">
                         <tr>
                             <th rowSpan={2} className={`${headerCellClass} text-left`}>Location / Performance Indicator</th>
@@ -554,7 +554,7 @@ const PICSReport: React.FC<PICSReportProps> = ({
                                 <React.Fragment key={region}>
                                     <tr className={groupRowClass} onClick={() => toggle(region)}>
                                         <td className={`${dataCellClass} text-left`}>
-                                            <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400 font-bold">{isRegionExpanded ? '−' : '+'}</span>
+                                            <span className="pics-report__expand" aria-hidden="true">{isRegionExpanded ? '−' : '+'}</span>
                                             {region}
                                         </td>
                                         <td className={`${dataCellClass} text-center`}>number</td>
@@ -587,7 +587,7 @@ const PICSReport: React.FC<PICSReportProps> = ({
                                             <React.Fragment key={provinceKey}>
                                                 <tr className={groupRowClass} onClick={() => toggle(provinceKey)}>
                                                     <td className={`${dataCellClass} text-left pl-6`}>
-                                                        <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400 font-bold">{isProvinceExpanded ? '−' : '+'}</span>
+                                                        <span className="pics-report__expand" aria-hidden="true">{isProvinceExpanded ? '−' : '+'}</span>
                                                         {province}
                                                     </td>
                                                     <td className={`${dataCellClass} text-center`}>number</td>

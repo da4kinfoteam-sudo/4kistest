@@ -1,4 +1,4 @@
-// Author: 4K 
+// Author: 4K
 import React, { useState, useEffect, useMemo } from 'react';
 import { MonthYearPicker } from '../ui/MonthYearPicker';
 import { OtherProgramExpense, operatingUnits, fundTypes, tiers, objectTypes, ObjectType } from '../../constants';
@@ -24,7 +24,7 @@ const commonInputClasses = "form-control";
 const DetailItem: React.FC<{ label: string; value?: string | number | React.ReactNode }> = ({ label, value }) => (
     <div className="detail-item">
         <dt className="detail-label">{label}</dt>
-        <dd className="detail-value font-semibold">{value || 'N/A'}</dd>
+        <dd className="detail-value detail-value--emphasis">{value || 'N/A'}</dd>
     </div>
 );
 
@@ -98,7 +98,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
         }
         return true;
     };
-    
+
     const [editMode, setEditMode] = useState<'none' | 'details' | 'accomplishment'>('none');
     const [formData, setFormData] = useState<OtherProgramExpense>(item);
     const [originalFormData, setOriginalFormData] = useState<OtherProgramExpense>(item);
@@ -119,7 +119,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
     // Initial load and whenever the item ID changes
     useEffect(() => {
         if (!item) return;
-        
+
         // Always reset form data to current item first
         const displayItem = getDisplayItem(item);
         setFormData(displayItem);
@@ -142,10 +142,10 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                     remarks: o.remarks
                 }));
                 const totalAmount = mappedObligations.reduce((sum, ob) => sum + (Number(ob.amount) || 0), 0);
-                setFormData(prev => ({ 
-                    ...prev, 
+                setFormData(prev => ({
+                    ...prev,
                     obligations: mappedObligations,
-                    actualObligationAmount: totalAmount 
+                    actualObligationAmount: totalAmount
                 }));
                 setOriginalFormData(prev => ({
                     ...prev,
@@ -168,7 +168,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
     }, [item, supabase]);
 
     const [validationErrors, setValidationErrors] = useState<string[]>([]);
-    
+
     // For selects
     const [selectedObjectType, setSelectedObjectType] = useState<ObjectType>('MOOE');
     const [selectedParticular, setSelectedParticular] = useState('');
@@ -202,21 +202,21 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
     // Handle selectivity initialization when entering details edit mode
     useEffect(() => {
         if (editMode === 'details') {
-            let foundType: ObjectType = 'MOOE'; 
+            let foundType: ObjectType = 'MOOE';
             let foundParticular = '';
-            outerLoop: 
-            for (const type of objectTypes) { 
-                if(uacsCodes[type]) { 
-                    for (const part in uacsCodes[type]) { 
-                        if (item.uacsCode && uacsCodes[type][part].hasOwnProperty(item.uacsCode)) { 
-                            foundType = type; 
-                            foundParticular = part; 
-                            break outerLoop; 
-                        } 
-                    } 
-                } 
+            outerLoop:
+            for (const type of objectTypes) {
+                if(uacsCodes[type]) {
+                    for (const part in uacsCodes[type]) {
+                        if (item.uacsCode && uacsCodes[type][part].hasOwnProperty(item.uacsCode)) {
+                            foundType = type;
+                            foundParticular = part;
+                            break outerLoop;
+                        }
+                    }
+                }
             }
-            setSelectedObjectType(foundType); 
+            setSelectedObjectType(foundType);
             setSelectedParticular(foundParticular);
         } else if (editMode === 'none') {
             // Reset to original state when canceling
@@ -245,15 +245,15 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        
+
         if (name === 'uacsCode') {
             setFormData(prev => ({ ...prev, [name]: value }));
-            
+
             // Auto-select particular if a valid code is entered
             if (value && uacsCodes[selectedObjectType]) {
                 const trimmedValue = value.trim();
                 let foundParticular = '';
-                
+
                 // First check if the code exists in the CURRENT selected particular (optimization)
                 if (selectedParticular && uacsCodes[selectedObjectType][selectedParticular] && uacsCodes[selectedObjectType][selectedParticular][trimmedValue]) {
                     foundParticular = selectedParticular;
@@ -278,7 +278,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
 
     const getInputClasses = (fieldName: string) => {
         if (validationErrors.includes(fieldName)) {
-            return `${commonInputClasses} border-red-500 ring-2 ring-red-200 dark:ring-red-900/30`;
+            return `${commonInputClasses} form-control--invalid`;
         }
         return commonInputClasses;
     };
@@ -328,7 +328,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
         }
 
         setValidationErrors([]);
-        
+
         const updatedItem: any = {
             ...formData,
             fundYear: Number(formData.fundYear),
@@ -352,7 +352,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                 setIsSaving(true);
                 // Exclude ID and obligations from payload
                 const { id, obligations, disbursements, ...payload } = updatedItem;
-                
+
                 console.log("Saving Other Program Expense...", { id: item.id, payload });
                 const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.id);
                 if (updateError) throw updateError;
@@ -360,7 +360,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                 // Sync obligations to centralized table
                 const entityType = 'other_program_expense';
                 const parentId = item.id;
-                
+
                 console.log("Syncing obligations to centralized table...", { entityType, parentId, count: obligations?.length });
 
                 // Delete old
@@ -368,12 +368,12 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                     .delete()
                     .eq('entity_type', entityType)
                     .eq('parent_id', parentId);
-                
+
                 if (deleteError) {
                     console.error("Error deleting old obligations:", deleteError);
                     // Continue as it might still succeed
                 }
-                
+
                 // Insert new
                 if (obligations && obligations.length > 0) {
                     const syncPayload = obligations.map((o: any) => ({
@@ -383,7 +383,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                         amount: Number(o.amount) || 0,
                         remarks: o.remarks || ''
                     }));
-                    
+
                     const { error: insertError } = await supabase.from('financial_obligations').insert(syncPayload);
                     if (insertError) {
                         console.error("Critical RLS Error or Insert Error in financial_obligations:", insertError);
@@ -419,7 +419,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
 
                 const metadata = getMonetaryChanges(item, updatedItem, 'Other');
                 logAction('Updated Other Program Expense', updatedItem.particulars, undefined, 'Other Program Expense', String(item.id), metadata);
-                
+
                 onUpdate(updatedItem as OtherProgramExpense);
                 setEditMode('none');
                 console.log("Save successful!");
@@ -446,12 +446,12 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                             <legend className="form-legend">Basic Information</legend>
                             <div className="form-grid">
                                 <div>
-                                    <label className="form-label">Operating Unit <span className="text-red-500">*</span></label>
-                                    <select 
-                                        name="operatingUnit" 
-                                        value={formData.operatingUnit} 
-                                        onChange={handleInputChange} 
-                                        className={`${getInputClasses('operatingUnit')} disabled:bg-gray-100 disabled:cursor-not-allowed`} 
+                                    <label className="form-label">Operating Unit <span className="form-required">*</span></label>
+                                    <select
+                                        name="operatingUnit"
+                                        value={formData.operatingUnit}
+                                        onChange={handleInputChange}
+                                        className={getInputClasses('operatingUnit')}
                                         disabled
                                     >
                                         <option value="">Select OU</option>
@@ -459,7 +459,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="form-label">Status <span className="text-red-500">*</span></label>
+                                    <label className="form-label">Status <span className="form-required">*</span></label>
                                     <select name="status" value={formData.status} onChange={handleInputChange} className={getInputClasses('status')}>
                                         <option value="Proposed">Proposed</option>
                                         <option value="Ongoing">Ongoing</option>
@@ -468,7 +468,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="form-label">Particular <span className="text-red-500">*</span></label>
+                                    <label className="form-label">Particular <span className="form-required">*</span></label>
                                     <input type="text" name="particulars" value={formData.particulars} onChange={handleInputChange} placeholder="Enter particulars" className={getInputClasses('particulars')} />
                                 </div>
                             </div>
@@ -480,17 +480,17 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                             <div className="space-y-6">
                                 <div className="form-grid">
                                     <div>
-                                        <label className="form-label">Fund Year <span className="text-red-500">*</span></label>
+                                        <label className="form-label">Fund Year <span className="form-required">*</span></label>
                                         <input type="number" name="fundYear" value={formData.fundYear} onChange={handleInputChange} className={getInputClasses('fundYear')} />
                                     </div>
                                     <div>
-                                        <label className="form-label">Fund Type <span className="text-red-500">*</span></label>
+                                        <label className="form-label">Fund Type <span className="form-required">*</span></label>
                                         <select name="fundType" value={formData.fundType} onChange={handleInputChange} className={commonInputClasses}>
                                             {fundTypes.map(f => <option key={f} value={f}>{f}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="form-label">Tier <span className="text-red-500">*</span></label>
+                                        <label className="form-label">Tier <span className="form-required">*</span></label>
                                         <select name="tier" value={formData.tier} onChange={handleInputChange} className={commonInputClasses}>
                                             {tiers.map(t => <option key={t} value={t}>{t}</option>)}
                                         </select>
@@ -500,21 +500,21 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                 {/* UACS Row */}
                                 <div className="program-form-grid program-form-grid--four">
                                     <div>
-                                        <label className="form-label">Object Type <span className="text-red-500">*</span></label>
-                                        <select 
-                                            value={selectedObjectType} 
-                                            onChange={e => { setSelectedObjectType(e.target.value as ObjectType); setSelectedParticular(''); setFormData(prev => ({...prev, uacsCode: ''})); }} 
+                                        <label className="form-label">Object Type <span className="form-required">*</span></label>
+                                        <select
+                                            value={selectedObjectType}
+                                            onChange={e => { setSelectedObjectType(e.target.value as ObjectType); setSelectedParticular(''); setFormData(prev => ({...prev, uacsCode: ''})); }}
                                             className={commonInputClasses}
                                         >
                                             {objectTypes.map(t => <option key={t} value={t}>{t}</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="form-label">Particular <span className="text-red-500">*</span></label>
-                                        <select 
-                                            value={selectedParticular} 
-                                            onChange={e => { 
-                                                setSelectedParticular(e.target.value); 
+                                        <label className="form-label">Particular <span className="form-required">*</span></label>
+                                        <select
+                                            value={selectedParticular}
+                                            onChange={e => {
+                                                setSelectedParticular(e.target.value);
                                                 const ot = selectedObjectType;
                                                 const ep = e.target.value;
                                                 if (uacsCodes[ot] && uacsCodes[ot][ep]) {
@@ -523,7 +523,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                                 } else {
                                                     setFormData(prev => ({...prev, uacsCode: ''}));
                                                 }
-                                            }} 
+                                            }}
                                             className={commonInputClasses}
                                         >
                                             <option value="">Select Particular</option>
@@ -531,18 +531,18 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                         </select>
                                     </div>
                                     <div className="relative">
-                                        <label className="form-label">UACS Code <span className="text-red-500">*</span></label>
+                                        <label className="form-label">UACS Code <span className="form-required">*</span></label>
                                         <div className="relative">
-                                            <input 
-                                                type="text" 
-                                                name="uacsCode" 
-                                                value={formData.uacsCode} 
-                                                onChange={handleInputChange} 
+                                            <input
+                                                type="text"
+                                                name="uacsCode"
+                                                value={formData.uacsCode}
+                                                onChange={handleInputChange}
                                                 list="uacs-codes-list-detail"
-                                                className={`${getInputClasses('uacsCode')} pr-10`} 
+                                                className={`${getInputClasses('uacsCode')} pr-10`}
                                             />
                                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg className="form-control-adornment__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                 </svg>
                                             </div>
@@ -555,47 +555,47 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                     </div>
                                     <div>
                                         <label className="form-label">Description</label>
-                                        <input 
-                                            type="text" 
-                                            value={selectedUacsDesc} 
-                                            readOnly 
-                                            className={`${commonInputClasses} form-control--readonly`} 
+                                        <input
+                                            type="text"
+                                            value={selectedUacsDesc}
+                                            readOnly
+                                            className={`${commonInputClasses} form-control--readonly`}
                                         />
                                     </div>
                                 </div>
 
                                 <div className="form-grid">
                                     <div>
-                                        <label className="form-label">Obligation Date <span className="text-red-500">*</span></label>
-                                        <MonthYearPicker 
-                                            value={formData.obligationDate} 
+                                        <label className="form-label">Obligation Date <span className="form-required">*</span></label>
+                                        <MonthYearPicker
+                                            value={formData.obligationDate}
                                             onChange={(val) => {
                                                 setFormData(prev => ({...prev, obligationDate: val}));
                                                 if (validationErrors.includes('obligationDate')) {
                                                     setValidationErrors(prev => prev.filter(f => f !== 'obligationDate'));
                                                 }
-                                            }} 
-                                            className={validationErrors.includes('obligationDate') ? 'border-red-500 ring-red-500' : ''}
+                                            }}
+                                            className={validationErrors.includes('obligationDate') ? 'form-control--invalid' : ''}
                                         />
                                     </div>
                                     <div>
-                                        <label className="form-label">Target Allocation Amount <span className="text-red-500">*</span></label>
+                                        <label className="form-label">Target Allocation Amount <span className="form-required">*</span></label>
                                         <input type="number" name="amount" value={formData.amount} onChange={handleInputChange} placeholder="0.00" className={getInputClasses('amount')} />
                                     </div>
                                 </div>
 
                                 <div className="detail-subsection">
-                                    <h4 className="detail-section-title detail-section-title--ruled">Monthly Disbursement Schedule <span className="text-red-500">*</span></h4>
+                                    <h4 className="detail-section-title detail-section-title--ruled">Monthly Disbursement Schedule <span className="form-required">*</span></h4>
                                     <div className="program-month-grid">
                                         {months.map(month => (
                                             <div key={month} className="program-month-cell">
                                                 <label className="program-month-cell__label">{month}</label>
-                                                <input 
-                                                    type="number" 
-                                                    name={`disbursement${month}`} 
-                                                    value={(formData as any)[`disbursement${month}`] || 0} 
-                                                    onChange={handleInputChange} 
-                                                    className={`${getInputClasses(`disbursement${month}`)} form-control--compact`} 
+                                                <input
+                                                    type="number"
+                                                    name={`disbursement${month}`}
+                                                    value={(formData as any)[`disbursement${month}`] || 0}
+                                                    onChange={handleInputChange}
+                                                    className={`${getInputClasses(`disbursement${month}`)} form-control--compact`}
                                                 />
                                             </div>
                                         ))}
@@ -625,7 +625,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                 <div className="form-card">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {monthLockMessage && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800" role="status">
+                            <div className="notice notice--warning" role="status">
                                 {monthLockMessage}
                             </div>
                         )}
@@ -638,9 +638,9 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                                         obligations={formData.obligations || []}
                                         onChange={(newObs, total) => {
                                             const latestOb = newObs.length > 0 ? [...newObs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] : null;
-                                            setFormData(prev => ({ 
-                                                ...prev, 
-                                                obligations: newObs, 
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                obligations: newObs,
                                                 actualObligationAmount: total,
                                                 actualObligationDate: latestOb ? latestOb.date : ''
                                             }));
@@ -656,7 +656,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                             <legend className="form-legend">Actual Monthly Disbursement</legend>
                             <div className="program-month-grid">
                                 {months.map(month => (
-                                    <div key={`actual-${month}`} className="program-month-cell"><label className="program-month-cell__label">{month}</label><input type="number" name={`actualDisbursement${month}`} 
+                                    <div key={`actual-${month}`} className="program-month-cell"><label className="program-month-cell__label">{month}</label><input type="number" name={`actualDisbursement${month}`}
                                     // @ts-ignore
                                     value={(formData as any)[`actualDisbursement${month}`]} onChange={handleInputChange} min="0" step="0.01" className="form-control form-control--compact" /></div>
                                 ))}
@@ -737,7 +737,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
 
             {/* Content Grid */}
             <div className="detail-grid">
-                
+
                 {/* Details Section */}
                 <div className="detail-card">
                     <h3 className="detail-card-title">Requirement Details</h3>
@@ -760,15 +760,15 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                             <DetailItem label="UACS Code" value={`${item.uacsCode} - ${selectedParticular || 'N/A'} - ${selectedUacsDesc || 'N/A'}`} />
                         </div>
                         <DetailItem label="Target Obligation Date" value={item.obligationDate} />
-                        
+
                         {/* Aligned Financial Targets */}
                         <DetailItem label="Target Allocation Amount" value={formatCurrency(item.amount)} />
                         <DetailItem label="Target Obligated Amount" value={formatCurrency(item.obligatedAmount || 0)} />
                         <DetailItem label="Target Disbursement Amount" value={formatCurrency(totalTargetDisbursement)} />
-                        
+
                         <DetailItem label="Encoded By" value={item.encodedBy} />
                     </div>
-                    
+
                     <div className="detail-subsection detail-subsection--separated">
                         <h4 className="detail-section-title detail-section-title--ruled">Target Monthly Disbursement</h4>
                         <div className="program-month-grid">
@@ -786,7 +786,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                 <div className="detail-card">
                     <h3 className="detail-card-title">Accomplishment Report</h3>
                     <div className="detail-stack">
-                        
+
                         <div>
                             <h4 className="detail-section-title detail-section-title--ruled">Financial Performance</h4>
                             <div className="detail-metric-grid">

@@ -38,7 +38,7 @@ const commonInputClasses = "form-control";
 const DetailItem: React.FC<{ label: string; value?: string | number | React.ReactNode }> = ({ label, value }) => (
     <div className="detail-item">
         <dt className="detail-label">{label}</dt>
-        <dd className="detail-value font-semibold">{value || 'N/A'}</dd>
+        <dd className="detail-value detail-value--emphasis">{value || 'N/A'}</dd>
     </div>
 );
 
@@ -326,7 +326,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
 
     const getInputClasses = (fieldName: string) => {
         const hasError = validationErrors.includes(fieldName);
-        return `${commonInputClasses} ${hasError ? 'border-red-500 ring-1 ring-red-500' : ''}`;
+        return `${commonInputClasses} ${hasError ? 'form-control--invalid' : ''}`;
     };
 
     useEffect(() => {
@@ -797,7 +797,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                         <fieldset className="form-fieldset">
                             <legend className="form-legend">Position Profile</legend>
                             <div className="program-form-grid program-form-grid--four">
-                                <div><label className="form-label">Position Title <span className="text-red-500">*</span></label><input type="text" name="personnelPosition" value={formData.personnelPosition} onChange={handleInputChange} required className={getInputClasses('personnelPosition')} /></div>
+                                <div><label className="form-label">Position Title <span className="form-required">*</span></label><input type="text" name="personnelPosition" value={formData.personnelPosition} onChange={handleInputChange} required className={getInputClasses('personnelPosition')} /></div>
                                 <div><label className="form-label">Component</label><select name="component" value={formData.component} onChange={handleInputChange} className={getInputClasses('component')}>{otherActivityComponents.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 <div>
                                     <label className="form-label">Hiring Status</label>
@@ -806,12 +806,12 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                         <option value="Filled">Filled</option>
                                         <option value="Unfilled">Unfilled</option>
                                     </select>
-                                    {formData.hiringStatus === 'Filled' && <p className="text-xs text-green-600 mt-1">Status set to Filled automatically based on Date Hired.</p>}
+                                    {formData.hiringStatus === 'Filled' && <p className="form-help form-help--success">Status set to Filled automatically based on Date Hired.</p>}
                                 </div>
                                 <div><label className="form-label">Employment Status</label><select name="status" value={formData.status} onChange={handleInputChange} className={getInputClasses('status')}><option value="Permanent">Permanent</option><option value="Contractual">Contractual</option><option value="COS">COS</option><option value="Job Order">Job Order</option></select></div>
                                 <div><label className="form-label">Salary Grade</label><input type="number" name="salaryGrade" value={formData.salaryGrade} onChange={handleInputChange} min="1" max="33" className={getInputClasses('salaryGrade')} /></div>
                                 <div><label className="form-label">Personnel Type</label><select name="personnelType" value={formData.personnelType} onChange={handleInputChange} className={getInputClasses('personnelType')}><option value="Technical">Technical</option><option value="Administrative">Administrative</option><option value="Support">Support</option></select></div>
-                                <div><label className="form-label">Operating Unit <span className="text-red-500">*</span></label><select name="operatingUnit" value={formData.operatingUnit} onChange={handleInputChange} className={getInputClasses('operatingUnit')} disabled={!canViewAll}><option value="">Select OU</option>{operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}</select></div>
+                                <div><label className="form-label">Operating Unit <span className="form-required">*</span></label><select name="operatingUnit" value={formData.operatingUnit} onChange={handleInputChange} className={getInputClasses('operatingUnit')} disabled={!canViewAll}><option value="">Select OU</option>{operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}</select></div>
                             </div>
                         </fieldset>
 
@@ -819,7 +819,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                         <fieldset className="form-fieldset">
                             <legend className="form-legend">Funding Source</legend>
                             <div className="form-grid">
-                                <div><label className="form-label">Fund Year <span className="text-red-500">*</span></label><input type="number" name="fundYear" value={formData.fundYear} onChange={handleInputChange} className={getInputClasses('fundYear')} /></div>
+                                <div><label className="form-label">Fund Year <span className="form-required">*</span></label><input type="number" name="fundYear" value={formData.fundYear} onChange={handleInputChange} className={getInputClasses('fundYear')} /></div>
                                 <div><label className="form-label">Fund Type</label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={getInputClasses('fundType')}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
                                 <div><label className="form-label">Tier</label><select name="tier" value={formData.tier} onChange={handleInputChange} className={getInputClasses('tier')}>{tiers.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                             </div>
@@ -865,9 +865,9 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                 </h4>
                                 <div className="program-form-grid program-form-grid--four">
                                     <div><label className="form-label">Object Type</label><select name="objectType" value={currentExpense.objectType} onChange={handleExpenseChange} className={getInputClasses('objectType')}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                    <div><label className="form-label">Particular <span className="text-red-500">*</span></label><select value={selectedParticular} onChange={e => { setSelectedParticular(e.target.value); setCurrentExpense(prev => ({...prev, uacsCode: ''})); if (validationErrors.includes('expenseParticular')) setValidationErrors(prev => prev.filter(err => err !== 'expenseParticular')); }} className={getInputClasses('expenseParticular')}><option value="">Select</option>{uacsCodes[currentExpense.objectType] && Object.keys(uacsCodes[currentExpense.objectType]).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                                    <div><label className="form-label">Particular <span className="form-required">*</span></label><select value={selectedParticular} onChange={e => { setSelectedParticular(e.target.value); setCurrentExpense(prev => ({...prev, uacsCode: ''})); if (validationErrors.includes('expenseParticular')) setValidationErrors(prev => prev.filter(err => err !== 'expenseParticular')); }} className={getInputClasses('expenseParticular')}><option value="">Select</option>{uacsCodes[currentExpense.objectType] && Object.keys(uacsCodes[currentExpense.objectType]).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                                     <div>
-                                        <label className="form-label">UACS Code <span className="text-red-500">*</span></label>
+                                        <label className="form-label">UACS Code <span className="form-required">*</span></label>
                                         <input 
                                             list="uacs-codes-list-detail"
                                             name="uacsCode" 
@@ -926,7 +926,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                         />
                                     </div>
                                     <div>
-                                        <label className="form-label">Obligation Date <span className="text-red-500">*</span></label>
+                                        <label className="form-label">Obligation Date <span className="form-required">*</span></label>
                                         <MonthYearPicker 
                                             value={currentExpense.obligationDate} 
                                             onChange={(val) => {
@@ -935,11 +935,11 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                                     setValidationErrors(prev => prev.filter(err => err !== 'obligationDate'));
                                                 }
                                             }}
-                                            className={validationErrors.includes('obligationDate') ? 'border-red-500 ring-1 ring-red-500' : ''}
+                                            className={validationErrors.includes('obligationDate') ? 'form-control--invalid' : ''}
                                         />
                                     </div>
                                     <div>
-                                        <label className="form-label">Amount <span className="text-red-500">*</span></label>
+                                        <label className="form-label">Amount <span className="form-required">*</span></label>
                                         <input
                                             type="text"
                                             name="amount"
@@ -958,7 +958,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                     </div>
                                     <div className="program-form-grid__full budget-line-adjustment-options">
                                         {editingExpenseId && (
-                                            <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                            <label className="form-check">
                                                 <input
                                                     type="checkbox"
                                                     checked={currentExpense.isCancelled}
@@ -968,12 +968,12 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                                         isRealignment: e.target.checked ? false : prev.isRealignment,
                                                         isSavings: e.target.checked ? false : prev.isSavings,
                                                     }))}
-                                                    className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                                                    className="form-checkbox"
                                                 />
                                                 Cancelled
                                             </label>
                                         )}
-                                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                        <label className="form-check">
                                             <input
                                                 type="checkbox"
                                                 checked={currentExpense.isRealignment}
@@ -983,11 +983,11 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                                     isCancelled: e.target.checked ? false : prev.isCancelled,
                                                     isSavings: e.target.checked ? false : prev.isSavings,
                                                 }))}
-                                                className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                                                className="form-checkbox"
                                             />
                                             Realignment
                                         </label>
-                                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                        <label className="form-check">
                                             <input
                                                 type="checkbox"
                                                 checked={currentExpense.isSavings}
@@ -997,7 +997,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                                                     isCancelled: e.target.checked ? false : prev.isCancelled,
                                                     isRealignment: e.target.checked ? false : prev.isRealignment,
                                                 }))}
-                                                className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                                                className="form-checkbox"
                                             />
                                             Savings
                                         </label>
@@ -1097,7 +1097,7 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
                 <div className="form-card">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {monthLockMessage && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800" role="status">
+                            <div className="notice notice--warning" role="status">
                                 {monthLockMessage}
                             </div>
                         )}

@@ -39,7 +39,7 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
 
     if (allDates.length === 0) {
         return (
-            <div className="text-center py-10 text-gray-500 dark:text-gray-400">
+            <div className="detail-empty gantt-empty">
                 No timeline data available.
             </div>
         );
@@ -93,7 +93,7 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
                     style={{ left: `${left}%` }}
                 >
                     {/* Tooltip/Label for the line */}
-                    <div className="absolute -top-6 -left-16 w-32 text-center text-xs font-bold text-red-600 bg-white dark:bg-gray-800 px-1 rounded shadow-sm whitespace-nowrap overflow-hidden text-ellipsis">
+                    <div className="gantt-deadline-label">
                         {title}
                     </div>
                 </div>
@@ -121,8 +121,8 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
             const date = new Date(zoomedMonth.getFullYear(), zoomedMonth.getMonth(), i);
             const left = (getDaysFromStart(date) / totalDays) * 100;
             headers.push(
-                <div key={i} className="absolute top-0 h-full w-px bg-gray-200 dark:bg-gray-700" style={{ left: `${left}%` }}>
-                    <span className="absolute top-0 -ml-1 mt-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+                <div key={i} className="gantt-gridline" style={{ left: `${left}%` }}>
+                    <span className="gantt-day-label">
                         {i}
                     </span>
                 </div>
@@ -137,10 +137,10 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
             const leftPosition = (daysFromStart / totalDays) * 100;
             
             headers.push(
-                <div key={monthDate.getTime()} className="absolute top-0 h-full w-px bg-gray-200 dark:bg-gray-700" style={{ left: `${leftPosition}%` }}>
+                <div key={monthDate.getTime()} className="gantt-gridline" style={{ left: `${leftPosition}%` }}>
                     <button 
                         onClick={() => setZoomedMonth(monthDate)}
-                        className="absolute top-0 left-1 mt-2 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:text-accent dark:hover:text-green-400 hover:underline transition-colors text-left whitespace-nowrap z-30"
+                        className="gantt-month-button"
                     >
                         {monthDate.toLocaleString('default', { month: 'short' })} '{monthDate.getFullYear().toString().slice(-2)}
                     </button>
@@ -151,26 +151,26 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="gantt-chart">
             {zoomedMonth && (
-                <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800/30">
+                <div className="gantt-zoom-bar">
                     <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-800 dark:text-white">
+                        <span className="gantt-zoom-bar__title">
                             {zoomedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
                         </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">(Day View)</span>
+                        <span className="gantt-zoom-bar__mode">(Day View)</span>
                     </div>
                     <button 
                         onClick={() => setZoomedMonth(null)} 
-                        className="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-300 bg-white dark:bg-gray-800 rounded border border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                        className="btn btn-secondary btn-sm"
                     >
                         Back to Year View
                     </button>
                 </div>
             )}
 
-            <div className="overflow-x-auto p-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg relative">
-                <div className="min-w-[900px] relative">
+            <div className="gantt-scroll">
+                <div className="gantt-canvas">
                     
                     {/* Planning Schedule Backgrounds */}
                     {systemSettings.planningSchedules.map(schedule => {
@@ -182,7 +182,7 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
                         
                         return (
                             <React.Fragment key={`schedule-${schedule.id}`}>
-                                {renderBar(start, endDateInclusive, "absolute top-0 bottom-0 bg-gray-300 dark:bg-gray-500 opacity-30 pointer-events-none z-0", `${schedule.name} (${schedule.startDate} - ${schedule.endDate})`)}
+                                {renderBar(start, endDateInclusive, "gantt-planning-range", `${schedule.name} (${schedule.startDate} - ${schedule.endDate})`)}
                             </React.Fragment>
                         );
                     })}
@@ -191,17 +191,17 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
                     {systemSettings.deadlines.map(deadline => {
                         const date = parseDate(deadline.date);
                         if (!date) return null;
-                        return renderBar(date, date, "absolute top-10 bottom-0 w-0.5 border-l-2 border-dashed border-red-500 z-10 pointer-events-none", deadline.name, true);
+                        return renderBar(date, date, "gantt-deadline", deadline.name, true);
                     })}
 
                     {/* Timeline Header */}
-                    <div className="flex relative border-b border-gray-200 dark:border-gray-700 h-10 z-20">
+                    <div className="gantt-header">
                          {headers}
                     </div>
                     
                     {/* Rows */}
-                    <div className="space-y-3 py-2 z-20 relative">
-                         {items.length === 0 && <div className="text-center py-4 text-gray-500 italic">No items to display.</div>}
+                    <div className="gantt-rows">
+                         {items.length === 0 && <div className="detail-empty">No items to display.</div>}
                          {items.map(item => {
                             const startDate = parseDate(item.startDate);
                             const estimatedEndDate = parseDate(item.endDate);
@@ -221,26 +221,26 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
                             const plannedBar = renderBar(
                                 startDate, 
                                 estimatedEndDate, 
-                                `absolute h-6 top-1/2 -translate-y-1/2 rounded-md transition-all duration-300 hover:brightness-110 ${item.type === 'Training' ? 'bg-green-300 dark:bg-green-700' : 'bg-blue-300 dark:bg-blue-700'}`,
+                                `gantt-bar gantt-bar--planned ${item.type === 'Training' ? 'gantt-bar--training' : 'gantt-bar--subproject'}`,
                                 `Planned: ${item.startDate}${item.type === 'Subproject' ? ` to ${item.endDate}` : ''}`
                             );
 
                             const actualBar = actualEndDate && item.type === 'Subproject' ? renderBar(
                                 startDate,
                                 actualEndDate,
-                                "absolute h-4 top-1/2 -translate-y-1/2 bg-green-500 dark:bg-green-400 rounded-sm shadow-md transition-all duration-300 hover:brightness-110",
+                                "gantt-bar gantt-bar--actual",
                                 `Actual: ${item.startDate} to ${item.actualEndDate}`
                             ) : null;
 
                             if (!plannedBar && !actualBar) return null;
 
                             return (
-                                <div key={`${item.type}-${item.id}`} className="flex items-center group text-sm h-10 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded transition-colors">
-                                    <div className="w-52 pr-4 pl-2 font-medium text-gray-800 dark:text-gray-200 truncate flex items-center gap-2 flex-shrink-0" title={item.name}>
-                                        <span className={`w-2 h-2 rounded-full ${item.type === 'Training' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
+                                <div key={`${item.type}-${item.id}`} className="gantt-row">
+                                    <div className="gantt-row__label" title={item.name}>
+                                        <span className={`gantt-row__marker ${item.type === 'Training' ? 'gantt-row__marker--training' : 'gantt-row__marker--subproject'}`}></span>
                                         {item.name}
                                     </div>
-                                    <div className="flex-1 h-full relative">
+                                    <div className="gantt-row__track">
                                          {plannedBar}
                                          {actualBar}
                                     </div>
@@ -254,7 +254,7 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
                              if(!s || !e) return true;
                              return (s > chartEndDate || e < chartStartDate);
                          }) && (
-                             <div className="text-center py-8 text-gray-400 italic">
+                             <div className="detail-empty">
                                  No activities scheduled for {zoomedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}.
                              </div>
                          )}
@@ -262,26 +262,26 @@ const GanttChart: React.FC<GanttChartProps> = ({ items, systemSettings }) => {
                 </div>
             </div>
             {/* Legend */}
-            <div className="flex items-center justify-end space-x-4 text-xs text-gray-600 dark:text-gray-400 flex-wrap gap-y-2">
-                {!zoomedMonth && <span className="mr-auto italic text-gray-400">* Click on a month label to expand details.</span>}
-                <div className="flex items-center">
-                    <span className="h-3 w-3 rounded-sm bg-blue-300 dark:bg-blue-700 mr-2"></span>
+            <div className="gantt-legend">
+                {!zoomedMonth && <span className="gantt-legend__hint">* Click on a month label to expand details.</span>}
+                <div className="gantt-legend__item">
+                    <span className="gantt-legend__swatch gantt-legend__swatch--subproject"></span>
                     <span>Subproject</span>
                 </div>
-                <div className="flex items-center">
-                    <span className="h-3 w-3 rounded-sm bg-green-300 dark:bg-green-700 mr-2"></span>
+                <div className="gantt-legend__item">
+                    <span className="gantt-legend__swatch gantt-legend__swatch--training"></span>
                     <span>Training</span>
                 </div>
-                <div className="flex items-center">
-                    <span className="h-3 w-3 rounded-sm bg-green-500 dark:bg-green-400 mr-2"></span>
+                <div className="gantt-legend__item">
+                    <span className="gantt-legend__swatch gantt-legend__swatch--actual"></span>
                     <span>Actual Duration</span>
                 </div>
-                <div className="flex items-center">
-                    <span className="h-4 w-0.5 border-l-2 border-dashed border-red-500 mr-2"></span>
+                <div className="gantt-legend__item">
+                    <span className="gantt-legend__swatch gantt-legend__swatch--deadline"></span>
                     <span>Deadline</span>
                 </div>
-                <div className="flex items-center">
-                    <span className="h-3 w-3 rounded-sm bg-gray-300 dark:bg-gray-500 opacity-50 mr-2"></span>
+                <div className="gantt-legend__item">
+                    <span className="gantt-legend__swatch gantt-legend__swatch--planning"></span>
                     <span>Planning Schedule</span>
                 </div>
             </div>

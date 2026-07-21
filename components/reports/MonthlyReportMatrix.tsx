@@ -522,7 +522,7 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
         const indent = level === 0 ? '' : level === 1 ? 'pl-6' : 'pl-10';
         return (
             <tr key={idx} className="monthly-matrix__row">
-                <td className={`${textCellClass} ${indent} font-medium`}>{item.indicator}</td>
+                <td className={`${textCellClass} ${indent} monthly-report-matrix__label`}>{item.indicator}</td>
                 <td className={`${dataCellClass} text-center`}></td>
                 <td className={`${dataCellClass} text-center`}>{item.unit}</td>
                 
@@ -665,7 +665,7 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
                         <tbody>
                             {financialHistoryData.map((row) => (
                                 <tr key={row.key} className="monthly-matrix__row">
-                                    <td className={`${textCellClass} font-bold`}>{row.label}</td>
+                                    <td className={`${textCellClass} monthly-report-matrix__label monthly-report-matrix__label--total`}>{row.label}</td>
                                     <td className={dataCellClass}>{formatCurrencyWhole(row.alloc)}</td>
                                     <td className={dataCellClass}>{formatCurrencyWhole(row.obli)}</td>
                                     <td className={dataCellClass}>{formatCurrencyWhole(row.disb)}</td>

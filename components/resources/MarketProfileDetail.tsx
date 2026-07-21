@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { MarketingPartner, IPO } from '../../constants';
 import { usePagination, useUserAccess } from '../mainfunctions/TableHooks';
 import { calculateMarketLinkageSales, formatMarketQuantityTotals, summarizeMarketPartnerSales } from '../../lib/marketSalesAggregation';
+import { DataTablePagination } from '../ui/enterprise';
 
 interface MarketProfileDetailProps {
     partner: MarketingPartner;
@@ -23,9 +24,11 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
     // Filter and Sort IPOs by Region Proximity (Potential)
     const potentialIpos = useMemo(() => {
         if (!partner.commodityNeeds) return [];
-        const needsNames = partner.commodityNeeds.map(c => c.name.toLowerCase());
+        const needsNames = partner.commodityNeeds
+            .map(commodity => commodity?.name?.trim().toLowerCase())
+            .filter((name): name is string => Boolean(name));
         const filtered = ipos.filter(ipo => 
-            ipo.commodities.some(c => needsNames.includes(c.particular.toLowerCase()))
+            (ipo.commodities || []).some(commodity => needsNames.includes((commodity.particular || '').trim().toLowerCase()))
         );
         const partnerRegion = partner.region;
         return filtered.sort((a, b) => {
@@ -51,9 +54,9 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
     );
 
     const DetailBlock = ({ label, value }: { label: string, value: any }) => (
-        <div>
-            <dt className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</dt>
-            <dd className="text-md font-semibold text-gray-800 dark:text-white mt-0.5">{value || 'N/A'}</dd>
+        <div className="detail-item">
+            <dt className="detail-label">{label}</dt>
+            <dd className="detail-value">{value || 'N/A'}</dd>
         </div>
     );
 
@@ -72,42 +75,15 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
         onItemsPerPageChange: (value: number) => void;
         totalItems: number;
     }) => (
-        <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-3 text-xs">
-            <div className="flex items-center gap-2">
-                <span className="text-gray-600 dark:text-gray-400">Show</span>
-                <select
-                    value={itemsPerPage}
-                    onChange={(event) => onItemsPerPageChange(Number(event.target.value))}
-                    className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-sm py-1 px-2 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 text-gray-700 dark:text-gray-200"
-                >
-                    {[5, 10, 20].map(size => <option key={size} value={size}>{size}</option>)}
-                </select>
-                <span className="text-gray-600 dark:text-gray-400">entries</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:gap-4 sm:text-left">
-                <span className="text-gray-600 dark:text-gray-400">
-                    {totalItems === 0 ? 'No entries' : `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(currentPage * itemsPerPage, totalItems)} of ${totalItems}`}
-                </span>
-                <div className="flex gap-1">
-                    <button
-                        type="button"
-                        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                        disabled={currentPage === 1}
-                        className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50"
-                    >
-                        Prev
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                        disabled={currentPage === totalPages || totalPages === 0}
-                        className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50"
-                    >
-                        Next
-                    </button>
-                </div>
-            </div>
-        </div>
+        <DataTablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+            onPageChange={onPageChange}
+            onItemsPerPageChange={onItemsPerPageChange}
+            pageSizeOptions={[5, 10, 20]}
+        />
     );
 
     const marketingLinkageItems = useMemo(() => (
@@ -117,15 +93,15 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
     const matchedIpoPagination = usePagination(potentialIpos, [partner.id, potentialIpos.length]);
 
     return (
-        <div className="space-y-8 animate-fadeIn">
-            <header className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <button onClick={onBack} className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 transition-colors">
+        <div className="detail-page animate-fadeIn">
+            <header className="detail-header">
+                <div className="detail-heading">
+                    <button onClick={onBack} className="btn btn-secondary btn-icon" aria-label="Back to marketing partners">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     </button>
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">{partner.companyName}</h1>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Marketing Partner Profile | {partner.uid}</p>
+                        <h1 className="detail-title">{partner.companyName}</h1>
+                        <p className="detail-meta">Marketing Partner Profile | {partner.uid}</p>
                     </div>
                 </div>
             </header>
@@ -133,11 +109,11 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
                     {/* General Information Section */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+                    <div className="detail-card">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white">General Information</h3>
+                            <h3 className="detail-card-title">General Information</h3>
                             {canEdit && (
-                                <button onClick={onEditDetails} className="text-sm text-emerald-600 hover:underline flex items-center gap-1">
+                                <button onClick={onEditDetails} className="btn btn-link">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                     Edit Details
                                 </button>
@@ -145,12 +121,12 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
-                            <DetailBlock label="Buyer Type" value={<span className={`px-2 py-0.5 rounded-full font-bold text-xs ${partner.buyerType === 'Government' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>{partner.buyerType || 'Private'}</span>} />
+                            <DetailBlock label="Buyer Type" value={<span className={`status-badge status-badge--compact ${partner.buyerType === 'Government' ? 'status-badge--info' : 'status-badge--neutral'}`}>{partner.buyerType || 'Private'}</span>} />
                             <DetailBlock label="Owner / Principal" value={partner.ownerName} />
                             <DetailBlock label="Payment Methods" value={
                                 <div className="flex flex-wrap gap-1 mt-1">
-                                    {partner.paymentMethods?.map(m => <span key={m} className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-[10px] font-bold uppercase">{m}</span>)}
-                                    {(!partner.paymentMethods || partner.paymentMethods.length === 0) && <span className="text-gray-400 italic text-xs">Unspecified</span>}
+                                    {partner.paymentMethods?.map(m => <span key={m} className="status-badge status-badge--neutral status-badge--compact">{m}</span>)}
+                                    {(!partner.paymentMethods || partner.paymentMethods.length === 0) && <span className="detail-empty detail-empty--compact">Unspecified</span>}
                                 </div>
                             } />
                             <DetailBlock label="Contact Number" value={partner.contactNumber} />
@@ -159,32 +135,32 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                             <div className="md:col-span-2"><DetailBlock label="Location" value={partner.location} /></div>
                             
                             <div className="md:col-span-2">
-                                <dt className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Commodity Needs</dt>
+                                <dt className="detail-label">Commodity Needs</dt>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {partner.commodityNeeds?.map((c, i) => {
                                         const totalVolume = MONTHS.reduce((sum, m) => sum + (Number((c as any)[`volume${m}`]) || 0), 0);
                                         return (
-                                            <div key={i} className="p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm space-y-3">
+                                            <div key={i} className="market-need-card">
                                                 <div className="flex justify-between items-start">
-                                                    <h4 className="font-bold text-gray-800 dark:text-white">{c.name}</h4>
-                                                    <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold uppercase">{c.sourceProvince || 'Any Source'}</span>
+                                                    <h4 className="market-need-card__title">{c.name}</h4>
+                                                    <span className="status-badge status-badge--approved status-badge--compact">{c.sourceProvince || 'Any Source'}</span>
                                                 </div>
                                                 <div>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Quality Standard</p>
-                                                    <p className="text-xs text-gray-700 dark:text-gray-300 italic">"{c.qualityStandard || 'None specified.'}"</p>
+                                                    <p className="market-need-card__label">Quality Standard</p>
+                                                    <p className="market-need-card__copy">"{c.qualityStandard || 'None specified.'}"</p>
                                                 </div>
                                                 <div>
-                                                    <p className="text-[10px] font-bold text-gray-400 uppercase flex justify-between">
+                                                    <p className="market-need-card__label market-need-card__label--spread">
                                                         Monthly Volumes
-                                                        <span className="text-emerald-600">Total: {totalVolume.toLocaleString()} Kg/Yr</span>
+                                                        <span className="market-need-card__total">Total: {totalVolume.toLocaleString()} Kg/Yr</span>
                                                     </p>
                                                     <div className="grid grid-cols-6 gap-1 mt-1">
                                                         {MONTHS.map(m => {
                                                             const val = (c as any)[`volume${m}`] || 0;
                                                             return (
-                                                                <div key={m} className="flex flex-col items-center bg-white dark:bg-gray-800 p-0.5 rounded border border-gray-100 dark:border-gray-700">
-                                                                    <span className="text-[8px] text-gray-400 uppercase">{m}</span>
-                                                                    <span className={`text-[9px] font-bold ${val > 0 ? 'text-emerald-600' : 'text-gray-300'}`}>{val > 0 ? val.toLocaleString() : '-'}</span>
+                                                                <div key={m} className="market-month-cell">
+                                                                    <span className="market-month-cell__label">{m}</span>
+                                                                    <span className={`market-month-cell__value ${val > 0 ? 'has-value' : ''}`}>{val > 0 ? val.toLocaleString() : '-'}</span>
                                                                 </div>
                                                             );
                                                         })}
@@ -194,23 +170,23 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                                         );
                                     })}
                                     {(!partner.commodityNeeds || partner.commodityNeeds.length === 0) && (
-                                        <p className="col-span-2 text-center py-4 text-gray-400 italic text-sm">No commodity requirements listed.</p>
+                                        <p className="detail-empty">No commodity requirements listed.</p>
                                     )}
                                 </div>
                             </div>
 
                             <div className="md:col-span-2">
-                                <DetailBlock label="Remarks" value={<p className="italic text-gray-600 dark:text-gray-400">{partner.remarks || 'No additional remarks.'}</p>} />
+                                <DetailBlock label="Remarks" value={<p className="detail-note">{partner.remarks || 'No additional remarks.'}</p>} />
                             </div>
                         </div>
                     </div>
 
                     {/* Established Linkages Section */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+                    <div className="detail-card">
                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white">Marketing Linkages</h3>
+                            <h3 className="detail-card-title">Marketing Linkages</h3>
                             {canEdit && (
-                                <button onClick={onAddLinkage} className="text-sm text-emerald-600 hover:underline flex items-center gap-1">
+                                <button onClick={onAddLinkage} className="btn btn-link">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                                     Add Market Linkage
                                 </button>
@@ -219,17 +195,17 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
 
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Linked IPOs</p>
-                                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">{formatNumber(marketSalesSummary.linkedIpoCount)}</p>
+                                <div className="detail-metric">
+                                    <p className="detail-metric-label">Linked IPOs</p>
+                                    <p className="detail-metric-value">{formatNumber(marketSalesSummary.linkedIpoCount)}</p>
                                 </div>
-                                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Total Quantity Sold</p>
-                                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">{formatMarketQuantityTotals(marketSalesSummary.totalQuantityByUnit)}</p>
+                                <div className="detail-metric">
+                                    <p className="detail-metric-label">Total Quantity Sold</p>
+                                    <p className="detail-metric-value">{formatMarketQuantityTotals(marketSalesSummary.totalQuantityByUnit)}</p>
                                 </div>
-                                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Total Sales from Market Linkage</p>
-                                    <p className="text-xl font-bold text-gray-800 dark:text-white mt-1">{formatCurrency(marketSalesSummary.totalSales)}</p>
+                                <div className="detail-metric">
+                                    <p className="detail-metric-label">Total Sales from Market Linkage</p>
+                                    <p className="detail-metric-value">{formatCurrency(marketSalesSummary.totalSales)}</p>
                                 </div>
                             </div>
                             {marketingLinkageItems.length > 0 ? (
@@ -241,30 +217,30 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                                             type="button"
                                             key={link.id ?? index}
                                             onClick={() => onSelectLinkage(link.id ?? index)}
-                                            className="w-full p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm space-y-3 text-left transition-all hover:border-emerald-300 hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            className="market-link-card"
                                             title={`Open market linkage details for ${link.ipoName}`}
                                         >
                                             <div className="flex justify-between items-start">
-                                                <h4 className="font-bold text-emerald-600 dark:text-emerald-400">{link.ipoName}</h4>
-                                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${link.negotiationStatus === 'Contract Signed' ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                <h4 className="market-link-card__title">{link.ipoName}</h4>
+                                                <span className={`status-badge status-badge--compact ${link.negotiationStatus === 'Contract Signed' ? 'status-badge--approved' : 'status-badge--pending'}`}>
                                                     {link.negotiationStatus}
                                                 </span>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Commodity Sold</p><p className={`font-medium ${link.commodityName ? 'text-gray-700 dark:text-gray-200' : 'text-amber-600 dark:text-amber-300'}`}>{getLinkageCommodityLabel(link)}</p></div>
-                                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Qty Agreement</p><p className="font-medium text-gray-700 dark:text-gray-200">{formatNumber(linkSales.quantity)} {linkSales.unitOfMeasure} ({link.agreedQuantityTimeframe})</p></div>
-                                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Agreed Price</p><p className="font-medium text-gray-700 dark:text-gray-200">{formatCurrency(linkSales.pricePerUnit)}/{linkSales.unitOfMeasure}</p></div>
-                                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Sales Value</p><p className="font-medium text-gray-700 dark:text-gray-200">{formatCurrency(linkSales.salesValue)}</p></div>
-                                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Agreement Type</p><p className="font-medium text-gray-700 dark:text-gray-200">{link.agreementType}</p></div>
-                                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Effective Date</p><p className="font-medium text-gray-700 dark:text-gray-200">{link.agreementDate ? new Date(link.agreementDate).toLocaleDateString() : 'N/A'}</p></div>
+                                            <div className="market-link-card__grid">
+                                                <div><p className="market-link-card__label">Commodity Sold</p><p className={link.commodityName ? 'market-link-card__value' : 'market-link-card__value is-missing'}>{getLinkageCommodityLabel(link)}</p></div>
+                                                <div><p className="market-link-card__label">Qty Agreement</p><p className="market-link-card__value">{formatNumber(linkSales.quantity)} {linkSales.unitOfMeasure} ({link.agreedQuantityTimeframe})</p></div>
+                                                <div><p className="market-link-card__label">Agreed Price</p><p className="market-link-card__value">{formatCurrency(linkSales.pricePerUnit)}/{linkSales.unitOfMeasure}</p></div>
+                                                <div><p className="market-link-card__label">Sales Value</p><p className="market-link-card__value">{formatCurrency(linkSales.salesValue)}</p></div>
+                                                <div><p className="market-link-card__label">Agreement Type</p><p className="market-link-card__value">{link.agreementType}</p></div>
+                                                <div><p className="market-link-card__label">Effective Date</p><p className="market-link-card__value">{link.agreementDate ? new Date(link.agreementDate).toLocaleDateString() : 'N/A'}</p></div>
                                             </div>
                                             {link.testBuyConducted && (
-                                                <div className="pt-2 border-t dark:border-gray-600">
-                                                    <p className="text-[10px] text-emerald-600 uppercase font-bold mb-1">Test Buy Completed</p>
-                                                    <p className="text-xs text-gray-500 italic">"{link.testBuyFeedback || 'No feedback provided.'}"</p>
+                                                <div className="market-link-card__note">
+                                                    <p className="market-link-card__label">Test Buy Completed</p>
+                                                    <p className="market-link-card__copy">"{link.testBuyFeedback || 'No feedback provided.'}"</p>
                                                 </div>
                                             )}
-                                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Open details</p>
+                                            <p className="table-link">Open details</p>
                                         </button>
                                         );
                                     })}
@@ -280,8 +256,8 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-center py-10 bg-gray-50 dark:bg-gray-700/20 rounded-xl border-2 border-dashed dark:border-gray-700">
-                                    <p className="text-sm text-gray-400 italic">No marketing linkages established yet.</p>
+                                <div className="detail-empty">
+                                    <p>No marketing linkages established yet.</p>
                                 </div>
                             )}
                         </div>
@@ -290,13 +266,12 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
 
                 <div className="space-y-8">
                     {/* Potential Partners Section (Matched IPOs) */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+                    <div className="detail-card">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                <span className="w-1.5 h-6 bg-teal-500 rounded-full"></span>
+                            <h3 className="detail-card-title">
                                 Matched IPO Producers
                             </h3>
-                            <span className="px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 text-xs font-bold">{potentialIpos.length} Matches</span>
+                            <span className="status-badge status-badge--info status-badge--compact">{potentialIpos.length} Matches</span>
                         </div>
                         <div className="space-y-3">
                             {matchedIpoPagination.paginatedData.map(ipo => {
@@ -305,16 +280,16 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                                 );
                                 const isSameRegion = ipo.region === partner.region;
                                 return (
-                                    <div key={ipo.id} className={`p-4 bg-gray-50 dark:bg-gray-700/30 border border-gray-100 dark:border-gray-700 rounded-lg group hover:border-teal-400 transition-colors ${isSameRegion ? 'ring-2 ring-emerald-100 dark:ring-emerald-900/30' : ''}`}>
+                                    <div key={ipo.id} className={`market-match-card ${isSameRegion ? 'is-nearby' : ''}`}>
                                         <div className="flex justify-between items-start mb-1">
-                                            <h4 className="font-bold text-gray-800 dark:text-white group-hover:text-teal-600 transition-colors">{ipo.name}</h4>
-                                            {isSameRegion && <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-bold uppercase">Nearby</span>}
+                                            <h4 className="market-match-card__title">{ipo.name}</h4>
+                                            {isSameRegion && <span className="status-badge status-badge--approved status-badge--compact">Nearby</span>}
                                         </div>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">{ipo.region}</p>
+                                        <p className="market-match-card__meta">{ipo.region}</p>
                                         <div className="mt-3 space-y-1">
                                             <div className="flex flex-wrap gap-1">
                                                 {matchingComms.map((mc, idx) => (
-                                                    <span key={idx} className="text-[10px] bg-white dark:bg-gray-800 px-2 py-0.5 rounded border border-teal-200 dark:border-teal-800 text-teal-600 font-bold">{mc.particular}</span>
+                                                    <span key={idx} className="data-table-tag">{mc.particular}</span>
                                                 ))}
                                             </div>
                                         </div>
@@ -334,23 +309,23 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
                         </div>
                     </div>
 
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Partner History</h3>
+                    <div className="detail-card">
+                        <h3 className="detail-card-title">Partner History</h3>
                         {partner.history && partner.history.length > 0 ? (
-                            <div className="relative border-l-2 border-gray-200 dark:border-gray-700 ml-2 py-2">
-                                <ul className="space-y-6">
+                            <div className="detail-timeline">
+                                <ul className="detail-timeline__list">
                                     {partner.history.map((entry, index) => (
-                                        <li key={index} className="ml-6 relative">
-                                            <span className="absolute flex items-center justify-center w-3 h-3 bg-emerald-500 rounded-full -left-[31px] ring-4 ring-white dark:ring-gray-800"></span>
-                                            <time className="mb-1 text-[10px] font-bold uppercase text-gray-400 dark:text-gray-500">{new Date(entry.date).toLocaleDateString()}</time>
-                                            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{entry.event}</p>
-                                            <p className="text-[10px] text-gray-500 dark:text-gray-400">by {entry.user}</p>
+                                        <li key={index} className="detail-timeline__item">
+                                            <span className="detail-timeline__marker"></span>
+                                            <time className="detail-timeline__time">{new Date(entry.date).toLocaleDateString()}</time>
+                                            <p className="detail-list-name">{entry.event}</p>
+                                            <p className="detail-timeline__byline">by {entry.user}</p>
                                         </li>
                                     ))}
                                 </ul>
                             </div>
                         ) : (
-                            <p className="text-sm text-gray-400 italic">No history available.</p>
+                            <p className="detail-empty">No history available.</p>
                         )}
                     </div>
                 </div>

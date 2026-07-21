@@ -19,7 +19,6 @@ import {
 } from '../../lib/financialAggregation';
 import { generateFinancialPowerPoint } from '../../lib/financialPowerPoint';
 import { parseLocation } from '../LocationPicker';
-import '../../styles/financial-dashboard.css';
 
 declare const PptxGenJS: any;
 

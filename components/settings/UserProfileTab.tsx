@@ -3,16 +3,18 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { User } from '../../constants';
 import { supabase } from '../../supabaseClient';
-import { User as UserIcon, ShieldCheck, Mail, Key, Eye, EyeOff, Save, Moon, Sun } from 'lucide-react';
+import { User as UserIcon, ShieldCheck, Mail, Key, Eye, EyeOff, Save, Monitor, Moon, Sun } from 'lucide-react';
+import { ThemePreference } from '../../lib/theme';
 
 interface UserProfileTabProps {
     isDarkMode: boolean;
-    toggleDarkMode: () => void;
+    themePreference: ThemePreference;
+    onThemePreferenceChange: (preference: ThemePreference) => void;
 }
 
-const commonInputClasses = "mt-1 block w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all sm:text-sm";
+const commonInputClasses = "form-control";
 
-const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, toggleDarkMode }) => {
+const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, themePreference, onThemePreferenceChange }) => {
     const { currentUser, setUsersList, login } = useAuth();
     const [profileData, setProfileData] = useState<User | null>(null);
     const [showPassword, setShowPassword] = useState(false);
@@ -69,53 +71,53 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, toggleDarkM
     if (!profileData) return null;
 
     return (
-        <div className="max-w-4xl space-y-8 pb-12">
-            <div className="flex flex-col md:flex-row gap-8 items-start">
+        <div className="profile-settings">
+            <div className="profile-settings__layout">
                 {/* Left Column: Personal Info */}
-                <div className="flex-1 space-y-6">
-                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-600">
+                <div className="profile-settings__main">
+                    <section className="content-card profile-settings__card">
+                        <div className="profile-settings__heading">
+                            <div className="profile-settings__icon">
                                 <UserIcon className="h-5 w-5" />
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Personal Identity</h3>
+                            <h3>Personal identity</h3>
                         </div>
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Full Name</label>
+                                <label className="form-label">Full name</label>
                                 <input type="text" name="fullName" value={profileData.fullName} onChange={handleProfileChange} className={commonInputClasses} placeholder="Your display name" />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Username</label>
-                                <div className="relative">
-                                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">@</span>
+                                <label className="form-label">Username</label>
+                                <div className="profile-settings__input-wrap">
+                                    <span className="profile-settings__input-adornment">@</span>
                                     <input type="text" name="username" value={profileData.username || ''} onChange={handleProfileChange} className={`${commonInputClasses} pl-8`} />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Email Address</label>
-                                <div className="relative">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <label className="form-label">Email address</label>
+                                <div className="profile-settings__input-wrap">
+                                    <Mail className="profile-settings__input-adornment profile-settings__input-adornment--icon" />
                                     <input type="email" name="email" value={profileData.email} onChange={handleProfileChange} className={`${commonInputClasses} pl-10`} />
                                 </div>
                             </div>
                         </div>
                     </section>
 
-                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-600 dark:text-emerald-400">
+                    <section className="content-card profile-settings__card">
+                        <div className="profile-settings__heading">
+                            <div className="profile-settings__icon">
                                 <Key className="h-5 w-5" />
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Account Security</h3>
+                            <h3>Account security</h3>
                         </div>
                         
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Change your system password. Changes take effect immediately upon saving.</p>
+                        <p className="settings-copy">Change your system password. Changes take effect immediately upon saving.</p>
                         
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Update Password</label>
+                                <label className="form-label">Update password</label>
                                 <div className="relative">
                                     <input 
                                         type={showPassword ? "text" : "password"} 
@@ -128,7 +130,8 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, toggleDarkM
                                     <button 
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-600 transition-colors"
+                                        className="profile-settings__password-toggle"
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                                     >
                                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
@@ -139,49 +142,69 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, toggleDarkM
                 </div>
 
                 {/* Right Column: Roles & Appearance */}
-                <div className="w-full md:w-80 space-y-6">
-                    <section className="bg-gray-50 dark:bg-gray-800/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-3 mb-4">
-                            <ShieldCheck className="h-5 w-5 text-gray-400" />
-                            <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">Access Level</h3>
+                <aside className="profile-settings__aside">
+                    <section className="content-card profile-settings__card profile-settings__access">
+                        <div className="profile-settings__heading">
+                            <ShieldCheck className="profile-settings__access-icon" />
+                            <h3>Access level</h3>
                         </div>
                         <div className="space-y-3">
-                            <div className="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                                <p className="text-[10px] font-black text-gray-400 uppercase">System Role</p>
-                                <p className="text-sm font-bold text-emerald-600">{profileData.role}</p>
+                            <div className="profile-fact">
+                                <p className="profile-settings__eyebrow">System role</p>
+                                <p className="profile-fact__value profile-fact__value--role">{profileData.role}</p>
                             </div>
-                            <div className="p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                                <p className="text-[10px] font-black text-gray-400 uppercase">Operating Unit</p>
-                                <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{profileData.operatingUnit}</p>
+                            <div className="profile-fact">
+                                <p className="profile-settings__eyebrow">Operating unit</p>
+                                <p className="profile-fact__value">{profileData.operatingUnit}</p>
                             </div>
                         </div>
                     </section>
 
-                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Interface Preferences</h3>
-                        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-                            <div className="flex items-center gap-3">
-                                {isDarkMode ? <Moon className="h-4 w-4 text-emerald-600" /> : <Sun className="h-4 w-4 text-amber-500" />}
-                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Dark Interface</span>
+                    <section className="content-card profile-settings__card">
+                        <h3 className="profile-settings__section-title">Interface preferences</h3>
+                        <div className="theme-preference-card">
+                            <div className="theme-preference-card__status">
+                                {themePreference === 'system'
+                                    ? <Monitor aria-hidden="true" />
+                                    : isDarkMode
+                                        ? <Moon aria-hidden="true" />
+                                        : <Sun aria-hidden="true" />}
+                                <span>{themePreference === 'system' ? `System · ${isDarkMode ? 'Dark' : 'Light'}` : `${themePreference === 'dark' ? 'Dark' : 'Light'} theme`}</span>
                             </div>
-                            <button 
-                                onClick={toggleDarkMode}
-                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${isDarkMode ? 'bg-emerald-600' : 'bg-gray-200 dark:bg-gray-700'}`}
-                            >
-                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition duration-200 ${isDarkMode ? 'translate-x-4.5' : 'translate-x-1'}`} />
-                            </button>
+                            <div className="theme-preference-card__options" role="group" aria-label="Theme preference">
+                                {([
+                                    { value: 'light' as const, label: 'Light', icon: Sun },
+                                    { value: 'dark' as const, label: 'Dark', icon: Moon },
+                                    { value: 'system' as const, label: 'System', icon: Monitor },
+                                ]).map(option => {
+                                    const Icon = option.icon;
+                                    const active = themePreference === option.value;
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => onThemePreferenceChange(option.value)}
+                                            className={active ? 'is-active' : ''}
+                                            aria-pressed={active}
+                                        >
+                                            <Icon aria-hidden="true" />
+                                            {option.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </section>
                     
                     <button 
                         onClick={handleSaveProfile} 
                         disabled={saving}
-                        className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-white font-bold text-sm transition-all shadow-lg active:scale-95 ${saving ? 'bg-gray-400' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'}`}
+                        className="btn btn-primary btn-lg profile-settings__save"
                     >
                         <Save className="h-4 w-4" />
                         {saving ? 'Updating...' : 'Save All Changes'}
                     </button>
-                </div>
+                </aside>
             </div>
         </div>
     );

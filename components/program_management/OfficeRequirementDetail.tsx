@@ -40,7 +40,7 @@ const getStatusBadge = (status: OfficeRequirement['status']) => {
 const DetailItem: React.FC<{ label: string; value?: string | number | React.ReactNode }> = ({ label, value }) => (
     <div className="detail-item">
         <dt className="detail-label">{label}</dt>
-        <dd className="detail-value font-semibold">{value || 'N/A'}</dd>
+        <dd className="detail-value detail-value--emphasis">{value || 'N/A'}</dd>
     </div>
 );
 
@@ -290,7 +290,7 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
 
     const getInputClasses = (fieldName: string) => {
         const hasError = validationErrors.includes(fieldName);
-        return `${commonInputClasses} ${hasError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`;
+        return `${commonInputClasses} ${hasError ? 'form-control--invalid' : ''}`;
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -430,16 +430,16 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                 <div className="form-card">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {monthLockMessage && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800" role="status">
+                            <div className="notice notice--warning" role="status">
                                 {monthLockMessage}
                             </div>
                         )}
                         <fieldset className="form-fieldset">
                             <legend className="form-legend">Basic Information</legend>
                             <div className="form-grid">
-                                <div><label className="form-label">Operating Unit <span className="text-red-500">*</span></label><select name="operatingUnit" value={formData.operatingUnit} onChange={handleInputChange} className={getInputClasses('operatingUnit')} disabled><option value="">Select OU</option>{operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}</select></div>
+                                <div><label className="form-label">Operating Unit <span className="form-required">*</span></label><select name="operatingUnit" value={formData.operatingUnit} onChange={handleInputChange} className={getInputClasses('operatingUnit')} disabled><option value="">Select OU</option>{operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}</select></div>
                                 <div>
-                                    <label className="form-label">Status <span className="text-red-500">*</span></label>
+                                    <label className="form-label">Status <span className="form-required">*</span></label>
                                     <select name="status" value={formData.status} onChange={handleInputChange} className={getInputClasses('status')} disabled={formData.status === 'Completed'}>
                                         <option value="Proposed">Proposed</option>
                                         <option value="Ongoing">Ongoing</option>
@@ -448,9 +448,9 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                                     </select>
                                     {formData.status === 'Completed' && <p className="form-help">Status set to Completed automatically based on actual delivery date.</p>}
                                 </div>
-                                <div><label className="form-label">Equipment <span className="text-red-500">*</span></label><input type="text" name="equipment" value={formData.equipment} onChange={handleInputChange} required className={getInputClasses('equipment')} /></div>
+                                <div><label className="form-label">Equipment <span className="form-required">*</span></label><input type="text" name="equipment" value={formData.equipment} onChange={handleInputChange} required className={getInputClasses('equipment')} /></div>
                                 <div><label className="form-label">Specifications</label><input type="text" name="specs" value={formData.specs} onChange={handleInputChange} className={getInputClasses('specs')} /></div>
-                                <div className="form-field--full"><label className="form-label">Purpose <span className="text-red-500">*</span></label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} rows={2} className={getInputClasses('purpose')} /></div>
+                                <div className="form-field--full"><label className="form-label">Purpose <span className="form-required">*</span></label><textarea name="purpose" value={formData.purpose} onChange={handleInputChange} rows={2} className={getInputClasses('purpose')} /></div>
                             </div>
                         </fieldset>
 
@@ -458,16 +458,16 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                             <legend className="form-legend">Funding & Classification</legend>
                             <div className="space-y-4">
                                 <div className="form-grid">
-                                    <div><label className="form-label">Fund Year <span className="text-red-500">*</span></label><input type="number" name="fundYear" value={formData.fundYear} onChange={handleInputChange} className={getInputClasses('fundYear')} /></div>
-                                    <div><label className="form-label">Fund Type <span className="text-red-500">*</span></label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={getInputClasses('fundType')}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
-                                    <div><label className="form-label">Tier <span className="text-red-500">*</span></label><select name="tier" value={formData.tier} onChange={handleInputChange} className={getInputClasses('tier')}>{tiers.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                    <div><label className="form-label">Fund Year <span className="form-required">*</span></label><input type="number" name="fundYear" value={formData.fundYear} onChange={handleInputChange} className={getInputClasses('fundYear')} /></div>
+                                    <div><label className="form-label">Fund Type <span className="form-required">*</span></label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={getInputClasses('fundType')}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
+                                    <div><label className="form-label">Tier <span className="form-required">*</span></label><select name="tier" value={formData.tier} onChange={handleInputChange} className={getInputClasses('tier')}>{tiers.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                                 </div>
                                 
                                 <div className="program-form-grid program-form-grid--four">
-                                    <div><label className="form-label">Object Type <span className="text-red-500">*</span></label><select value={selectedObjectType} onChange={e => { setSelectedObjectType(e.target.value as ObjectType); setSelectedParticular(''); setFormData(prev => ({...prev, uacsCode: ''})); }} className={getInputClasses('objectType')}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                    <div><label className="form-label">Particular <span className="text-red-500">*</span></label><select value={selectedParticular} onChange={e => { setSelectedParticular(e.target.value); setFormData(prev => ({...prev, uacsCode: ''})); }} className={getInputClasses('particular')}><option value="">Select</option>{uacsCodes[selectedObjectType] && Object.keys(uacsCodes[selectedObjectType]).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                                    <div><label className="form-label">Object Type <span className="form-required">*</span></label><select value={selectedObjectType} onChange={e => { setSelectedObjectType(e.target.value as ObjectType); setSelectedParticular(''); setFormData(prev => ({...prev, uacsCode: ''})); }} className={getInputClasses('objectType')}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                    <div><label className="form-label">Particular <span className="form-required">*</span></label><select value={selectedParticular} onChange={e => { setSelectedParticular(e.target.value); setFormData(prev => ({...prev, uacsCode: ''})); }} className={getInputClasses('particular')}><option value="">Select</option>{uacsCodes[selectedObjectType] && Object.keys(uacsCodes[selectedObjectType]).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                                     <div>
-                                        <label className="form-label">UACS Code <span className="text-red-500">*</span></label>
+                                        <label className="form-label">UACS Code <span className="form-required">*</span></label>
                                         <div className="relative">
                                             <input 
                                                 type="text" 
@@ -479,7 +479,7 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                                                 className={getInputClasses('uacsCode')} 
                                             />
                                             <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                                                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                                <svg className="form-control-adornment__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                                             </div>
                                         </div>
                                         <datalist id="uacs-codes-list-detail">
@@ -506,7 +506,7 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                             <legend className="form-legend">Target Schedule & Cost</legend>
                             <div className="form-grid">
                                 <div>
-                                    <label className="form-label">Physical Delivery Month <span className="text-red-500">*</span></label>
+                                    <label className="form-label">Physical Delivery Month <span className="form-required">*</span></label>
                                     <MonthYearPicker 
                                         value={formData.physicalDeliveryDate}
                                         onChange={(val) => {
@@ -515,11 +515,11 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                                                 setValidationErrors(prev => prev.filter(f => f !== 'physicalDeliveryDate'));
                                             }
                                         }}
-                                        className={validationErrors.includes('physicalDeliveryDate') ? 'border-red-500 ring-red-500' : ''}
+                                        className={validationErrors.includes('physicalDeliveryDate') ? 'form-control--invalid' : ''}
                                     />
                                 </div>
                                 <div>
-                                    <label className="form-label">Target Obligation Month <span className="text-red-500">*</span></label>
+                                    <label className="form-label">Target Obligation Month <span className="form-required">*</span></label>
                                     <MonthYearPicker 
                                         value={formData.obligationDate}
                                         onChange={(val) => {
@@ -528,11 +528,11 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                                                 setValidationErrors(prev => prev.filter(f => f !== 'obligationDate'));
                                             }
                                         }}
-                                        className={validationErrors.includes('obligationDate') ? 'border-red-500 ring-red-500' : ''}
+                                        className={validationErrors.includes('obligationDate') ? 'form-control--invalid' : ''}
                                     />
                                 </div>
                                 <div>
-                                    <label className="form-label">Target Disbursement Month <span className="text-red-500">*</span></label>
+                                    <label className="form-label">Target Disbursement Month <span className="form-required">*</span></label>
                                     <MonthYearPicker 
                                         value={formData.disbursementDate}
                                         onChange={(val) => {
@@ -541,12 +541,12 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                                                 setValidationErrors(prev => prev.filter(f => f !== 'disbursementDate'));
                                             }
                                         }}
-                                        className={validationErrors.includes('disbursementDate') ? 'border-red-500 ring-red-500' : ''}
+                                        className={validationErrors.includes('disbursementDate') ? 'form-control--invalid' : ''}
                                     />
                                 </div>
                             
-                                <div><label className="form-label">Number of Units <span className="text-red-500">*</span></label><input type="number" name="numberOfUnits" value={formData.numberOfUnits} onChange={handleInputChange} min="0" className={getInputClasses('numberOfUnits')} /></div>
-                                <div><label className="form-label">Price per Unit <span className="text-red-500">*</span></label><input type="number" name="pricePerUnit" value={formData.pricePerUnit} onChange={handleInputChange} min="0" step="0.01" className={getInputClasses('pricePerUnit')} /></div>
+                                <div><label className="form-label">Number of Units <span className="form-required">*</span></label><input type="number" name="numberOfUnits" value={formData.numberOfUnits} onChange={handleInputChange} min="0" className={getInputClasses('numberOfUnits')} /></div>
+                                <div><label className="form-label">Price per Unit <span className="form-required">*</span></label><input type="number" name="pricePerUnit" value={formData.pricePerUnit} onChange={handleInputChange} min="0" step="0.01" className={getInputClasses('pricePerUnit')} /></div>
                                 <div><label className="form-label">Total Amount</label><input type="text" value={formatCurrency((Number(formData.numberOfUnits) || 0) * (Number(formData.pricePerUnit) || 0))} disabled className={`${commonInputClasses} form-control--readonly`} /></div>
                             </div>
                         </fieldset>

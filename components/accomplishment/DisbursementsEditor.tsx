@@ -50,7 +50,7 @@ export const DisbursementsEditor: React.FC<DisbursementsEditorProps> = ({ disbur
                                 onChange={(val) => handleUpdate(db.id, 'date', val)}
                                 placeholder="Month"
                                 defaultYear={defaultYear}
-                                className="h-8 text-xs w-full"
+                                className="form-control form-control--compact"
                                 disabled={readOnly}
                                 allowClear
                             />

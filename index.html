@@ -9,10 +9,12 @@
         (function () {
             var storageKey = '4kis-theme-preference';
             var theme = null;
+            var preference = 'system';
             try {
                 var savedTheme = window.localStorage.getItem(storageKey);
                 if (savedTheme === 'light' || savedTheme === 'dark') {
                     theme = savedTheme;
+                    preference = savedTheme;
                 }
             } catch (error) {}
 
@@ -22,19 +24,18 @@
 
             document.documentElement.classList.toggle('dark', theme === 'dark');
             document.documentElement.dataset.theme = theme;
+            document.documentElement.dataset.themePreference = preference;
             document.documentElement.style.colorScheme = theme;
         })();
     </script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <link rel="stylesheet" href="/styles/main.css">
     <link rel="icon" type="image/png" href="/assets/4klogo.png">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-    <link rel="stylesheet" href="/index.css">
 </head>
-<body class="bg-gray-100 dark:bg-gray-900">
+<body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>

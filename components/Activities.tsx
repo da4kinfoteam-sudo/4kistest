@@ -1,6 +1,6 @@
-
+﻿
 // Author: 4K
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Check, Download, FileSpreadsheet, Plus, Upload, X } from 'lucide-react';
 import { Activity, ActivityExpense, IPO, objectTypes, ObjectType, fundTypes, FundType, tiers, Tier, otherActivityComponents, ReferenceActivity, philippineRegions, operatingUnits, ouToRegionMap, filterYears } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,6 +14,7 @@ import useLocalStorageState from '../hooks/useLocalStorageState';
 import { useDcfPolicyGuard } from '../hooks/useDcfPolicyGuard';
 import type { DataScope } from '../lib/scopedDataFetch';
 import { DcfScopeFilterPanel, DcfScopeFilterToggle, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
+import { ConfirmDialog, DataTablePagination, FilterableTableHeader } from './ui/enterprise';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -45,12 +46,6 @@ const DuplicateIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
-const FilterIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-    </svg>
-);
-
 const commonInputClasses = "form-control";
 const DCF_SCOPE_COLUMN_KEYS = new Set(['fundingYear', 'operatingUnit', 'fundType', 'tier']);
 
@@ -63,137 +58,6 @@ const getStatusBadge = (status: Activity['status']) => {
         default: return 'status-badge status-badge--neutral';
     }
 }
-
-// --- COLUMN HEADER COMPONENT WITH FILTER ---
-interface ActivityColumnHeaderProps {
-    label: string;
-    columnKey: keyof Activity | 'budget';
-    sortConfig: { key: string; direction: 'ascending' | 'descending' } | null;
-    onSort: (key: any, direction: 'ascending' | 'descending') => void;
-    filters: string[];
-    onFilterChange: (values: string[]) => void;
-    uniqueValues: string[];
-    isNumeric?: boolean;
-}
-
-const ActivityColumnHeader: React.FC<ActivityColumnHeaderProps> = ({
-    label, columnKey, sortConfig, onSort, filters, onFilterChange, uniqueValues, isNumeric
-}) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const menuRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const filteredValues = uniqueValues.filter(v => v.toLowerCase().includes(searchTerm.toLowerCase()));
-    const isSorted = sortConfig?.key === columnKey;
-    const isFiltered = filters.length > 0;
-
-    const toggleFilter = (value: string) => {
-        if (filters.includes(value)) {
-            onFilterChange(filters.filter(f => f !== value));
-        } else {
-            onFilterChange([...filters, value]);
-        }
-    };
-
-    return (
-        <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 relative group select-none whitespace-nowrap">
-            <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsOpen(!isOpen)}>
-                <div className="flex items-center gap-1">
-                    {label}
-                    {isSorted && (
-                        <span className="text-emerald-600 dark:text-emerald-400">
-                            {sortConfig?.direction === 'ascending' ? '▲' : '▼'}
-                        </span>
-                    )}
-                </div>
-                <div className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${isFiltered ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/50' : 'text-gray-400 opacity-0 group-hover:opacity-100'}`}>
-                    <FilterIcon />
-                </div>
-            </div>
-
-            {isOpen && (
-                <div ref={menuRef} className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-md shadow-xl border border-gray-200 dark:border-gray-700 z-50 text-sm normal-case font-normal text-gray-700 dark:text-gray-200">
-                    <div className="p-2 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-1">
-                        <button
-                            onClick={() => { onSort(columnKey, 'ascending'); setIsOpen(false); }}
-                            className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
-                        >
-                            <span>▲</span> Sort Ascending
-                        </button>
-                        <button
-                            onClick={() => { onSort(columnKey, 'descending'); setIsOpen(false); }}
-                            className="w-full text-left px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-2"
-                        >
-                            <span>▼</span> Sort Descending
-                        </button>
-                    </div>
-
-                    {!isNumeric && (
-                        <>
-                            <div className="p-2">
-                                <input
-                                    type="text"
-                                    placeholder={`Search ${label}...`}
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    autoFocus
-                                />
-                            </div>
-                            <div className="max-h-48 overflow-y-auto px-2 pb-2 custom-scrollbar">
-                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={filters.length === 0}
-                                        onChange={() => onFilterChange([])}
-                                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                                    />
-                                    <span className="truncate italic text-gray-500">(Select All)</span>
-                                </label>
-                                {filteredValues.map(val => (
-                                    <label key={val} className="flex items-center gap-2 px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={filters.includes(val)}
-                                            onChange={() => toggleFilter(val)}
-                                            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                                        />
-                                        <span className="truncate" title={val}>{val}</span>
-                                    </label>
-                                ))}
-                            </div>
-                            <div className="p-2 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-                                <button
-                                    onClick={() => onFilterChange([])}
-                                    className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline"
-                                >
-                                    Clear
-                                </button>
-                                <button
-                                    onClick={() => setIsOpen(false)}
-                                    className="text-xs px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
-                                >
-                                    Done
-                                </button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
-        </th>
-    );
-};
-
 
 export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
     ipos, activities, setActivities, onSelectIpo, onSelectActivity,
@@ -674,32 +538,23 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
     return (
         <div className="data-list-page">
             {isDeleteModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
-                        <h3 className="text-lg font-bold">Confirm Deletion</h3>
-                        <p className="my-4">Are you sure you want to delete this activity?</p>
-                        <div className="flex justify-end gap-4">
-                            <button onClick={() => setIsDeleteModalOpen(false)} className="px-4 py-2 rounded-md text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Cancel</button>
-                            <button onClick={confirmDelete} className="btn btn-danger">Delete</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm deletion"
+                    description="Are you sure you want to delete this activity?"
+                    confirmLabel="Delete"
+                    onCancel={() => setIsDeleteModalOpen(false)}
+                    onConfirm={confirmDelete}
+                />
             )}
 
             {isMultiDeleteModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
-                        <h3 className="text-lg font-bold text-red-600 dark:text-red-400">Confirm Bulk Deletion</h3>
-                        <p className="my-4 text-gray-700 dark:text-gray-300">
-                            Are you sure you want to delete the <strong>{selectedIds.length}</strong> selected activities?
-                            This action cannot be undone.
-                        </p>
-                        <div className="flex justify-end gap-4">
-                            <button onClick={() => setIsMultiDeleteModalOpen(false)} className="px-4 py-2 rounded-md text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Cancel</button>
-                            <button onClick={confirmMultiDelete} className="btn btn-danger">Delete All Selected</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm bulk deletion"
+                    description={<>Are you sure you want to delete the <strong>{selectedIds.length}</strong> selected activities? This action cannot be undone.</>}
+                    confirmLabel="Delete all selected"
+                    onCancel={() => setIsMultiDeleteModalOpen(false)}
+                    onConfirm={confirmMultiDelete}
+                />
             )}
 
             <div className="data-list-header">
@@ -731,7 +586,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                             />
 
                             {Object.keys(columnFilters).length > 0 && (
-                                <button onClick={clearColumnFilters} className="text-sm text-red-500 hover:text-red-700 underline">
+                                <button onClick={clearColumnFilters} className="data-table-reset">
                                     Reset Filters
                                 </button>
                             )}
@@ -781,12 +636,12 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                      </div>
                  </div>
 
-                <div className="data-table-scroll overflow-x-visible pb-24">
-                    <table className="data-table min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead className="bg-gray-50 dark:bg-gray-700">
+                <div className="data-table-scroll">
+                    <table className="data-table">
+                        <thead>
                             <tr>
-                                <th scope="col" className="w-12 px-4 py-3 sticky left-0 bg-gray-50 dark:bg-gray-700 z-10"></th>
-                                <ActivityColumnHeader
+                                <th scope="col" className="data-table__sticky-left" aria-label="Expand row"></th>
+                                <FilterableTableHeader
                                     label="Name"
                                     columnKey="name"
                                     sortConfig={sortConfig}
@@ -795,7 +650,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('name', v)}
                                     uniqueValues={uniqueValues.name}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="OU"
                                     columnKey="operatingUnit"
                                     sortConfig={sortConfig}
@@ -804,7 +659,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('operatingUnit', v)}
                                     uniqueValues={uniqueValues.operatingUnit}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Component"
                                     columnKey="component"
                                     sortConfig={sortConfig}
@@ -813,7 +668,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('component', v)}
                                     uniqueValues={uniqueValues.component}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Fund Year"
                                     columnKey="fundingYear"
                                     sortConfig={sortConfig}
@@ -822,7 +677,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('fundingYear', v)}
                                     uniqueValues={uniqueValues.fundingYear}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Fund Type"
                                     columnKey="fundType"
                                     sortConfig={sortConfig}
@@ -831,7 +686,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('fundType', v)}
                                     uniqueValues={uniqueValues.fundType}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Tier"
                                     columnKey="tier"
                                     sortConfig={sortConfig}
@@ -840,7 +695,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('tier', v)}
                                     uniqueValues={uniqueValues.tier}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Project Status"
                                     columnKey="status"
                                     sortConfig={sortConfig}
@@ -849,7 +704,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('status', v)}
                                     uniqueValues={uniqueValues.status}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Date"
                                     columnKey="date"
                                     sortConfig={sortConfig}
@@ -858,7 +713,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('date', v)}
                                     uniqueValues={uniqueValues.date}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Description"
                                     columnKey="description"
                                     sortConfig={sortConfig}
@@ -867,7 +722,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     onFilterChange={(v) => handleColumnFilterChange('description', v)}
                                     uniqueValues={uniqueValues.description}
                                 />
-                                <ActivityColumnHeader
+                                <FilterableTableHeader
                                     label="Budget"
                                     columnKey="budget"
                                     sortConfig={sortConfig}
@@ -877,16 +732,16 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     uniqueValues={[]}
                                     isNumeric={true}
                                 />
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">Workflow Status</th>
-                                <th scope="col" className="px-6 py-3 text-right text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider sticky right-0 bg-gray-50 dark:bg-gray-700 z-10">
+                                <th scope="col">Workflow Status</th>
+                                <th scope="col" className="data-table__head--actions data-table__sticky-right">
                                     {isSelectionMode ? (
-                                        <div className="flex items-center justify-end gap-2">
-                                            <span className="text-xs">Select All</span>
+                                        <div className="data-table__select-all">
+                                            <span>Select all</span>
                                             <input
                                                 type="checkbox"
                                                 onChange={(e) => handleSelectAll(e, paginatedActivities)}
                                                 checked={paginatedActivities.length > 0 && paginatedActivities.every(a => selectedIds.includes(a.id))}
-                                                className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                className="form-checkbox"
                                             />
                                         </div>
                                     ) : (
@@ -895,34 +750,34 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        <tbody>
                             {paginatedActivities.map((activity) => {
                                 const totalActivityBudget = activity.expenses.reduce((sum, e) => sum + e.amount, 0);
                                 const totalParticipants = activity.participantsMale + activity.participantsFemale;
 
                                 return (
                                 <React.Fragment key={activity.id}>
-                                    <tr onClick={() => handleToggleRow(activity.id)} className="cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/10">
-                                        <td className="px-4 py-4 text-gray-400 sticky left-0 bg-white dark:bg-gray-800 z-10"><svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform duration-200 ${expandedRowId === activity.id ? 'transform rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></td>
-                                        <td className="px-6 py-4 whitespace-normal text-sm font-medium text-gray-900 dark:text-white">
+                                    <tr onClick={() => handleToggleRow(activity.id)} className="data-table__row--interactive">
+                                        <td className="data-table__sticky-left data-table__cell--soft"><svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform duration-200 ${expandedRowId === activity.id ? 'transform rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></td>
+                                        <td className="data-table__cell--primary data-table__cell--wrap">
                                             <button onClick={(e) => { e.stopPropagation(); onSelectActivity(activity); }} className="table-link">
                                                 {activity.name}
                                             </button>
-                                            {activity.uid && <div className="text-xs text-gray-400 font-normal mt-1">{activity.uid}</div>}
+                                            {activity.uid && <span className="data-table__subline">{activity.uid}</span>}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{activity.operatingUnit}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{activity.component}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{activity.fundingYear || 'N/A'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{activity.fundType || 'N/A'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{activity.tier || 'N/A'}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-xs"><span className={getStatusBadge(activity.status)}>{activity.status}</span></td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.operatingUnit}</td>
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.component}</td>
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.fundingYear || 'N/A'}</td>
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.fundType || 'N/A'}</td>
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.tier || 'N/A'}</td>
+                                        <td className="data-table__cell--nowrap"><span className={getStatusBadge(activity.status)}>{activity.status}</span></td>
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">
                                             {new Date(activity.date).toLocaleDateString()}
                                             {activity.endDate && activity.endDate !== activity.date ? ` - ${new Date(activity.endDate).toLocaleDateString()}` : ''}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-300 max-w-xs truncate" title={activity.description}>{activity.description}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalActivityBudget)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="data-table__cell--muted data-table__cell--truncate" title={activity.description}>{activity.description}</td>
+                                        <td className="data-table__cell--muted data-table__cell--nowrap">{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalActivityBudget)}</td>
+                                        <td className="data-table__cell--nowrap">
                                             <div className="flex flex-col gap-1 items-start">
                                                 {getWorkflowStatusBadge(activity.workflow_status)}
                                                 {activity.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
@@ -945,16 +800,16 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium sticky right-0 bg-white dark:bg-gray-800 z-10">
+                                        <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
                                             {canEdit ? (
-                                                <div className="flex items-center justify-end gap-3">
+                                                <div className="data-table__actions">
                                                     {isSelectionMode && (
                                                         <input
                                                             type="checkbox"
                                                             checked={selectedIds.includes(activity.id)}
                                                             onChange={(e) => { e.stopPropagation(); handleSelectRow(activity.id); }}
                                                             onClick={(e) => e.stopPropagation()}
-                                                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                            className="form-checkbox"
                                                         />
                                                     )}
                                                     <button onClick={(e) => { e.stopPropagation(); onSelectActivity(activity); }} className="table-action table-action--primary">Profile</button>
@@ -966,63 +821,63 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                         </td>
                                     </tr>
                                      {expandedRowId === activity.id && (
-                                        <tr className="bg-gray-50 dark:bg-gray-900/50">
-                                            <td colSpan={12} className="p-4">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                    <div className="space-y-4">
-                                                        <div>
-                                                            <h4 className="font-semibold text-md mb-2 text-gray-700 dark:text-gray-200">Details</h4>
-                                                            <p className="text-sm text-gray-600 dark:text-gray-300"><strong>Type:</strong> <span className={`status-badge ${activity.type === 'Training' ? 'status-badge--completed' : 'status-badge--info'}`}>{activity.type}</span></p>
-                                                            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1"><strong>Component:</strong> {activity.component}</p>
+                                        <tr className="data-table__detail-row">
+                                            <td colSpan={12} className="data-table__detail-cell">
+                                                <div className="data-table-detail-grid">
+                                                    <div className="data-table-detail-stack">
+                                                        <section className="data-table-detail-section">
+                                                            <h4 className="data-table-detail-title">Details</h4>
+                                                            <p className="data-table-detail-text"><strong>Type:</strong> <span className={`status-badge ${activity.type === 'Training' ? 'status-badge--completed' : 'status-badge--info'}`}>{activity.type}</span></p>
+                                                            <p className="data-table-detail-text"><strong>Component:</strong> {activity.component}</p>
                                                             {activity.description && (
-                                                                <div className="mt-2">
-                                                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Description:</p>
-                                                                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">{activity.description}</p>
+                                                                <div className="data-table-detail-section">
+                                                                    <p className="data-table-detail-text"><strong>Description:</strong></p>
+                                                                    <p className="data-table-detail-empty">{activity.description}</p>
                                                                 </div>
                                                             )}
-                                                            {activity.type === 'Training' && activity.facilitator && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Facilitator: {activity.facilitator}</p>}
-                                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Encoded by: {activity.encodedBy}</p>
-                                                        </div>
-                                                        <div>
-                                                            <h4 className="font-semibold text-md mb-2 text-gray-700 dark:text-gray-200">Target Participants</h4>
-                                                            <div className="text-sm text-gray-600 dark:text-gray-300">
+                                                            {activity.type === 'Training' && activity.facilitator && <p className="data-table-detail-text">Facilitator: {activity.facilitator}</p>}
+                                                            <p className="data-table-detail-text">Encoded by: {activity.encodedBy}</p>
+                                                        </section>
+                                                        <section className="data-table-detail-section">
+                                                            <h4 className="data-table-detail-title">Target Participants</h4>
+                                                            <div className="data-table-detail-text">
                                                                 <p>Male: {activity.participantsMale}</p>
                                                                 <p>Female: {activity.participantsFemale}</p>
-                                                                <p className="font-medium mt-1">Total: {totalParticipants}</p>
+                                                                <p><strong>Total: {totalParticipants}</strong></p>
                                                             </div>
-                                                        </div>
+                                                        </section>
                                                         {activity.participatingIpos.length > 0 && (
-                                                            <div>
-                                                                <h4 className="font-semibold text-md mb-2 text-gray-700 dark:text-gray-200">Participating IPOs</h4>
-                                                                <div className="flex flex-wrap gap-2">
+                                                            <section className="data-table-detail-section">
+                                                                <h4 className="data-table-detail-title">Participating IPOs</h4>
+                                                                <div className="data-table-detail-pills">
                                                                     {activity.participatingIpos.map(ipoName => {
                                                                         const ipo = ipos.find(i => i.name === ipoName);
                                                                         return (
-                                                                            <button key={ipoName} onClick={(e) => { e.stopPropagation(); if (ipo) onSelectIpo(ipo); }} className="bg-gray-200 dark:bg-gray-700 rounded-full px-3 py-1 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed" disabled={!ipo} title={ipo ? `View details for ${ipoName}` : `${ipoName} (details not found)`}>
+                                                                            <button key={ipoName} onClick={(e) => { e.stopPropagation(); if (ipo) onSelectIpo(ipo); }} className="data-table-detail-pill" disabled={!ipo} title={ipo ? `View details for ${ipoName}` : `${ipoName} (details not found)`}>
                                                                                 {ipoName}
                                                                             </button>
                                                                         );
                                                                     })}
                                                                 </div>
-                                                            </div>
+                                                            </section>
                                                         )}
                                                     </div>
-                                                    <div className="space-y-4 text-sm bg-gray-100 dark:bg-gray-800/50 p-4 rounded-lg">
-                                                        <h4 className="font-semibold text-md mb-2 text-gray-700 dark:text-gray-200">Budget & Funding</h4>
+                                                    <section className="data-table-detail-panel">
+                                                        <h4 className="data-table-detail-title">Budget & Funding</h4>
                                                          {activity.expenses.length > 0 ? (
-                                                             <ul className="space-y-1">
+                                                             <ul className="data-table-detail-list">
                                                                 {activity.expenses.map(exp => (
-                                                                    <li key={exp.id} className="flex justify-between items-center p-1"><span>{exp.expenseParticular} ({exp.uacsCode})</span><span className="font-medium">{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(exp.amount)}</span></li>
+                                                                    <li key={exp.id} className="data-table-detail-list__item"><span>{exp.expenseParticular} ({exp.uacsCode})</span><strong>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(exp.amount)}</strong></li>
                                                                 ))}
-                                                                <li className="flex justify-between items-center p-1 border-t border-gray-300 dark:border-gray-600 mt-1 pt-1 font-bold"><span>Total</span><span>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalActivityBudget)}</span></li>
+                                                                <li className="data-table-detail-list__total"><span>Total</span><span>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalActivityBudget)}</span></li>
                                                             </ul>
-                                                        ) : (<p className="text-sm text-gray-500 dark:text-gray-400 italic">No budget items listed.</p>)}
-                                                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                                             <p><strong className="text-gray-500 dark:text-gray-400">Funding Year:</strong> {activity.fundingYear ?? 'N/A'} </p>
-                                                            <p><strong className="text-gray-500 dark:text-gray-400">Fund Type:</strong> {activity.fundType ?? 'N/A'}</p>
-                                                            <p><strong className="text-gray-500 dark:text-gray-400">Tier:</strong> {activity.tier ?? 'N/A'}</p>
+                                                        ) : (<p className="data-table-detail-empty">No budget items listed.</p>)}
+                                                        <div className="data-table-detail-meta">
+                                                             <p><strong>Funding Year:</strong> {activity.fundingYear ?? 'N/A'} </p>
+                                                            <p><strong>Fund Type:</strong> {activity.fundType ?? 'N/A'}</p>
+                                                            <p><strong>Tier:</strong> {activity.tier ?? 'N/A'}</p>
                                                         </div>
-                                                    </div>
+                                                    </section>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1032,22 +887,14 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                         </tbody>
                     </table>
                 </div>
-                 {/* Pagination */}
-                 <div className="data-table-pagination py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-gray-700 dark:text-gray-300">Show</span>
-                        <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-1 pl-2 pr-8 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm">{[10, 20, 50, 100].map(size => ( <option key={size} value={size}>{size}</option> ))}</select>
-                        <span className="text-gray-700 dark:text-gray-300">entries</span>
-                    </div>
-                     <div className="flex items-center gap-4 text-sm">
-                        <span className="text-gray-700 dark:text-gray-300">Showing {Math.min((currentPage - 1) * itemsPerPage + 1, processedActivities.length)} to {Math.min(currentPage * itemsPerPage, processedActivities.length)} of {processedActivities.length} entries</span>
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
-                            <span className="px-2 font-medium">{currentPage} / {totalPages}</span>
-                            <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
-                        </div>
-                    </div>
-                </div>
+                <DataTablePagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={processedActivities.length}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={setItemsPerPage}
+                />
             </div>
         </div>
     );

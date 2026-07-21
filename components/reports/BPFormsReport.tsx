@@ -44,8 +44,8 @@ const ActivityRow: React.FC<{
             onClick={() => hasParticulars && toggleRow && rowKey && toggleRow(rowKey)} 
             className={`bp-report__row ${hasParticulars ? 'cursor-pointer bp-report__row--interactive' : ''}`}
         >
-            <td className={`${dataCellClass} text-left ${indentClasses[indentLevel]} sticky left-0 bg-inherit z-10 border-r-2 border-r-gray-300 dark:border-r-gray-600`}>
-                {hasParticulars && toggleRow && <span className="inline-block w-5 text-center text-gray-500">{isExpanded ? '−' : '+'}</span>}
+            <td className={`${dataCellClass} ${indentClasses[indentLevel]} bp-report__cell--sticky`}>
+                {hasParticulars && toggleRow && <span className="bp-report__expand" aria-hidden="true">{isExpanded ? '−' : '+'}</span>}
                 {!hasParticulars && <span className="inline-block w-5"></span>}
                 {activity.name}
             </td>
@@ -54,16 +54,16 @@ const ActivityRow: React.FC<{
             {mooeCodes.map((code: string) => (
                 <td key={`mooe-${code}`} className={`${dataCellClass} text-right whitespace-nowrap`}>{activity.uacsValues[code] > 0 ? formatCurrencyWhole(activity.uacsValues[code]) : ''}</td>
             ))}
-            <td className={`${dataCellClass} font-bold text-right whitespace-nowrap bg-blue-50 dark:bg-blue-900/20`}>{activity.totalMOOE > 0 ? formatCurrencyWhole(activity.totalMOOE) : ''}</td>
+            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--mooe`}>{activity.totalMOOE > 0 ? formatCurrencyWhole(activity.totalMOOE) : ''}</td>
             
             {/* CO Columns */}
             {coCodes.map((code: string) => (
                 <td key={`co-${code}`} className={`${dataCellClass} text-right whitespace-nowrap`}>{activity.uacsValues[code] > 0 ? formatCurrencyWhole(activity.uacsValues[code]) : ''}</td>
             ))}
-            <td className={`${dataCellClass} font-bold text-right whitespace-nowrap bg-orange-50 dark:bg-orange-900/20`}>{activity.totalCO > 0 ? formatCurrencyWhole(activity.totalCO) : ''}</td>
+            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--co`}>{activity.totalCO > 0 ? formatCurrencyWhole(activity.totalCO) : ''}</td>
             
             {/* Grand Total */}
-            <td className={`${dataCellClass} font-bold bg-green-50 dark:bg-green-900/20 text-right whitespace-nowrap`}>{(activity.totalMOOE + activity.totalCO) > 0 ? formatCurrencyWhole(activity.totalMOOE + activity.totalCO) : ''}</td>
+            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--grand`}>{(activity.totalMOOE + activity.totalCO) > 0 ? formatCurrencyWhole(activity.totalMOOE + activity.totalCO) : ''}</td>
         </tr>
     );
 };
@@ -77,8 +77,8 @@ const ParticularRow: React.FC<{
     indentClasses: string[];
 }> = ({ particular, mooeCodes, coCodes, indentLevel, dataCellClass, indentClasses }) => {
     return (
-        <tr className="bp-report__row bp-report__row--particular text-[11px] italic">
-            <td className={`${dataCellClass} text-left ${indentClasses[indentLevel]} sticky left-0 bg-white dark:bg-gray-800 z-10 border-r-2 border-r-gray-300 dark:border-r-gray-600`}>
+        <tr className="bp-report__row bp-report__row--particular">
+            <td className={`${dataCellClass} ${indentClasses[indentLevel]} bp-report__cell--sticky`}>
                 <span className="inline-block w-5"></span> {particular.name}
             </td>
             
@@ -88,7 +88,7 @@ const ParticularRow: React.FC<{
                     {particular.uacsCode === code && particular.amount > 0 ? formatCurrencyWhole(particular.amount) : ''}
                 </td>
             ))}
-            <td className={`${dataCellClass} text-right whitespace-nowrap bg-blue-50/30 dark:bg-blue-900/10`}>
+            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--mooe`}>
                 {particular.objectType !== 'CO' ? formatCurrencyWhole(particular.amount) : ''}
             </td>
             
@@ -98,12 +98,12 @@ const ParticularRow: React.FC<{
                     {particular.uacsCode === code && particular.amount > 0 ? formatCurrencyWhole(particular.amount) : ''}
                 </td>
             ))}
-            <td className={`${dataCellClass} text-right whitespace-nowrap bg-orange-50/30 dark:bg-orange-900/10`}>
+            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--co`}>
                 {particular.objectType === 'CO' ? formatCurrencyWhole(particular.amount) : ''}
             </td>
             
             {/* Grand Total */}
-            <td className={`${dataCellClass} bg-green-50/30 dark:bg-green-900/10 text-right whitespace-nowrap`}>{formatCurrencyWhole(particular.amount)}</td>
+            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--grand`}>{formatCurrencyWhole(particular.amount)}</td>
         </tr>
     );
 };
@@ -125,10 +125,10 @@ const SummaryRow: React.FC<{
     if (!items || items.length === 0) {
         return (
              <tr className="bp-report__row bp-report__row--summary">
-                <td className={`${dataCellClass} text-left ${indentClasses[indentLevel]} sticky left-0 bg-gray-100 dark:bg-gray-700 z-10 border-r-2 border-r-gray-300 dark:border-r-gray-600`}>
-                     <span className="inline-block w-5 text-center"></span> {label}
+                <td className={`${dataCellClass} ${indentClasses[indentLevel]} bp-report__cell--sticky`}>
+                     <span className="bp-report__expand" aria-hidden="true"></span> {label}
                 </td>
-                <td colSpan={totalCols} className={`${dataCellClass} text-center italic text-gray-500 dark:text-gray-400`}>No activities for this item.</td>
+                <td colSpan={totalCols} className={`${dataCellClass} bp-report__cell--empty`}>No activities for this item.</td>
             </tr>
         );
     }
@@ -142,28 +142,28 @@ const SummaryRow: React.FC<{
         return acc;
     }, { totalMOOE: 0, totalCO: 0, uacsValues: [...mooeCodes, ...coCodes].reduce((acc: any, code: string) => ({...acc, [code]: 0}), {}) }), [items, mooeCodes, coCodes]);
     
-    const numberCellClass = `${dataCellClass} text-right whitespace-nowrap`;
+    const numberCellClass = `${dataCellClass} bp-report__cell--number`;
 
     return (
         <tr onClick={() => toggleRow(rowKey)} className="bp-report__row bp-report__row--summary cursor-pointer">
-            <td className={`${dataCellClass} text-left ${indentClasses[indentLevel]} sticky left-0 bg-gray-100 dark:bg-gray-700 z-10 border-r-2 border-r-gray-300 dark:border-r-gray-600`}>
-                <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400">{isExpanded ? '−' : '+'}</span> {label}
+            <td className={`${dataCellClass} ${indentClasses[indentLevel]} bp-report__cell--sticky`}>
+                <span className="bp-report__expand" aria-hidden="true">{isExpanded ? '−' : '+'}</span> {label}
             </td>
             
             {/* MOOE Summary */}
             {mooeCodes.map((code: string) => (
                 <td key={`mooe-${code}`} className={numberCellClass}>{summary.uacsValues[code] > 0 ? formatCurrencyWhole(summary.uacsValues[code]) : ''}</td>
             ))}
-            <td className={`${numberCellClass} bg-blue-100 dark:bg-blue-900/30`}>{summary.totalMOOE > 0 ? formatCurrencyWhole(summary.totalMOOE) : ''}</td>
+            <td className={`${numberCellClass} bp-report__cell--mooe`}>{summary.totalMOOE > 0 ? formatCurrencyWhole(summary.totalMOOE) : ''}</td>
 
             {/* CO Summary */}
             {coCodes.map((code: string) => (
                 <td key={`co-${code}`} className={numberCellClass}>{summary.uacsValues[code] > 0 ? formatCurrencyWhole(summary.uacsValues[code]) : ''}</td>
             ))}
-            <td className={`${numberCellClass} bg-orange-100 dark:bg-orange-900/30`}>{summary.totalCO > 0 ? formatCurrencyWhole(summary.totalCO) : ''}</td>
+            <td className={`${numberCellClass} bp-report__cell--co`}>{summary.totalCO > 0 ? formatCurrencyWhole(summary.totalCO) : ''}</td>
 
             {/* Grand Total Summary */}
-            <td className={`${numberCellClass} bg-green-100 dark:bg-green-900/30`}>{(summary.totalMOOE + summary.totalCO) > 0 ? formatCurrencyWhole(summary.totalMOOE + summary.totalCO) : ''}</td>
+            <td className={`${numberCellClass} bp-report__cell--grand`}>{(summary.totalMOOE + summary.totalCO) > 0 ? formatCurrencyWhole(summary.totalMOOE + summary.totalCO) : ''}</td>
         </tr>
     );
 };
@@ -719,8 +719,8 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
     // Ensure all CO cols + 1 for Total CO
     const coSpan = coCodes.length;
 
-    const indentClasses = ['pl-2', 'pl-6', 'pl-10', 'pl-14'];
-    const headerCellClass = "bp-report__head-cell text-center align-middle";
+    const indentClasses = ['', 'bp-report__indent--1', 'bp-report__indent--2', 'bp-report__indent--3'];
+    const headerCellClass = "bp-report__head-cell";
     const dataCellClass = "bp-report__cell";
 
     return (
@@ -747,22 +747,22 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                 </div>
             </div>
             <div id="bp-forms-table" className="report-table-scroll relative">
-                <table className="bp-report-table min-w-full border-collapse text-xs">
+                <table className="bp-report-table">
                     <thead className="sticky top-0 z-20">
                         <tr>
                             {/* PAP Column: Frozen */}
-                            <th rowSpan={4} className={`${headerCellClass} min-w-[300px] sticky left-0 z-30`}>Program/Activity/Project</th>
+                            <th rowSpan={4} className={`${headerCellClass} bp-report__header-cell--label`}>Program/Activity/Project</th>
                             
                             {/* MOOE Group */}
                             {mooeCodes.length > 0 && <th colSpan={mooeCodes.length} className={`${headerCellClass} bp-report__group--mooe`}>MOOE</th>}
-                            <th rowSpan={4} className={`${headerCellClass} bp-report__group--mooe font-bold min-w-[100px]`}>Total MOOE</th>
+                            <th rowSpan={4} className={`${headerCellClass} bp-report__group--mooe bp-report__head-cell--total`}>Total MOOE</th>
                             
                             {/* CO Group */}
                             {coCodes.length > 0 && <th colSpan={coCodes.length} className={`${headerCellClass} bp-report__group--co`}>CO</th>}
-                            <th rowSpan={4} className={`${headerCellClass} bp-report__group--co font-bold min-w-[100px]`}>Total CO</th>
+                            <th rowSpan={4} className={`${headerCellClass} bp-report__group--co bp-report__head-cell--total`}>Total CO</th>
                             
                             {/* Grand Total */}
-                            <th rowSpan={4} className={`${headerCellClass} bp-report__group--grand min-w-[100px]`}>Grand Total</th>
+                            <th rowSpan={4} className={`${headerCellClass} bp-report__group--grand bp-report__header-cell--grand`}>Grand Total</th>
                         </tr>
                         <tr>
                             {/* MOOE Particulars (Dynamic grouping) */}
@@ -857,7 +857,7 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                                     }
                                 }
                                 return (
-                                    <th key={`desc-mooe-${code}`} className={`${headerCellClass} text-[10px] italic font-normal max-w-[150px] whitespace-normal`}>
+                                    <th key={`desc-mooe-${code}`} className={`${headerCellClass} bp-report__head-cell--description`}>
                                         {getDescription('MOOE', partName, code)}
                                     </th>
                                 );
@@ -872,7 +872,7 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                                     }
                                 }
                                 return (
-                                    <th key={`desc-co-${code}`} className={`${headerCellClass} text-[10px] italic font-normal max-w-[150px] whitespace-normal`}>
+                                    <th key={`desc-co-${code}`} className={`${headerCellClass} bp-report__head-cell--description`}>
                                         {getDescription('CO', partName, code)}
                                     </th>
                                 );
@@ -880,9 +880,9 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                         </tr>
                         <tr>
                             {/* MOOE Codes */}
-                            {mooeCodes.map(code => <th key={code} className={`${headerCellClass} font-mono whitespace-nowrap`}>{code}</th>)}
+                            {mooeCodes.map(code => <th key={code} className={`${headerCellClass} bp-report__head-cell--code`}>{code}</th>)}
                             {/* CO Codes */}
-                            {coCodes.map(code => <th key={code} className={`${headerCellClass} font-mono whitespace-nowrap`}>{code}</th>)}
+                            {coCodes.map(code => <th key={code} className={`${headerCellClass} bp-report__head-cell--code`}>{code}</th>)}
                         </tr>
                     </thead>
                     <tbody>
@@ -961,7 +961,7 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                     </tbody>
                     <tfoot>
                         <tr className="bp-report__row bp-report__row--total">
-                            <td className={`${dataCellClass} text-left sticky left-0 z-10`}>GRAND TOTAL</td>
+                            <td className={`${dataCellClass} bp-report__cell--sticky`}>GRAND TOTAL</td>
                             
                             {/* MOOE Totals */}
                             {mooeCodes.map((code: string) => (
@@ -969,7 +969,7 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                                     {grandTotals.uacsValues[code] > 0 ? formatCurrencyWhole(grandTotals.uacsValues[code]) : ''}
                                 </td>
                             ))}
-                            <td className={`${dataCellClass} text-right whitespace-nowrap bg-blue-100 dark:bg-blue-900/40`}>{grandTotals.totalMOOE > 0 ? formatCurrencyWhole(grandTotals.totalMOOE) : ''}</td>
+                            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--mooe`}>{grandTotals.totalMOOE > 0 ? formatCurrencyWhole(grandTotals.totalMOOE) : ''}</td>
 
                             {/* CO Totals */}
                             {coCodes.map((code: string) => (
@@ -977,10 +977,10 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                                     {grandTotals.uacsValues[code] > 0 ? formatCurrencyWhole(grandTotals.uacsValues[code]) : ''}
                                 </td>
                             ))}
-                            <td className={`${dataCellClass} text-right whitespace-nowrap bg-orange-100 dark:bg-orange-900/40`}>{grandTotals.totalCO > 0 ? formatCurrencyWhole(grandTotals.totalCO) : ''}</td>
+                            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--co`}>{grandTotals.totalCO > 0 ? formatCurrencyWhole(grandTotals.totalCO) : ''}</td>
 
                             {/* Grand Total */}
-                            <td className={`${dataCellClass} text-right whitespace-nowrap bg-green-100 dark:bg-green-900/40`}>{(grandTotals.totalMOOE + grandTotals.totalCO) > 0 ? formatCurrencyWhole(grandTotals.totalMOOE + grandTotals.totalCO) : ''}</td>
+                            <td className={`${dataCellClass} bp-report__cell--number bp-report__cell--grand`}>{(grandTotals.totalMOOE + grandTotals.totalCO) > 0 ? formatCurrencyWhole(grandTotals.totalMOOE + grandTotals.totalCO) : ''}</td>
                         </tr>
                     </tfoot>
                 </table>

@@ -25,25 +25,21 @@ const DCFManagementTab: React.FC<DCFManagementTabProps> = (props) => {
     const [activeSection, setActiveSection] = useState<'physical' | 'budget'>('physical');
 
     return (
-        <div className="space-y-6">
-            <div className="flex space-x-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+        <div className="form-stack form-stack--spacious">
+            <div className="data-tabs__nav" role="tablist" aria-label="DCF management sections">
                 <button
                     onClick={() => setActiveSection('physical')}
-                    className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                        activeSection === 'physical'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border-b-2 border-emerald-500'
-                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                    }`}
+                    className={activeSection === 'physical' ? 'is-active' : undefined}
+                    role="tab"
+                    aria-selected={activeSection === 'physical'}
                 >
                     Physical Status Management
                 </button>
                 <button
                     onClick={() => setActiveSection('budget')}
-                    className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                        activeSection === 'budget'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 border-b-2 border-emerald-500'
-                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                    }`}
+                    className={activeSection === 'budget' ? 'is-active' : undefined}
+                    role="tab"
+                    aria-selected={activeSection === 'budget'}
                 >
                     Budget Ceiling Management
                 </button>

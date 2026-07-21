@@ -321,426 +321,49 @@ const UserControlCenterTab: React.FC = () => {
     const hasChanges = JSON.stringify(configs) !== JSON.stringify(pendingConfigs);
     const hasDcfPolicyChanges = !policyEqual(normalizeDcfPolicySettings(activeDcfPolicy), normalizeDcfPolicySettings(pendingDcfPolicy));
 
-    if (loading) return <div className="p-4">Loading control center...</div>;
+    if (loading) return <div className="ui-state">Loading control center...</div>;
+
+    const renderToggle = (checked: boolean, disabled: boolean, label: string, onChange: () => void, tone = 'view') => (
+        <label className={`toggle-control ${disabled ? 'is-disabled' : ''}`}>
+            <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} aria-label={label} />
+            <span className={`toggle-control__track toggle-control__track--${tone}`}><span /></span>
+        </label>
+    );
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center gap-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                <div>
-                    <button
-                        type="button"
-                        onClick={() => setRoleControlOpen(prev => !prev)}
-                        className="flex items-center gap-2 text-left"
-                        aria-expanded={roleControlOpen}
-                    >
-                        <ChevronDown className={`h-5 w-5 text-gray-500 transition-transform ${roleControlOpen ? 'rotate-180' : ''}`} />
-                        <h3 className="text-xl font-bold text-gray-800 dark:text-white">Role-Level UX Control</h3>
+        <div className="access-control form-stack form-stack--spacious">
+            <section className="settings-accordion">
+                <header className="settings-accordion__header">
+                    <button type="button" onClick={() => setRoleControlOpen(prev => !prev)} className="settings-accordion__toggle" aria-expanded={roleControlOpen}>
+                        <ChevronDown className={`settings-accordion__chevron ${roleControlOpen ? 'is-open' : ''}`} />
+                        <span><strong>Role-Level UX Control</strong><small>Manage global view, edit, and delete permissions for each role.</small></span>
                     </button>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage global view, edit, and delete permissions for each role.</p>
-                </div>
-                <div className="flex items-center gap-4">
-                    {success && (
-                        <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm animate-pulse">
-                            <Check className="h-5 w-5" />
-                            Changes saved successfully!
-                        </div>
-                    )}
-                    <button
-                        onClick={handleSave}
-                        disabled={saving || !hasChanges}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-white font-medium transition-all ${saving || !hasChanges ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 shadow-md hover:shadow-lg'}`}
-                    >
-                        <Save className="h-5 w-5" />
-                        {saving ? 'Saving...' : 'Save Configuration'}
-                    </button>
-                </div>
-            </div>
-
-            {success && (
-                <div className="fixed bottom-10 right-10 z-[100] animate-bounce-in">
-                    <div className="bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3">
-                        <div className="bg-white/20 p-2 rounded-full">
-                            <Check className="h-6 w-6 text-white" />
-                        </div>
-                        <div>
-                            <p className="font-bold">Save Successful!</p>
-                            <p className="text-xs opacity-90">User role permissions have been updated.</p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {error && (
-                <div className="p-4 bg-red-50 text-red-700 rounded-lg flex items-start gap-3 border border-red-200">
-                    <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                    <div>
-                        <p className="font-bold">Database Error</p>
-                        <p className="text-sm">{error}</p>
-                    </div>
-                </div>
-            )}
-            
-            {warning && (
-                <div className="p-4 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                    <div>
-                        <p className="font-bold">Virtual Check Failed</p>
-                        <p className="text-sm mt-1">{warning}</p>
-                    </div>
-                </div>
-            )}
-
-            {roleControlOpen && (
-                <>
-            <div className="relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-900">
-                <div className="overflow-auto max-h-[720px] scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700">
-                    <table className="min-w-max w-full text-sm text-left border-collapse">
-                        <thead className="text-gray-700 dark:text-gray-300">
-                            <tr className="bg-gray-100 dark:bg-gray-800 sticky top-0 z-40">
-                                <th className="px-6 py-4 font-bold border-b border-r dark:border-gray-700 border-gray-200 bg-gray-100 dark:bg-gray-800 sticky left-0 top-0 z-50 min-w-[200px] shadow-[2px_0_4px_rgba(0,0,0,0.05)]">
-                                    User Roles
-                                </th>
-                                <th className="px-6 py-4 font-bold border-b border-r dark:border-gray-700 border-gray-200 text-center min-w-[150px] text-[11px] uppercase tracking-wider bg-gray-100 dark:bg-gray-800">
-                                    OU Visibility
-                                </th>
-                                {appModules.map(module => (
-                                    <th key={module} className="px-4 py-4 font-bold border-b border-r dark:border-gray-700 border-gray-200 text-center min-w-[240px] text-[11px] uppercase tracking-wider bg-gray-100 dark:bg-gray-800">
-                                        {module}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {allRoles.map(role => (
-                                <tr key={role} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white border-r dark:border-gray-700 border-gray-200 bg-white dark:bg-gray-900 sticky left-0 z-30 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
-                                        {role}
-                                    </td>
-                                    <td className="px-4 py-4 border-r dark:border-gray-700 border-gray-200 text-center">
-                                        {(() => {
-                                            const roleConfig = pendingConfigs.find(c => c.role === role);
-                                            const isSuperAdmin = role === 'Super Admin';
-                                            const scope = roleConfig?.visibility_scope || 'Own OU';
-                                            
-                                            return (
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <button
-                                                        onClick={() => !isSuperAdmin && handleVisibilityToggle(role)}
-                                                        disabled={isSuperAdmin}
-                                                        className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
-                                                            isSuperAdmin 
-                                                                ? 'bg-emerald-100 text-emerald-800 opacity-60 cursor-not-allowed'
-                                                                : scope === 'All OUs'
-                                                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                        }`}
-                                                    >
-                                                        {scope}
-                                                    </button>
-                                                    <p className="text-[9px] text-gray-400 font-medium">
-                                                        {scope === 'All OUs' ? 'Can view everything' : 'Restricted to own OU'}
-                                                    </p>
-                                                </div>
-                                            );
-                                        })()}
-                                    </td>
-                                    {appModules.map(module => {
-                                        const config = pendingConfigs.find(c => c.role === role && c.module === module);
-                                        if (!config) return <td key={module} className="p-4 border-r dark:border-gray-700 border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900"></td>;
-                                        
-                                        const isSuperAdmin = role === 'Super Admin';
-                                        const displayConfig = role === 'Guest' ? { ...config, can_edit: false, can_delete: false } : config;
-                                    return (
-                                        <td key={module} className="px-4 py-3 align-top border-r border-gray-100 dark:border-gray-800/50">
-                                            <div className="flex flex-col gap-2">
-                                                <label className={`flex justify-between items-center text-[10px] p-1.5 rounded ${isSuperAdmin ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer'}`}>
-                                                    <span className="text-gray-600 dark:text-gray-400 font-bold tracking-tight">VIEW</span>
-                                                    <div className={`w-8 h-4 rounded-full relative transition-colors ${displayConfig.can_view ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                                        <span className={`absolute top-0.5 left-0.5 bg-white w-3 h-3 rounded-full transition-transform ${displayConfig.can_view ? 'translate-x-4' : 'translate-x-0'}`}></span>
-                                                    </div>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="hidden"
-                                                        checked={displayConfig.can_view}
-                                                        onChange={() => !isSuperAdmin && handleToggle(role, module, 'can_view')}
-                                                        disabled={isSuperAdmin}
-                                                    />
-                                                </label>
-                                                
-                                                <label className={`flex justify-between items-center text-[10px] p-1.5 rounded ${(isSuperAdmin || isGuestWriteField(role, 'can_edit')) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer'}`}>
-                                                    <span className="text-gray-600 dark:text-gray-400 font-bold tracking-tight">EDIT</span>
-                                                    <div className={`w-8 h-4 rounded-full relative transition-colors ${displayConfig.can_edit ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                                        <span className={`absolute top-0.5 left-0.5 bg-white w-3 h-3 rounded-full transition-transform ${displayConfig.can_edit ? 'translate-x-4' : 'translate-x-0'}`}></span>
-                                                    </div>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="hidden"
-                                                        checked={displayConfig.can_edit}
-                                                        onChange={() => !isSuperAdmin && !isGuestWriteField(role, 'can_edit') && handleToggle(role, module, 'can_edit')}
-                                                        disabled={isSuperAdmin || isGuestWriteField(role, 'can_edit')}
-                                                    />
-                                                </label>
-
-                                                <label className={`flex justify-between items-center text-[10px] p-1.5 rounded ${(isSuperAdmin || isGuestWriteField(role, 'can_delete')) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer'}`}>
-                                                    <span className="text-gray-600 dark:text-gray-400 font-bold tracking-tight">DELETE</span>
-                                                    <div className={`w-8 h-4 rounded-full relative transition-colors ${displayConfig.can_delete ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                                                        <span className={`absolute top-0.5 left-0.5 bg-white w-3 h-3 rounded-full transition-transform ${displayConfig.can_delete ? 'translate-x-4' : 'translate-x-0'}`}></span>
-                                                    </div>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="hidden"
-                                                        checked={displayConfig.can_delete}
-                                                        onChange={() => !isSuperAdmin && !isGuestWriteField(role, 'can_delete') && handleToggle(role, module, 'can_delete')}
-                                                        disabled={isSuperAdmin || isGuestWriteField(role, 'can_delete')}
-                                                    />
-                                                </label>
-                                            </div>
-                                        </td>
-                                    );
-                                })}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                </div>
-            </div>
-            
-            <div className="bg-blue-50/50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800/50 flex items-start gap-3">
-                <Info className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-blue-800 dark:text-blue-300">
-                    <p className="font-semibold mb-1">How Role Control Works</p>
-                    <p>Changing these toggles affects all users with that specific role. <strong>Super Admin</strong> always retains full systemic control and cannot be locked out. If you assign an override on a specific user in User Management, that override will supersede these defaults.</p>
-                </div>
-            </div>
-                </>
-            )}
-
-            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-emerald-50/70 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800/50">
-                    <div>
-                        <button
-                            type="button"
-                            onClick={() => setDcfRulesOpen(prev => !prev)}
-                            className="flex items-center gap-2 text-left"
-                            aria-expanded={dcfRulesOpen}
-                        >
-                            <ChevronDown className={`h-5 w-5 text-emerald-700 dark:text-emerald-300 transition-transform ${dcfRulesOpen ? 'rotate-180' : ''}`} />
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white">DCF Editing Rules</h3>
-                        </button>
-                        <p className="text-sm text-emerald-800/80 dark:text-emerald-200/80 mt-1">
-                            Configure active status-based edit, accomplishment, and delete rules for DCF detail, edit, and accomplishment pages.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        {dcfPolicyMessage && <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 px-3 py-2">{dcfPolicyMessage}</span>}
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                            onClick={() => setPendingDcfPolicy(activeDcfPolicy)}
-                            disabled={!hasDcfPolicyChanges || savingDcfPolicy}
-                        >
-                            Cancel Changes
-                        </button>
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                            onClick={() => setPendingDcfPolicy(DEFAULT_DCF_POLICY_SETTINGS)}
-                            disabled={savingDcfPolicy}
-                        >
-                            <RotateCcw className="h-4 w-4" />
-                            Reset Defaults
-                        </button>
-                        <button
-                            type="button"
-                            className={`flex items-center gap-2 px-5 py-2 rounded-lg text-white text-sm font-bold ${hasDcfPolicyChanges && !savingDcfPolicy ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400 cursor-not-allowed'}`}
-                            onClick={handleSaveDcfPolicy}
-                            disabled={!hasDcfPolicyChanges || savingDcfPolicy}
-                        >
-                            <Save className="h-4 w-4" />
-                            {savingDcfPolicy ? 'Saving...' : 'Save DCF Policy'}
-                        </button>
-                    </div>
-                </div>
-
-                {(dcfPolicyLoadError || dcfPolicyError) && (
-                    <div className="m-4 p-4 bg-red-50 text-red-700 rounded-lg flex items-start gap-3 border border-red-200">
-                        <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                        <div>
-                            <p className="font-bold">DCF Policy Notice</p>
-                            <p className="text-sm">{dcfPolicyError || dcfPolicyLoadError}</p>
-                        </div>
-                    </div>
-                )}
-
-                {dcfRulesOpen && (
-                    <div className="p-4 space-y-5">
-                        <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-                            <div className="space-y-3">
-                                <label className="block">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Module</span>
-                                    <select
-                                        value={selectedDcfModule}
-                                        onChange={event => setSelectedDcfModule(event.target.value as DcfModuleKey)}
-                                        className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                                    >
-                                        {DCF_MODULES.map(module => <option key={module.key} value={module.key}>{module.label}</option>)}
-                                    </select>
-                                </label>
-                                <div className="rounded-lg border border-blue-100 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
-                                    <p className="font-bold mb-1">Two-gate policy</p>
-                                    <p>Module permissions apply first. DCF status and period rules then decide whether that already-authorized user can edit details, edit accomplishments, or delete the selected status.</p>
-                                </div>
-                            </div>
-
-                            <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
-                                <table className="min-w-max w-full text-sm border-collapse">
-                                    <thead className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                                        <tr>
-                                            <th className="sticky left-0 z-20 bg-gray-100 dark:bg-gray-800 px-4 py-3 text-left font-bold min-w-[150px]">Role / Status</th>
-                                            {DCF_POLICY_ACTIONS.map(action => (
-                                                <th key={action.key} className="px-4 py-3 text-center font-bold min-w-[150px]">{action.shortLabel}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                        {DCF_POLICY_ROLES.map(role => (
-                                            <React.Fragment key={role}>
-                                                <tr className="bg-gray-50 dark:bg-gray-800/60">
-                                                    <td colSpan={DCF_POLICY_ACTIONS.length + 1} className="sticky left-0 px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">
-                                                        {role}
-                                                        {role === 'Super Admin' && <span className="ml-2 text-emerald-600 normal-case tracking-normal">always protected</span>}
-                                                    </td>
-                                                </tr>
-                                                {selectedModuleMeta.statuses.map(status => (
-                                                    <tr key={`${role}-${status}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                        <td className="sticky left-0 z-10 bg-white dark:bg-gray-900 px-4 py-3 font-bold text-gray-800 dark:text-gray-100 border-r border-gray-100 dark:border-gray-800">
-                                                            {status}
-                                                        </td>
-                                                        {DCF_POLICY_ACTIONS.map(action => {
-                                                            const checked = getDcfRuleValue(pendingDcfPolicy, role, selectedDcfModule, status, action.key);
-                                                            const disabled = role === 'Super Admin' || role === 'Guest';
-                                                            return (
-                                                                <td key={action.key} className="px-4 py-3 text-center">
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleDcfRuleToggle(role, selectedDcfModule, status, action.key)}
-                                                                        disabled={disabled}
-                                                                        className={`mx-auto w-10 h-5 rounded-full relative transition-colors ${checked ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:ring-2 hover:ring-emerald-200'}`}
-                                                                        aria-label={`${role} ${status} ${action.label}`}
-                                                                    >
-                                                                        <span className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`}></span>
-                                                                    </button>
-                                                                </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </React.Fragment>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/50">
-                            <div className="flex items-center gap-2 mb-4">
-                                <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                                <h4 className="font-black text-gray-900 dark:text-white">Policy Preview</h4>
-                                <span className="text-xs text-gray-500">Server date: {dcfPolicyLoading ? 'Loading...' : serverDate}</span>
-                            </div>
-                            <div className="grid gap-3 md:grid-cols-5">
-                                <select value={selectedDcfRole} onChange={event => setSelectedDcfRole(event.target.value as UserRole)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
-                                    {DCF_POLICY_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
-                                </select>
-                                <select value={selectedDcfModule} onChange={event => setSelectedDcfModule(event.target.value as DcfModuleKey)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
-                                    {DCF_MODULES.map(module => <option key={module.key} value={module.key}>{module.label}</option>)}
-                                </select>
-                                <select value={previewStatus} onChange={event => setPreviewStatus(event.target.value as DcfPolicyStatus)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
-                                    {selectedModuleMeta.statuses.map(status => <option key={status} value={status}>{status}</option>)}
-                                </select>
-                                <select value={previewAction} onChange={event => setPreviewAction(event.target.value as DcfPolicyAction)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm">
-                                    {DCF_POLICY_ACTIONS.map(action => <option key={action.key} value={action.key}>{action.label}</option>)}
-                                </select>
-                                <input type="month" value={previewMonth} onChange={event => setPreviewMonth(event.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm" />
-                            </div>
-                            <div className={`mt-4 rounded-lg px-4 py-3 text-sm font-bold ${effectivePreview.allowed ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200'}`}>
-                                {effectivePreview.allowed ? 'Allowed' : 'Blocked'}: {effectivePreview.message}
-                                {effectivePreview.requiresOverrideReason && <span className="ml-2 font-semibold">(override reason required)</span>}
-                            </div>
-                        </div>
-                    </div>
-                )}
+                    <div className="settings-accordion__actions">{success && <span className="status-indicator status-indicator--success"><Check className="btn-symbol" /> Changes saved</span>}<button onClick={handleSave} disabled={saving || !hasChanges} className="btn-primary"><Save className="btn-symbol" />{saving ? 'Saving...' : 'Save Configuration'}</button></div>
+                </header>
+                {error && <div className="notice notice--danger"><AlertTriangle className="btn-symbol" /><div><strong>Database Error</strong><p>{error}</p></div></div>}
+                {warning && <div className="notice notice--warning"><AlertTriangle className="btn-symbol" /><div><strong>Virtual Check Failed</strong><p>{warning}</p></div></div>}
+                {roleControlOpen && <div className="settings-accordion__content">
+                    <div className="data-table-scroll role-permissions-scroll"><table className="data-table role-permissions-table"><thead><tr><th className="data-table__sticky-left">User Roles</th><th>OU Visibility</th>{appModules.map(module => <th key={module}>{module}</th>)}</tr></thead><tbody>
+                        {allRoles.map(role => <tr key={role}><td className="data-table__sticky-left data-table__cell--primary">{role}</td><td>{(() => { const roleConfig = pendingConfigs.find(c => c.role === role); const isSuperAdmin = role === 'Super Admin'; const scope = roleConfig?.visibility_scope || 'Own OU'; return <div className="role-scope"><button onClick={() => !isSuperAdmin && handleVisibilityToggle(role)} disabled={isSuperAdmin} className={`status-badge ${scope === 'All OUs' ? 'status-badge--completed' : 'status-badge--neutral'}`}>{scope}</button><small>{scope === 'All OUs' ? 'Can view everything' : 'Restricted to own OU'}</small></div>; })()}</td>
+                            {appModules.map(module => { const config = pendingConfigs.find(c => c.role === role && c.module === module); if (!config) return <td key={module} />; const isSuperAdmin = role === 'Super Admin'; const displayConfig = role === 'Guest' ? {...config,can_edit:false,can_delete:false}:config; return <td key={module}><div className="permission-toggle-stack"><span>View {renderToggle(displayConfig.can_view,isSuperAdmin,`${role} ${module} view`,()=>!isSuperAdmin&&handleToggle(role,module,'can_view'))}</span><span>Edit {renderToggle(displayConfig.can_edit,isSuperAdmin||isGuestWriteField(role,'can_edit'),`${role} ${module} edit`,()=>!isSuperAdmin&&!isGuestWriteField(role,'can_edit')&&handleToggle(role,module,'can_edit'),'edit')}</span><span>Delete {renderToggle(displayConfig.can_delete,isSuperAdmin||isGuestWriteField(role,'can_delete'),`${role} ${module} delete`,()=>!isSuperAdmin&&!isGuestWriteField(role,'can_delete')&&handleToggle(role,module,'can_delete'),'delete')}</span></div></td>; })}
+                        </tr>)}
+                    </tbody></table></div>
+                    <div className="notice notice--info"><Info className="btn-symbol" /><div><strong>How role control works</strong><p>Changes affect all users with that role. Super Admin always retains full access, while user-specific overrides supersede these defaults.</p></div></div>
+                </div>}
             </section>
 
-            <section className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                <button
-                    type="button"
-                    onClick={() => setMonthLockOpen(prev => !prev)}
-                    className="w-full flex items-center justify-between gap-4 p-4 bg-amber-50/70 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800/50 text-left"
-                    aria-expanded={monthLockOpen}
-                >
-                    <div>
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Accomplishment Period Locking</h3>
-                        <p className="text-sm text-amber-800/80 dark:text-amber-200/80 mt-1">Control the monthly window used for physical and financial accomplishment entries.</p>
+            <section className="settings-accordion">
+                <header className="settings-accordion__header settings-accordion__header--accent"><button type="button" onClick={() => setDcfRulesOpen(prev => !prev)} className="settings-accordion__toggle" aria-expanded={dcfRulesOpen}><ChevronDown className={`settings-accordion__chevron ${dcfRulesOpen ? 'is-open' : ''}`} /><span><strong>DCF Editing Rules</strong><small>Configure status-based edit, accomplishment, and delete rules.</small></span></button><div className="settings-accordion__actions">{dcfPolicyMessage && <span className="status-indicator status-indicator--success">{dcfPolicyMessage}</span>}<button type="button" className="btn-secondary" onClick={() => setPendingDcfPolicy(activeDcfPolicy)} disabled={!hasDcfPolicyChanges||savingDcfPolicy}>Cancel Changes</button><button type="button" className="btn-secondary" onClick={() => setPendingDcfPolicy(DEFAULT_DCF_POLICY_SETTINGS)} disabled={savingDcfPolicy}><RotateCcw className="btn-symbol" />Reset Defaults</button><button type="button" className="btn-primary" onClick={handleSaveDcfPolicy} disabled={!hasDcfPolicyChanges||savingDcfPolicy}><Save className="btn-symbol" />{savingDcfPolicy?'Saving...':'Save DCF Policy'}</button></div></header>
+                {(dcfPolicyLoadError||dcfPolicyError)&&<div className="notice notice--danger"><AlertTriangle className="btn-symbol" /><div><strong>DCF Policy Notice</strong><p>{dcfPolicyError||dcfPolicyLoadError}</p></div></div>}
+                {dcfRulesOpen&&<div className="settings-accordion__content form-stack">
+                    <div className="dcf-rules-layout"><aside className="form-stack"><label className="form-field"><span className="form-label">Module</span><select value={selectedDcfModule} onChange={event=>setSelectedDcfModule(event.target.value as DcfModuleKey)} className="form-control">{DCF_MODULES.map(module=><option key={module.key} value={module.key}>{module.label}</option>)}</select></label><div className="notice notice--info"><div><strong>Two-gate policy</strong><p>Module permissions apply first. Status and period rules then determine allowed actions.</p></div></div></aside>
+                        <div className="data-table-scroll"><table className="data-table dcf-rules-table"><thead><tr><th className="data-table__sticky-left">Role / Status</th>{DCF_POLICY_ACTIONS.map(action=><th key={action.key}>{action.shortLabel}</th>)}</tr></thead><tbody>{DCF_POLICY_ROLES.map(role=><React.Fragment key={role}><tr className="data-table__group-row"><td colSpan={DCF_POLICY_ACTIONS.length+1}>{role}{role==='Super Admin'&&<small> · always protected</small>}</td></tr>{selectedModuleMeta.statuses.map(status=><tr key={`${role}-${status}`}><td className="data-table__sticky-left data-table__cell--primary">{status}</td>{DCF_POLICY_ACTIONS.map(action=>{const checked=getDcfRuleValue(pendingDcfPolicy,role,selectedDcfModule,status,action.key);const disabled=role==='Super Admin'||role==='Guest';return <td key={action.key}>{renderToggle(checked,disabled,`${role} ${status} ${action.label}`,()=>handleDcfRuleToggle(role,selectedDcfModule,status,action.key))}</td>;})}</tr>)}</React.Fragment>)}</tbody></table></div>
                     </div>
-                    <ChevronDown className={`h-5 w-5 text-amber-700 dark:text-amber-300 transition-transform ${monthLockOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {monthLockOpen && (
-                    <div className="p-4 grid gap-4 lg:grid-cols-3">
-                        <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                            <span>
-                                <span className="block font-bold text-gray-900 dark:text-white">Enable month lock</span>
-                                <span className="text-sm text-gray-500 dark:text-gray-400">Restrict ordinary users to open periods.</span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                checked={pendingDcfPolicy.monthLock.enabled}
-                                onChange={event => updateMonthLock('enabled', event.target.checked)}
-                                className="h-5 w-5"
-                            />
-                        </label>
-                        <label className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                            <span className="block font-bold text-gray-900 dark:text-white">Previous-month grace days</span>
-                            <input
-                                type="number"
-                                min={0}
-                                value={pendingDcfPolicy.monthLock.graceDays}
-                                onChange={event => updateMonthLock('graceDays', Number(event.target.value) || 0)}
-                                className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                            />
-                        </label>
-                        <label className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                            <span>
-                                <span className="block font-bold text-gray-900 dark:text-white">Require override reason</span>
-                                <span className="text-sm text-gray-500 dark:text-gray-400">Applies to Super Admin/Admin period overrides.</span>
-                            </span>
-                            <input
-                                type="checkbox"
-                                checked={pendingDcfPolicy.monthLock.requireOverrideReason}
-                                onChange={event => updateMonthLock('requireOverrideReason', event.target.checked)}
-                                className="h-5 w-5"
-                            />
-                        </label>
-                        <div className="lg:col-span-3 grid gap-3 md:grid-cols-3">
-                            <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Date Source</p>
-                                <p className="font-bold text-gray-900 dark:text-white mt-1">Server date, Asia/Manila</p>
-                            </div>
-                            <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Past Months</p>
-                                <p className="font-bold text-gray-900 dark:text-white mt-1">Blocked after grace period</p>
-                            </div>
-                            <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-4">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Future Months</p>
-                                <p className="font-bold text-gray-900 dark:text-white mt-1">Blocked for ordinary users</p>
-                            </div>
-                        </div>
-                        <div className="lg:col-span-3 rounded-xl border border-amber-100 dark:border-amber-900 bg-amber-50/70 dark:bg-amber-900/20 p-4 text-sm text-amber-900 dark:text-amber-200">
-                            Override roles for this rollout are fixed to <strong>{pendingDcfPolicy.monthLock.overrideRoles.join(', ')}</strong>. When override reasons are required, the reason is recorded in the user activity log with the blocked action or month.
-                        </div>
-                    </div>
-                )}
+                    <section className="policy-preview"><header><ShieldCheck className="btn-symbol" /><strong>Policy Preview</strong><small>Server date: {dcfPolicyLoading?'Loading...':serverDate}</small></header><div className="policy-preview__controls"><select value={selectedDcfRole} onChange={event=>setSelectedDcfRole(event.target.value as UserRole)} className="form-control">{DCF_POLICY_ROLES.map(role=><option key={role} value={role}>{role}</option>)}</select><select value={selectedDcfModule} onChange={event=>setSelectedDcfModule(event.target.value as DcfModuleKey)} className="form-control">{DCF_MODULES.map(module=><option key={module.key} value={module.key}>{module.label}</option>)}</select><select value={previewStatus} onChange={event=>setPreviewStatus(event.target.value as DcfPolicyStatus)} className="form-control">{selectedModuleMeta.statuses.map(status=><option key={status} value={status}>{status}</option>)}</select><select value={previewAction} onChange={event=>setPreviewAction(event.target.value as DcfPolicyAction)} className="form-control">{DCF_POLICY_ACTIONS.map(action=><option key={action.key} value={action.key}>{action.label}</option>)}</select><input type="month" value={previewMonth} onChange={event=>setPreviewMonth(event.target.value)} className="form-control" /></div><div className={`policy-preview__result ${effectivePreview.allowed?'is-allowed':'is-blocked'}`}><strong>{effectivePreview.allowed?'Allowed':'Blocked'}:</strong> {effectivePreview.message}{effectivePreview.requiresOverrideReason&&<span> (override reason required)</span>}</div></section>
+                </div>}
             </section>
+
+            <section className="settings-accordion"><header className="settings-accordion__header settings-accordion__header--warning"><button type="button" onClick={()=>setMonthLockOpen(prev=>!prev)} className="settings-accordion__toggle" aria-expanded={monthLockOpen}><ChevronDown className={`settings-accordion__chevron ${monthLockOpen?'is-open':''}`} /><span><strong>Accomplishment Period Locking</strong><small>Control the monthly window for physical and financial accomplishment entries.</small></span></button></header>{monthLockOpen&&<div className="settings-accordion__content month-lock-grid"><label className="setting-choice"><span><strong>Enable month lock</strong><small>Restrict ordinary users to open periods.</small></span><input type="checkbox" checked={pendingDcfPolicy.monthLock.enabled} onChange={event=>updateMonthLock('enabled',event.target.checked)} className="form-checkbox" /></label><label className="setting-choice"><span><strong>Previous-month grace days</strong></span><input type="number" min={0} value={pendingDcfPolicy.monthLock.graceDays} onChange={event=>updateMonthLock('graceDays',Number(event.target.value)||0)} className="form-control form-control--compact" /></label><label className="setting-choice"><span><strong>Require override reason</strong><small>Applies to Super Admin/Admin period overrides.</small></span><input type="checkbox" checked={pendingDcfPolicy.monthLock.requireOverrideReason} onChange={event=>updateMonthLock('requireOverrideReason',event.target.checked)} className="form-checkbox" /></label><div className="month-lock-grid__facts">{[['Date Source','Server date, Asia/Manila'],['Past Months','Blocked after grace period'],['Future Months','Blocked for ordinary users']].map(([label,value])=><div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div><div className="notice notice--warning">Override roles are fixed to <strong>{pendingDcfPolicy.monthLock.overrideRoles.join(', ')}</strong>. Required override reasons are recorded in the user activity log.</div></div>}</section>
         </div>
     );
 };
