@@ -5,8 +5,11 @@ interface StatCardProps {
     title: string;
     value: string;
     icon: React.ReactNode;
+    supportingText?: React.ReactNode;
     onClick?: () => void;
-    onToggle?: (e: React.MouseEvent) => void;
+    onToggle?: () => void;
+    toggleLabel?: string;
+    toggleAriaLabel?: string;
     toggleIcon?: React.ReactNode;
 }
 
@@ -42,13 +45,21 @@ const compactStatValue = (rawValue: string): string => {
     return `${prefix}${formatCompactNumber(numericValue)}`;
 };
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, onClick, onToggle, toggleIcon }) => {
+const StatCard: React.FC<StatCardProps> = ({
+    title,
+    value,
+    icon,
+    supportingText,
+    onClick,
+    onToggle,
+    toggleLabel,
+    toggleAriaLabel,
+    toggleIcon,
+}) => {
     const displayValue = compactStatValue(value);
 
     return (
-        <div
-            className={`stat-card ${onClick ? 'stat-card--clickable' : ''}`}
-        >
+        <article className={`stat-card ${onClick ? 'stat-card--clickable' : ''}`}>
             {onClick && (
                 <button
                     type="button"
@@ -58,31 +69,35 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, onClick, onTogg
                 />
             )}
             <div className="stat-card__top">
-                <div className="stat-card__icon">
-                    {icon}
-                </div>
-                <div className="stat-card__body">
-                    <p className="stat-card__title" title={title}>{title}</p>
-                </div>
+                <p className="stat-card__title" title={title}>{title}</p>
+                <span className="stat-card__icon" aria-hidden="true">{icon}</span>
             </div>
             <p className="stat-card__value" title={value}>{displayValue}</p>
-            {onToggle && (
-                <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onToggle(e);
-                    }}
-                    className="stat-card__toggle"
-                    title="Switch View"
-                >
-                    {toggleIcon || (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
+            {(supportingText || onToggle) && (
+                <div className="stat-card__footer">
+                    <span className="stat-card__supporting">{supportingText}</span>
+                    {onToggle && (
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onToggle();
+                            }}
+                            className="stat-card__toggle"
+                            title={toggleAriaLabel || 'Switch budget view'}
+                            aria-label={toggleAriaLabel || 'Switch budget view'}
+                        >
+                            {toggleLabel && <span>{toggleLabel}</span>}
+                            {toggleIcon || (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            )}
+                        </button>
                     )}
-                </button>
+                </div>
             )}
-        </div>
+        </article>
     );
 };
 
