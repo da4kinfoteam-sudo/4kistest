@@ -18,6 +18,11 @@ interface CalendarProps {
     systemSettings: SystemSettings;
     onDateClick: (date: Date, events: CalendarEvent[]) => void;
     onEventClick: (event: CalendarEvent) => void;
+    compact?: boolean;
+    selectedDate?: Date | null;
+    visibleMonth?: Date;
+    onVisibleMonthChange?: (date: Date) => void;
+    onToday?: () => void;
 }
 
 const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -34,9 +39,20 @@ interface Holiday {
     types: string[];
 }
 
-const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateClick, onEventClick }) => {
-    const [currentDate, setCurrentDate] = useState(new Date());
+const Calendar: React.FC<CalendarProps> = ({
+    activities,
+    systemSettings,
+    onDateClick,
+    onEventClick,
+    compact = false,
+    selectedDate = null,
+    visibleMonth,
+    onVisibleMonthChange,
+    onToday,
+}) => {
+    const [internalCurrentDate, setInternalCurrentDate] = useState(new Date());
     const [holidays, setHolidays] = useState<Holiday[]>([]);
+    const currentDate = visibleMonth || internalCurrentDate;
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -51,9 +67,16 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
 
-    const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-    const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-    const goToToday = () => setCurrentDate(new Date());
+    const setVisibleMonth = (date: Date) => {
+        if (onVisibleMonthChange) onVisibleMonthChange(date);
+        else setInternalCurrentDate(date);
+    };
+    const prevMonth = () => setVisibleMonth(new Date(year, month - 1, 1));
+    const nextMonth = () => setVisibleMonth(new Date(year, month + 1, 1));
+    const goToToday = () => {
+        setVisibleMonth(new Date());
+        onToday?.();
+    };
 
     useEffect(() => {
         const fetchHolidays = async () => {
@@ -175,6 +198,24 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
         return events;
     }, [activities, systemSettings, holidays]);
 
+    const monthlySummary = useMemo(() => {
+        const activityIds = new Set<string>();
+        const deadlineIds = new Set<string>();
+        const monthPrefix = `${year}-${month}-`;
+
+        (Object.entries(eventsByDate) as Array<[string, CalendarEvent[]]>).forEach(([dateKey, dateEvents]) => {
+            if (!dateKey.startsWith(monthPrefix)) return;
+            dateEvents.forEach(event => {
+                if (event.dataId && (event.dataType === 'Activity' || event.dataType === 'Training')) {
+                    activityIds.add(`${event.dataType}-${event.dataId}`);
+                }
+                if (event.type === 'Deadline') deadlineIds.add(event.id);
+            });
+        });
+
+        return { activities: activityIds.size, deadlines: deadlineIds.size };
+    }, [eventsByDate, month, year]);
+
     const renderCells = () => {
         const cells = [];
         for (let i = 0; i < firstDay; i++) {
@@ -188,34 +229,48 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
             const key = `${year}-${month}-${day}`;
             const dayEvents = eventsByDate[key] || [];
             const isToday = isCurrentMonth && today.getDate() === day;
+            const isSelected = !!selectedDate
+                && selectedDate.getFullYear() === year
+                && selectedDate.getMonth() === month
+                && selectedDate.getDate() === day;
 
             cells.push(
                 <div 
                     key={day} 
-                    className={`app-calendar__day ${isToday ? 'app-calendar__day--today' : ''}`}
+                    className={`app-calendar__day ${isToday ? 'app-calendar__day--today' : ''} ${dayEvents.length ? 'app-calendar__day--has-events' : ''} ${isSelected ? 'app-calendar__day--selected' : ''}`}
                 >
                     <button
                         type="button"
                         className="app-calendar__date"
                         onClick={() => onDateClick(new Date(year, month, day), dayEvents)}
                         aria-label={`${currentDate.toLocaleString('default', { month: 'long' })} ${day}, ${year}${dayEvents.length ? `, ${dayEvents.length} event${dayEvents.length === 1 ? '' : 's'}` : ''}`}
+                        aria-pressed={isSelected}
                     >
                         {day}
                     </button>
                     
-                    <div className="app-calendar__events custom-scrollbar">
-                        {dayEvents.map((evt, idx) => (
-                            <button
-                                key={idx} 
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onEventClick(evt); }}
-                                className={`app-calendar__event app-calendar__event--${evt.tone}`}
-                                title={evt.title}
-                            >
-                                <span>{evt.title}</span>
-                            </button>
-                        ))}
-                    </div>
+                    {compact ? (
+                        <div className="app-calendar__event-dots" aria-hidden="true">
+                            {dayEvents.slice(0, 4).map(evt => (
+                                <span key={evt.id} className={`app-calendar__event-dot app-calendar__event-dot--${evt.tone}`} title={evt.title} />
+                            ))}
+                            {dayEvents.length > 4 && <span className="app-calendar__event-more">+{dayEvents.length - 4}</span>}
+                        </div>
+                    ) : (
+                        <div className="app-calendar__events custom-scrollbar">
+                            {dayEvents.map(evt => (
+                                <button
+                                    key={evt.id}
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onEventClick(evt); }}
+                                    className={`app-calendar__event app-calendar__event--${evt.tone}`}
+                                    title={evt.title}
+                                >
+                                    <span>{evt.title}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -223,26 +278,28 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
     };
 
     return (
-        <div className="app-calendar">
+        <div className={`app-calendar ${compact ? 'app-calendar--compact' : ''}`}>
             <div className="app-calendar__header">
-                <button type="button" onClick={prevMonth} className="btn btn-ghost btn-icon" aria-label="Previous month">
-                    <svg className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
                 <div className="app-calendar__heading">
                     <h2>
                         {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                     </h2>
-                    <button type="button" onClick={goToToday} className="btn btn-link">Today</button>
+                    {!compact && <button type="button" onClick={goToToday} className="btn btn-link">Today</button>}
                 </div>
-                <button type="button" onClick={nextMonth} className="btn btn-ghost btn-icon" aria-label="Next month">
-                    <svg className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                </button>
+                <div className="app-calendar__navigation">
+                    <button type="button" onClick={prevMonth} className="btn btn-ghost btn-icon" aria-label="Previous month">
+                        <svg className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <button type="button" onClick={nextMonth} className="btn btn-ghost btn-icon" aria-label="Next month">
+                        <svg className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                </div>
             </div>
 
             <div className="app-calendar__weekdays">
                 {daysOfWeek.map(day => (
                     <div key={day}>
-                        {day}
+                        {compact ? day.slice(0, 1) : day}
                     </div>
                 ))}
             </div>
@@ -251,7 +308,12 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                 {renderCells()}
             </div>
             
-            <div className="app-calendar__legend">
+            {compact ? (
+                <div className="app-calendar__summary">
+                    <span>{monthlySummary.activities} {monthlySummary.activities === 1 ? 'activity' : 'activities'} this month</span>
+                    <span>{monthlySummary.deadlines} {monthlySummary.deadlines === 1 ? 'deadline' : 'deadlines'} this month</span>
+                </div>
+            ) : <div className="app-calendar__legend">
                 <div>
                     <span className="app-calendar__legend-swatch app-calendar__legend-swatch--holiday" />
                     <span>Holiday</span>
@@ -268,7 +330,7 @@ const Calendar: React.FC<CalendarProps> = ({ activities, systemSettings, onDateC
                     <span className="app-calendar__legend-swatch app-calendar__legend-swatch--activity" />
                     <span>Activity</span>
                 </div>
-            </div>
+            </div>}
         </div>
     );
 };

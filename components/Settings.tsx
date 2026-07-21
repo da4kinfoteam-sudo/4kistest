@@ -46,6 +46,15 @@ interface SettingsProps {
 
 type TabName = 'profile' | 'management' | 'control_center' | 'drive' | 'system' | 'logs' | 'dcf' | 'lod' | 'archive';
 
+const getInitialSettingsTab = (): TabName => {
+    const hashPath = window.location.hash.replace(/^#/, '');
+    const [, query = ''] = hashPath.split('?');
+    const requestedTab = new URLSearchParams(query).get('tab') as TabName | null;
+    const validTabs: TabName[] = ['profile', 'management', 'control_center', 'drive', 'system', 'logs', 'dcf', 'lod', 'archive'];
+    if (requestedTab && validTabs.includes(requestedTab)) return requestedTab;
+    return hashPath.includes('drive=') ? 'drive' : 'profile';
+};
+
 const Settings: React.FC<SettingsProps> = ({ 
     isDarkMode, themePreference, onThemePreferenceChange,
     deadlines, setDeadlines,
@@ -60,9 +69,7 @@ const Settings: React.FC<SettingsProps> = ({
     onSelectIpo
 }) => {
     const { currentUser, hasAccess } = useAuth();
-    const [activeTab, setActiveTab] = useState<TabName>(() => (
-        window.location.hash.includes('drive=') ? 'drive' : 'profile'
-    ));
+    const [activeTab, setActiveTab] = useState<TabName>(getInitialSettingsTab);
 
     // We keep these legacy admin checks as absolute fallbacks for settings only
     const isAdmin = currentUser?.role === 'Administrator' || currentUser?.role === 'Super Admin';
