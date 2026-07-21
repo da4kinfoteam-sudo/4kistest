@@ -272,7 +272,7 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
     const [expandedRows, setExpandedRows] = useState(new Set<string>());
 
     const dataCellClass = 'beds-report__cell';
-    const indentClasses: Record<number, string> = { 0: '', 1: 'pl-6', 2: 'pl-10', 3: 'pl-14' };
+    const indentClasses: Record<number, string> = { 0: '', 1: 'beds-report__indent--1', 2: 'beds-report__indent--2', 3: 'beds-report__indent--3' };
     const isYearSelected = selectedYear !== 'All';
 
     const financialInput = useMemo(() => ({
@@ -448,18 +448,18 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
     const renderBed1Totals = (items: Bed1Row[], label: string) => {
         const totals = getBed1Totals(items);
         return (
-            <tr className="font-bold bg-gray-200 dark:bg-gray-700 text-xs">
-                <td className={`${dataCellClass} sticky left-0 bg-gray-200 dark:bg-gray-700 z-10`}>{label}</td>
+            <tr className="beds-report__row beds-report__row--total">
+                <td className={`${dataCellClass} beds-report__cell--sticky`}>{label}</td>
                 <td className={`${dataCellClass} text-center`}></td>
                 <td className={`${dataCellClass} text-right`}></td>
                 <td className={`${dataCellClass} text-right`}></td>
                 <td className={`${dataCellClass} text-right`}></td>
-                <td className={`${dataCellClass} text-right bg-emerald-50 dark:bg-emerald-900/20`}>{totals.currTotal > 0 ? formatCurrencyWhole(totals.currTotal) : ''}</td>
+                <td className={`${dataCellClass} text-right beds-report__cell--highlight`}>{totals.currTotal > 0 ? formatCurrencyWhole(totals.currTotal) : ''}</td>
                 <td className={`${dataCellClass} text-right`}>{totals.compQ1 > 0 ? formatCurrencyWhole(totals.compQ1) : ''}</td>
                 <td className={`${dataCellClass} text-right`}>{totals.compQ2 > 0 ? formatCurrencyWhole(totals.compQ2) : ''}</td>
                 <td className={`${dataCellClass} text-right`}>{totals.compQ3 > 0 ? formatCurrencyWhole(totals.compQ3) : ''}</td>
                 <td className={`${dataCellClass} text-right`}>{totals.compQ4 > 0 ? formatCurrencyWhole(totals.compQ4) : ''}</td>
-                <td className={`${dataCellClass} text-right font-semibold`}>{totals.compSubtotal > 0 ? formatCurrencyWhole(totals.compSubtotal) : ''}</td>
+                <td className={`${dataCellClass} text-right beds-report__cell--emphasis`}>{totals.compSubtotal > 0 ? formatCurrencyWhole(totals.compSubtotal) : ''}</td>
                 <td colSpan={5} className={dataCellClass}></td>
             </tr>
         );
@@ -469,19 +469,19 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
         const totals = getMonthlyTotals(items);
         const fmt = (val: number) => bedType === 'BED2' ? (val > 0 ? formatNumberWhole(val) : '') : (val > 0 ? formatCurrencyWhole(val) : '');
         return (
-            <tr className="font-bold bg-gray-200 dark:bg-gray-700 text-xs">
-                <td className={`${dataCellClass} sticky left-0 bg-gray-200 dark:bg-gray-700 z-10`}>{label}</td>
+            <tr className="beds-report__row beds-report__row--total">
+                <td className={`${dataCellClass} beds-report__cell--sticky`}>{label}</td>
                 {Array.from({ length: 12 }, (_, index) => (
                     <React.Fragment key={index}>
                         <td className={`${dataCellClass} text-right`}>{fmt(totals[`m${index + 1}` as keyof MonthlyRow] as number)}</td>
                         {[2, 5, 8, 11].includes(index) && (
-                            <td className={`${dataCellClass} text-right bg-gray-300 dark:bg-gray-600`}>
+                            <td className={`${dataCellClass} text-right beds-report__cell--quarter`}>
                                 {fmt(index === 2 ? totals.q1 : index === 5 ? totals.q2 : index === 8 ? totals.q3 : totals.q4)}
                             </td>
                         )}
                     </React.Fragment>
                 ))}
-                <td className={`${dataCellClass} text-right bg-emerald-100 dark:bg-emerald-900`}>{fmt(totals.total)}</td>
+                <td className={`${dataCellClass} text-right beds-report__cell--grand`}>{fmt(totals.total)}</td>
             </tr>
         );
     };
@@ -492,15 +492,15 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
                 const row = item as Bed1Row;
                 return (
                     <tr key={key}>
-                        <td className={`${dataCellClass} ${indentClasses[level]} sticky left-0 bg-white dark:bg-gray-800 z-10`}>{renderItemLabel(row)}</td>
+                        <td className={`${dataCellClass} ${indentClasses[level]} beds-report__cell--sticky`}>{renderItemLabel(row)}</td>
                         <td className={`${dataCellClass} text-center`}></td>
                         <td colSpan={3} className={dataCellClass}></td>
-                        <td className={`${dataCellClass} text-right bg-emerald-50 dark:bg-emerald-900/20`}>{row.currTotal > 0 ? formatCurrencyWhole(row.currTotal) : ''}</td>
+                        <td className={`${dataCellClass} text-right beds-report__cell--highlight`}>{row.currTotal > 0 ? formatCurrencyWhole(row.currTotal) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{row.compQ1 > 0 ? formatCurrencyWhole(row.compQ1) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{row.compQ2 > 0 ? formatCurrencyWhole(row.compQ2) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{row.compQ3 > 0 ? formatCurrencyWhole(row.compQ3) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{row.compQ4 > 0 ? formatCurrencyWhole(row.compQ4) : ''}</td>
-                        <td className={`${dataCellClass} text-right font-semibold`}>{row.compSubtotal > 0 ? formatCurrencyWhole(row.compSubtotal) : ''}</td>
+                        <td className={`${dataCellClass} text-right beds-report__cell--emphasis`}>{row.compSubtotal > 0 ? formatCurrencyWhole(row.compSubtotal) : ''}</td>
                         <td colSpan={5} className={dataCellClass}></td>
                     </tr>
                 );
@@ -510,18 +510,18 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
             const fmt = (val: number) => bedType === 'BED2' ? (val > 0 ? formatNumberWhole(val) : '') : (val > 0 ? formatCurrencyWhole(val) : '');
             return (
                 <tr key={key}>
-                    <td className={`${dataCellClass} ${indentClasses[level]} sticky left-0 bg-white dark:bg-gray-800 z-10`}>{renderItemLabel(row)}</td>
+                    <td className={`${dataCellClass} ${indentClasses[level]} beds-report__cell--sticky`}>{renderItemLabel(row)}</td>
                     {Array.from({ length: 12 }, (_, index) => (
                         <React.Fragment key={index}>
                             <td className={`${dataCellClass} text-right`}>{fmt(row[`m${index + 1}` as keyof MonthlyRow] as number)}</td>
                             {[2, 5, 8, 11].includes(index) && (
-                                <td className={`${dataCellClass} text-right bg-gray-50 dark:bg-gray-700/50`}>
+                                <td className={`${dataCellClass} text-right beds-report__cell--quarter`}>
                                     {fmt(index === 2 ? row.q1 : index === 5 ? row.q2 : index === 8 ? row.q3 : row.q4)}
                                 </td>
                             )}
                         </React.Fragment>
                     ))}
-                    <td className={`${dataCellClass} text-right font-semibold`}>{fmt(row.total)}</td>
+                    <td className={`${dataCellClass} text-right beds-report__cell--emphasis`}>{fmt(row.total)}</td>
                 </tr>
             );
         };
@@ -531,13 +531,13 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
             if (bedType === 'BED1') {
                 const totals = getBed1Totals(items as Bed1Row[]);
                 return (
-                    <tr onClick={() => toggleRow(rowKeyValue)} className="font-bold bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer text-xs">
-                        <td className={`${dataCellClass} ${indentClasses[level]} sticky left-0 bg-gray-100 dark:bg-gray-700 z-10`}>
-                            <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400">{isExpanded ? '-' : '+'}</span> {label}
+                    <tr onClick={() => toggleRow(rowKeyValue)} className="beds-report__row beds-report__row--summary">
+                        <td className={`${dataCellClass} ${indentClasses[level]} beds-report__cell--sticky`}>
+                            <span className="beds-report__expand" aria-hidden="true">{isExpanded ? '−' : '+'}</span> {label}
                         </td>
                         <td className={dataCellClass}></td>
                         <td colSpan={3} className={dataCellClass}></td>
-                        <td className={`${dataCellClass} text-right bg-emerald-50 dark:bg-emerald-900/20`}>{totals.currTotal > 0 ? formatCurrencyWhole(totals.currTotal) : ''}</td>
+                        <td className={`${dataCellClass} text-right beds-report__cell--highlight`}>{totals.currTotal > 0 ? formatCurrencyWhole(totals.currTotal) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{totals.compQ1 > 0 ? formatCurrencyWhole(totals.compQ1) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{totals.compQ2 > 0 ? formatCurrencyWhole(totals.compQ2) : ''}</td>
                         <td className={`${dataCellClass} text-right`}>{totals.compQ3 > 0 ? formatCurrencyWhole(totals.compQ3) : ''}</td>
@@ -551,21 +551,21 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
             const totals = getMonthlyTotals(items as MonthlyRow[]);
             const fmt = (val: number) => bedType === 'BED2' ? (val > 0 ? formatNumberWhole(val) : '') : (val > 0 ? formatCurrencyWhole(val) : '');
             return (
-                <tr onClick={() => toggleRow(rowKeyValue)} className="font-bold bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer text-xs">
-                    <td className={`${dataCellClass} ${indentClasses[level]} sticky left-0 bg-gray-100 dark:bg-gray-700 z-10`}>
-                        <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400">{isExpanded ? '-' : '+'}</span> {label}
+                <tr onClick={() => toggleRow(rowKeyValue)} className="beds-report__row beds-report__row--summary">
+                    <td className={`${dataCellClass} ${indentClasses[level]} beds-report__cell--sticky`}>
+                        <span className="beds-report__expand" aria-hidden="true">{isExpanded ? '−' : '+'}</span> {label}
                     </td>
                     {Array.from({ length: 12 }, (_, index) => (
                         <React.Fragment key={index}>
                             <td className={`${dataCellClass} text-right`}>{fmt(totals[`m${index + 1}` as keyof MonthlyRow] as number)}</td>
                             {[2, 5, 8, 11].includes(index) && (
-                                <td className={`${dataCellClass} text-right bg-gray-200 dark:bg-gray-700`}>
+                                <td className={`${dataCellClass} text-right beds-report__cell--quarter`}>
                                     {fmt(index === 2 ? totals.q1 : index === 5 ? totals.q2 : index === 8 ? totals.q3 : totals.q4)}
                                 </td>
                             )}
                         </React.Fragment>
                     ))}
-                    <td className={`${dataCellClass} text-right font-semibold`}>{fmt(totals.total)}</td>
+                    <td className={`${dataCellClass} text-right beds-report__cell--emphasis`}>{fmt(totals.total)}</td>
                 </tr>
             );
         };
@@ -726,16 +726,16 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
     const renderMonthlyHeader = () => (
         <>
             <tr>
-                <th rowSpan={2} className="p-2 border border-gray-300 dark:border-gray-600 align-bottom min-w-[250px] sticky left-0 bg-teal-200 dark:bg-teal-900 z-20 text-left text-teal-900 dark:text-white">Program/Activity/Project</th>
-                <th colSpan={4} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold text-teal-900 dark:text-white">Quarter 1</th>
-                <th colSpan={4} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold text-teal-900 dark:text-white">Quarter 2</th>
-                <th colSpan={4} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold text-teal-900 dark:text-white">Quarter 3</th>
-                <th colSpan={4} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold text-teal-900 dark:text-white">Quarter 4</th>
-                <th rowSpan={2} className="p-2 border border-gray-300 dark:border-gray-600 text-center align-middle font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-100">Grand Total</th>
+                <th rowSpan={2} className="beds-report__header-cell beds-report__header-cell--sticky beds-report__header-cell--label">Program/Activity/Project</th>
+                <th colSpan={4} className="beds-report__header-cell beds-report__header-cell--quarter">Quarter 1</th>
+                <th colSpan={4} className="beds-report__header-cell beds-report__header-cell--quarter">Quarter 2</th>
+                <th colSpan={4} className="beds-report__header-cell beds-report__header-cell--quarter">Quarter 3</th>
+                <th colSpan={4} className="beds-report__header-cell beds-report__header-cell--quarter">Quarter 4</th>
+                <th rowSpan={2} className="beds-report__header-cell beds-report__header-cell--grand">Grand Total</th>
             </tr>
             <tr>
                 {['Jan', 'Feb', 'Mar', 'Total', 'Apr', 'May', 'Jun', 'Total', 'Jul', 'Aug', 'Sep', 'Total', 'Oct', 'Nov', 'Dec', 'Total'].map((label, index) => (
-                    <th key={`${label}-${index}`} className={`p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px]${label === 'Total' ? ' font-bold bg-teal-300 dark:bg-teal-800' : ''}`}>{label}</th>
+                    <th key={`${label}-${index}`} className={`beds-report__header-cell beds-report__header-cell--month${label === 'Total' ? ' beds-report__header-cell--subtotal' : ''}`}>{label}</th>
                 ))}
             </tr>
         </>
@@ -778,19 +778,19 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
                         </button>
                     </div>
                     <div id="bed1-report-table" className="report-table-scroll beds-report-scroll">
-                        <table className="beds-report-table min-w-full border-collapse text-xs whitespace-nowrap">
-                            <thead className="bg-teal-200 dark:bg-teal-900 sticky top-0 z-10">
+                        <table className="beds-report-table">
+                            <thead className="beds-report__head">
                                 <tr>
-                                    <th rowSpan={2} className="p-2 border border-gray-300 dark:border-gray-600 align-bottom min-w-[250px] sticky left-0 bg-teal-200 dark:bg-teal-900 z-20 text-left text-teal-900 dark:text-white">Program/Activity/Project</th>
-                                    <th rowSpan={2} className="p-2 border border-gray-300 dark:border-gray-600 text-center align-middle min-w-[150px] text-teal-900 dark:text-white">Performance Indicator</th>
-                                    <th colSpan={3} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold bg-teal-300 dark:bg-teal-800 text-teal-900 dark:text-white">Current Year Obligation</th>
-                                    <th rowSpan={2} className="p-2 border border-gray-300 dark:border-gray-600 text-center align-middle bg-emerald-100 dark:bg-emerald-900/40 font-bold min-w-[100px] text-emerald-900 dark:text-emerald-100">Total Target</th>
-                                    <th colSpan={5} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold text-teal-900 dark:text-white">Comprehensive Release</th>
-                                    <th colSpan={5} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold text-teal-900 dark:text-white">For Later Release</th>
+                                    <th rowSpan={2} className="beds-report__header-cell beds-report__header-cell--sticky beds-report__header-cell--label">Program/Activity/Project</th>
+                                    <th rowSpan={2} className="beds-report__header-cell beds-report__header-cell--indicator">Performance Indicator</th>
+                                    <th colSpan={3} className="beds-report__header-cell beds-report__header-cell--subtotal">Current Year Obligation</th>
+                                    <th rowSpan={2} className="beds-report__header-cell beds-report__header-cell--grand beds-report__header-cell--target">Total Target</th>
+                                    <th colSpan={5} className="beds-report__header-cell beds-report__header-cell--quarter">Comprehensive Release</th>
+                                    <th colSpan={5} className="beds-report__header-cell beds-report__header-cell--quarter">For Later Release</th>
                                 </tr>
                                 <tr>
                                     {['Actual (Jan-Sept)', 'Estimate (Oct-Dec)', 'Total', 'Q1', 'Q2', 'Q3', 'Q4', 'Subtotal', 'Q1', 'Q2', 'Q3', 'Q4', 'Subtotal'].map((label, index) => (
-                                        <th key={`${label}-${index}`} className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[80px]">{label}</th>
+                                        <th key={`${label}-${index}`} className="beds-report__header-cell beds-report__header-cell--detail">{label}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -818,8 +818,8 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
                         </button>
                     </div>
                     <div id="bed2-report-table" className="report-table-scroll beds-report-scroll">
-                        <table className="beds-report-table min-w-full border-collapse text-xs whitespace-nowrap">
-                            <thead className="bg-teal-200 dark:bg-teal-900 sticky top-0 z-10">{renderMonthlyHeader()}</thead>
+                        <table className="beds-report-table">
+                            <thead className="beds-report__head">{renderMonthlyHeader()}</thead>
                             <tbody>{renderData(bed2Data, 'BED2')}</tbody>
                             <tfoot>{renderMonthlyTotals(getGrandTotals(bed2Data), 'GRAND TOTAL', 'BED2')}</tfoot>
                         </table>
@@ -853,8 +853,8 @@ const BEDSReport: React.FC<BEDSReportProps> = ({
                         </div>
                     )}
                     <div id="bed3-report-table" className="report-table-scroll beds-report-scroll">
-                        <table className="beds-report-table min-w-full border-collapse text-xs whitespace-nowrap">
-                            <thead className="bg-teal-200 dark:bg-teal-900 sticky top-0 z-10">{renderMonthlyHeader()}</thead>
+                        <table className="beds-report-table">
+                            <thead className="beds-report__head">{renderMonthlyHeader()}</thead>
                             <tbody>{renderData(bed3Data, 'BED3')}</tbody>
                             <tfoot>{renderMonthlyTotals(getGrandTotals(bed3Data), 'GRAND TOTAL', 'BED3')}</tfoot>
                         </table>

@@ -11,6 +11,14 @@ import { aggregateHomepageFinancials } from '../lib/financialAggregation';
 import { aggregateHomepagePhysicalStats } from '../lib/physicalAggregation';
 import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../lib/budgetLineAdjustments';
 import type { DataScope } from '../lib/scopedDataFetch';
+import {
+    ContentCard,
+    EmptyState,
+    FilterToolbar,
+    MapCard,
+    PageHeader,
+    StatusIndicator,
+} from './ui/enterprise';
 
 // Since Leaflet is loaded from a script tag, we need to declare it for TypeScript
 declare const L: any;
@@ -205,7 +213,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ ipos, subprojects, trainings })
         }
     }, [ipos, subprojects, trainings]);
 
-    return <div ref={mapContainerRef} className="h-96 w-full rounded-lg z-0" />;
+    return <div ref={mapContainerRef} className="dashboard-map" />;
 };
 
 
@@ -256,17 +264,6 @@ const isWithinDeadlineWindow = (dateString?: string) => {
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
-}
-
-const getStatusBadge = (status: Subproject['status']) => {
-    const baseClasses = "px-3 py-1 text-xs font-semibold rounded-full";
-    switch (status) {
-        case 'Completed': return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200`;
-        case 'Ongoing': return `${baseClasses} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200`;
-        case 'Proposed': return `${baseClasses} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200`;
-        case 'Cancelled': return `${baseClasses} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200`;
-        default: return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200`;
-    }
 }
 
 const calculateTotalBudget = (details: SubprojectDetail[]) => {
@@ -324,6 +321,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     const [modalData, setModalData] = useState<ActivityItem | null>(null);
     const [dayModalData, setDayModalData] = useState<{ date: Date, items: CalendarEvent[] } | null>(null);
     const [cardModal, setCardModal] = useState<{ title: string; metrics: { label: string; value: number | string; isCurrency?: boolean; subtext?: string }[] } | null>(null);
+
+    useEffect(() => {
+        if (!cardModal && !dayModalData) return;
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setCardModal(null);
+            setDayModalData(null);
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [cardModal, dayModalData]);
 
     const [mapFilters, setMapFilters] = useState({
         ipos: true,
@@ -575,10 +583,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div 
                         className="dashboard-modal dashboard-modal--day"
                         onClick={(e) => e.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="dashboard-card-dialog-title"
                     >
                         <div className="dashboard-modal__header">
-                            <h3>{cardModal.title}</h3>
-                            <button onClick={() => setCardModal(null)} className="dashboard-modal__close">&times;</button>
+                            <h3 id="dashboard-card-dialog-title">{cardModal.title}</h3>
+                            <button onClick={() => setCardModal(null)} className="dashboard-modal__close" aria-label="Close details">&times;</button>
                         </div>
                         <div className="dashboard-modal__stack">
                             {cardModal.metrics.map((metric, idx) => (
@@ -606,12 +617,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div 
                         className="dashboard-modal"
                         onClick={(e) => e.stopPropagation()}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="dashboard-day-dialog-title"
                     >
                         <div className="dashboard-modal__header">
-                            <h3>
+                            <h3 id="dashboard-day-dialog-title">
                                 {dayModalData.date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                             </h3>
-                            <button onClick={() => setDayModalData(null)} className="dashboard-modal__close">&times;</button>
+                            <button onClick={() => setDayModalData(null)} className="dashboard-modal__close" aria-label="Close day details">&times;</button>
                         </div>
                         
                         <div className="dashboard-modal__body dashboard-day-modal__body custom-scrollbar">
@@ -622,17 +636,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                                     onClick={() => handleCalendarEventClick(event)}
                                     className={`dashboard-modal__event ${event.originalData ? 'dashboard-modal__event--clickable' : ''}`}
                                 >
-                                    <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm">{event.title}</p>
+                                    <p className="dashboard-modal__event-title">{event.title}</p>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide">{event.type}</p>
+                                        <p className="dashboard-modal__event-type">{event.type}</p>
                                         {event.originalData?.operatingUnit && (
-                                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                                            <span className="status-badge status-badge--compact status-badge--completed">
                                                 {event.originalData.operatingUnit}
                                             </span>
                                         )}
                                     </div>
                                     {event.originalData?.description && (
-                                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-2 line-clamp-2 italic border-t border-gray-100 dark:border-gray-700 pt-2">
+                                        <p className="dashboard-modal__event-description">
                                             {event.originalData.description}
                                         </p>
                                     )}
@@ -644,11 +658,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
             )}
 
-            <div className="dashboard-header">
-                <div>
-                    <h2>4K Information System Overview</h2>
-                </div>
-                <div className="dashboard-filter-bar">
+            <PageHeader
+                title="4K Information System Overview"
+                metadata="Program performance, schedules, mapped activities, and delivery progress."
+            />
+
+            <FilterToolbar className="dashboard-filter-bar">
                      <div className="dashboard-filter">
                         <label htmlFor="ou-filter">OU</label>
                         <select 
@@ -702,15 +717,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                             ))}
                         </select>
                     </div>
-                </div>
-            </div>
+            </FilterToolbar>
 
             <div className="dashboard-metric-grid">
                 <StatCard 
                     title={`Total Budget (${totalBudgetView})`} 
                     value={formatCurrency(totalBudgetView === 'Obligated' ? dashboardStats.financials.total.obli : dashboardStats.financials.total.disb)} 
                     icon={<FinancialsIcon />} 
-                    color="text-purple-500" 
                     onClick={showTotalBudget}
                     onToggle={() => setTotalBudgetView(prev => prev === 'Obligated' ? 'Disbursed' : 'Obligated')}
                 />
@@ -718,7 +731,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                     title={`Total Budget for Subprojects (${spBudgetView})`} 
                     value={formatCurrency(spBudgetView === 'Obligated' ? dashboardStats.financials.subprojects.obli : dashboardStats.financials.subprojects.disb)} 
                     icon={<FinancialsIcon />} 
-                    color="text-blue-500" 
                     onClick={showSpBudget}
                     onToggle={() => setSpBudgetView(prev => prev === 'Obligated' ? 'Disbursed' : 'Obligated')}
                 />
@@ -726,19 +738,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                     title={`Total Budget for Trainings (${trBudgetView})`} 
                     value={formatCurrency(trBudgetView === 'Obligated' ? dashboardStats.financials.trainings.obli : dashboardStats.financials.trainings.disb)} 
                     icon={<FinancialsIcon />} 
-                    color="text-green-500" 
                     onClick={showTrBudget}
                     onToggle={() => setTrBudgetView(prev => prev === 'Obligated' ? 'Disbursed' : 'Obligated')}
                 />
-                <StatCard title="Number of Subprojects (Completed)" value={dashboardStats.physical.subprojects.actual.toString()} icon={<ProjectsIcon className="h-8 w-8" />} color="text-blue-600" onClick={showSpCount} />
-                <StatCard title="Number of Trainings (Completed)" value={dashboardStats.physical.trainings.actual.toString()} icon={<TrainingIcon className="h-8 w-8" />} color="text-green-600" onClick={showTrCount} />
-                <StatCard title="Number of IPOs assisted" value={dashboardStats.physical.iposAssisted.actual.toString()} icon={<IpoIcon className="h-8 w-8" />} color="text-yellow-500" onClick={showIposAssisted} />
-                <StatCard title="Number of IPOs with subprojects" value={dashboardStats.physical.iposWithSp.actual.toString()} icon={<IpoIcon className="h-8 w-8" />} color="text-teal-500" onClick={showIposWithSp} />
-                <StatCard title="Number of Ancestral Domains assisted" value={dashboardStats.physical.adsAssisted.actual.toString()} icon={<AdIcon className="h-8 w-8" />} color="text-orange-500" onClick={showAdsAssisted} />
+                <StatCard title="Number of Subprojects (Completed)" value={dashboardStats.physical.subprojects.actual.toString()} icon={<ProjectsIcon className="h-8 w-8" />} onClick={showSpCount} />
+                <StatCard title="Number of Trainings (Completed)" value={dashboardStats.physical.trainings.actual.toString()} icon={<TrainingIcon className="h-8 w-8" />} onClick={showTrCount} />
+                <StatCard title="Number of IPOs assisted" value={dashboardStats.physical.iposAssisted.actual.toString()} icon={<IpoIcon className="h-8 w-8" />} onClick={showIposAssisted} />
+                <StatCard title="Number of IPOs with subprojects" value={dashboardStats.physical.iposWithSp.actual.toString()} icon={<IpoIcon className="h-8 w-8" />} onClick={showIposWithSp} />
+                <StatCard title="Number of Ancestral Domains assisted" value={dashboardStats.physical.adsAssisted.actual.toString()} icon={<AdIcon className="h-8 w-8" />} onClick={showAdsAssisted} />
             </div>
 
             {/* System Schedule Summary Card */}
-            <div className="dashboard-panel">
+            <ContentCard className="dashboard-panel">
                 <div className="dashboard-panel__header">
                     <div>
                         <h3 className="dashboard-panel__title">System Schedule</h3>
@@ -799,9 +810,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                         ) : <p className="dashboard-empty">No active NPMO schedules.</p>}
                     </div>
                 </div>
-            </div>
+            </ContentCard>
 
-            <div className="dashboard-panel">
+            <MapCard className="dashboard-panel">
                 <div className="dashboard-panel__header">
                     <div>
                         <h3 className="dashboard-panel__title">4K Map</h3>
@@ -823,9 +834,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                 </div>
                 <MapDisplay ipos={filteredIposForMap} subprojects={filteredSubprojectsForMap} trainings={filteredTrainingsForMap} />
-            </div>
+            </MapCard>
 
-            <div className="dashboard-panel">
+            <ContentCard className="dashboard-panel">
                 <div className="dashboard-panel__header">
                     <div>
                         <h3 className="dashboard-panel__title">4K Calendar</h3>
@@ -837,10 +848,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                     onDateClick={handleDateClick}
                     onEventClick={handleCalendarEventClick}
                 />
-            </div>
+            </ContentCard>
 
             {/* Activities List Section (with Cards) */}
-            <div className="dashboard-panel">
+            <ContentCard className="dashboard-panel">
                 <div className="dashboard-panel__header">
                     <div>
                         <h3 className="dashboard-panel__title">4K Activities</h3>
@@ -879,6 +890,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         </div>
                     </div>
                 </div>
+                 {paginatedActivitiesList.length > 0 ? (
                  <div className="dashboard-activity-grid">
                     {paginatedActivitiesList.map(activity => (
                         <div 
@@ -893,7 +905,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                             <h4>{activity.name}</h4>
                             <div className="dashboard-activity-card__context">
                                 <span className="dashboard-activity-card__ou">{activity.activityOu || 'No OU'}</span>
-                                <span className={getStatusBadge(activity.activityStatus)}>{activity.activityStatus}</span>
+                                <StatusIndicator status={activity.activityStatus} compact />
                             </div>
                             <p className="line-clamp-2">
                                 {activity.activityType === 'Subproject' ? activity.location : activity.description}
@@ -901,6 +913,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                         </div>
                     ))}
                  </div>
+                 ) : (
+                    <EmptyState
+                        title="No activities found"
+                        message="Try another date view or activity type."
+                    />
+                 )}
                  
                  {/* Pagination Controls */}
                  {totalActivityPages > 1 && (
@@ -922,7 +940,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                          </button>
                      </div>
                  )}
-            </div>
+            </ContentCard>
         </div>
     );
 };

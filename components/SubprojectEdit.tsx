@@ -12,6 +12,7 @@ import { useDcfPolicyGuard } from '../hooks/useDcfPolicyGuard';
 import { supabase } from '../supabaseClient';
 import { resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../lib/physicalAccomplishmentTimestamp';
 import { isMonthTargetOverdue } from '../lib/dateStatus';
+import { ConfirmDialog } from './ui/enterprise';
 
 interface SubprojectEditProps {
     subproject?: Subproject;
@@ -644,7 +645,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                     {activeTab === 'details' && (
                          <div className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div><label className="form-label">Subproject Name <span className="text-red-500">*</span></label><input type="text" name="name" value={formData.name} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('name') ? 'border-red-500 ring-1 ring-red-500' : ''}`} required /></div>
+                                <div><label className="form-label">Subproject Name <span className="form-required">*</span></label><input type="text" name="name" value={formData.name} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('name') ? 'form-control--invalid' : ''}`} required /></div>
                                 <div>
                                     <label className="form-label">Operating Unit</label>
                                     <select 
@@ -659,14 +660,14 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         {operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}
                                     </select>
                                 </div>
-                                <div><label className="form-label">Region <span className="text-red-500">*</span></label><select value={selectedRegion} onChange={(e) => { setSelectedRegion(e.target.value); setFormData(prev => ({...prev, indigenousPeopleOrganization: ''})); }} className={`${commonInputClasses} ${missingFields.includes('indigenousPeopleOrganization') && !selectedRegion ? 'border-red-500 ring-1 ring-red-500' : ''}`}><option value="">Select Region</option>{philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                                <div><label className="form-label">Indigenous People Organization <span className="text-red-500">*</span></label><select name="indigenousPeopleOrganization" value={formData.indigenousPeopleOrganization} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('indigenousPeopleOrganization') ? 'border-red-500 ring-1 ring-red-500' : ''}`} disabled={!selectedRegion} required><option value="">Select IPO</option>{filteredIpos.map(ipo => <option key={ipo.id} value={ipo.name}>{ipo.name}</option>)}</select></div>
-                                <div><label className="form-label">Status <span className="text-red-500">*</span></label><select name="status" value={formData.status} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('status') ? 'border-red-500 ring-1 ring-red-500' : ''}`}><option value="Proposed">Proposed</option><option value="Ongoing">Ongoing</option><option value="Completed">Completed</option><option value="Cancelled">Cancelled</option></select></div>
+                                <div><label className="form-label">Region <span className="form-required">*</span></label><select value={selectedRegion} onChange={(e) => { setSelectedRegion(e.target.value); setFormData(prev => ({...prev, indigenousPeopleOrganization: ''})); }} className={`${commonInputClasses} ${missingFields.includes('indigenousPeopleOrganization') && !selectedRegion ? 'form-control--invalid' : ''}`}><option value="">Select Region</option>{philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                                <div><label className="form-label">Indigenous People Organization <span className="form-required">*</span></label><select name="indigenousPeopleOrganization" value={formData.indigenousPeopleOrganization} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('indigenousPeopleOrganization') ? 'form-control--invalid' : ''}`} disabled={!selectedRegion} required><option value="">Select IPO</option>{filteredIpos.map(ipo => <option key={ipo.id} value={ipo.name}>{ipo.name}</option>)}</select></div>
+                                <div><label className="form-label">Status <span className="form-required">*</span></label><select name="status" value={formData.status} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('status') ? 'form-control--invalid' : ''}`}><option value="Proposed">Proposed</option><option value="Ongoing">Ongoing</option><option value="Completed">Completed</option><option value="Cancelled">Cancelled</option></select></div>
                                 <div><label className="form-label">Package</label><select name="packageType" value={formData.packageType} onChange={handleInputChange} className={commonInputClasses}>{Array.from({ length: 7 }, (_, i) => `Package ${i + 1}`).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium">Estimated Completion {!subproject && <span className="text-red-500">*</span>}</label>
+                                    <label className="form-label">Estimated Completion {!subproject && <span className="form-required">*</span>}</label>
                                     <MonthYearPicker
                                         value={formData.estimatedCompletionDate}
                                         onChange={(val) => {
@@ -678,40 +679,40 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                             setFormData(prev => ({ ...prev, estimatedCompletionDate: val }));
                                         }}
                                         placeholder="Select completion date"
-                                        className={missingFields.includes('estimatedCompletionDate') ? 'border-red-500 ring-1 ring-red-500' : ''}
+                                        className={missingFields.includes('estimatedCompletionDate') ? 'form-control--invalid' : ''}
                                         defaultYear={formData.fundingYear}
                                     />
                                     {getYearFromDateStr(formData.estimatedCompletionDate) && getYearFromDateStr(formData.estimatedCompletionDate) !== (formData.fundingYear || new Date().getFullYear()).toString() && (
-                                        <p className="text-xs text-amber-600 mt-1">Note: Estimated completion year is different from the funding year.</p>
+                                        <p className="form-help form-help--warning">Note: Estimated completion year is different from the funding year.</p>
                                     )}
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div><label className="block text-sm font-medium">Fund Year</label><input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleInputChange} className={commonInputClasses} /></div>
-                                <div><label className="block text-sm font-medium">Fund Type</label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={commonInputClasses}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
-                                <div><label className="block text-sm font-medium">Tier</label><select name="tier" value={formData.tier} onChange={handleInputChange} className={commonInputClasses}>{tiers.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                <div className="flex flex-col justify-center space-y-2 mt-4 md:mt-0">
-                                    <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        <input type="checkbox" checked={formData.isRealignment || false} onChange={e => setFormData(prev => ({ ...prev, isRealignment: e.target.checked, isSavings: e.target.checked ? false : prev.isSavings }))} className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" />
+                                <div><label className="form-label">Fund Year</label><input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleInputChange} className={commonInputClasses} /></div>
+                                <div><label className="form-label">Fund Type</label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={commonInputClasses}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
+                                <div><label className="form-label">Tier</label><select name="tier" value={formData.tier} onChange={handleInputChange} className={commonInputClasses}>{tiers.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                <div className="form-check-group">
+                                    <label className="form-check">
+                                        <input type="checkbox" checked={formData.isRealignment || false} onChange={e => setFormData(prev => ({ ...prev, isRealignment: e.target.checked, isSavings: e.target.checked ? false : prev.isSavings }))} className="form-checkbox" />
                                         <span>Realignment</span>
                                     </label>
-                                    <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        <input type="checkbox" checked={formData.isSavings || false} onChange={e => setFormData(prev => ({ ...prev, isSavings: e.target.checked, isRealignment: e.target.checked ? false : prev.isRealignment }))} className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" />
+                                    <label className="form-check">
+                                        <input type="checkbox" checked={formData.isSavings || false} onChange={e => setFormData(prev => ({ ...prev, isSavings: e.target.checked, isRealignment: e.target.checked ? false : prev.isRealignment }))} className="form-checkbox" />
                                         <span>Savings</span>
                                     </label>
                                 </div>
                             </div>
                             {isMonthTargetOverdue(formData.estimatedCompletionDate) && formData.status !== 'Completed' && (
-                                <div className="border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/10 p-4 rounded-md mt-4">
-                                    <h4 className="font-semibold text-red-600 dark:text-red-400 mb-2">Catch Up Plan</h4>
-                                    <p className="text-xs text-red-500 mb-4">Project is delayed. Please provide a catch-up plan.</p>
+                                <div className="notice notice--danger form-stack">
+                                    <h4 className="notice__title">Catch Up Plan</h4>
+                                    <p>Project is delayed. Please provide a catch-up plan.</p>
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Remarks / Justification</label>
+                                            <label className="form-label">Remarks / Justification</label>
                                             <textarea name="catchUpPlanRemarks" value={formData.catchUpPlanRemarks || ''} onChange={handleInputChange} rows={3} className={commonInputClasses} placeholder="Describe actions taken or justification for delay..." />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">New Target Completion Date</label>
+                                            <label className="form-label">New Target Completion Date</label>
                                             <input type="date" name="newTargetCompletionDate" value={formData.newTargetCompletionDate || ''} onChange={handleInputChange} className={commonInputClasses} />
                                         </div>
                                     </div>
@@ -723,26 +724,26 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                         <div className="space-y-4">
                             {formData.subprojectCommodities && formData.subprojectCommodities.length > 0 ? (
                                 formData.subprojectCommodities.map((c, i) => (
-                                    <div key={i} className={`flex items-center justify-between p-4 rounded-lg text-sm ${i === editingCommodityIndex ? 'bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700' : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'}`}>
-                                        <div className="flex-grow">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-bold text-gray-900 dark:text-white text-base">{c.name}</span>
-                                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full text-[10px] font-bold uppercase tracking-wider">{c.typeName}</span>
+                                    <div key={i} className={`form-record-card ${i === editingCommodityIndex ? 'is-editing' : ''}`}>
+                                        <div className="form-record-card__content">
+                                            <div className="form-record-card__heading">
+                                                <span className="form-record-card__title">{c.name}</span>
+                                                <span className="status-badge status-badge--approved status-badge--compact">{c.typeName}</span>
                                             </div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                                            <div className="form-record-card__metrics">
                                                 <div>
-                                                    <span className="text-gray-500 dark:text-gray-400 block mb-0.5 uppercase tracking-tighter font-semibold">{c.typeName === 'Livestock' ? 'Number of Heads' : 'Total Area'}</span>
-                                                    <span className="font-medium text-gray-900 dark:text-white">{c.area} {c.typeName === 'Livestock' ? 'Heads' : 'Hectares'}</span>
+                                                    <span className="form-record-card__label">{c.typeName === 'Livestock' ? 'Number of Heads' : 'Total Area'}</span>
+                                                    <span className="form-record-card__value">{c.area} {c.typeName === 'Livestock' ? 'Heads' : 'Hectares'}</span>
                                                 </div>
                                                 {c.typeName === 'Crop' && (
                                                     <div>
-                                                        <span className="text-gray-500 dark:text-gray-400 block mb-0.5 uppercase tracking-tighter font-semibold">Estimated Yield</span>
-                                                        <span className="font-medium text-gray-900 dark:text-white">{c.averageYield?.toLocaleString()} Kilograms</span>
+                                                        <span className="form-record-card__label">Estimated Yield</span>
+                                                        <span className="form-record-card__value">{c.averageYield?.toLocaleString()} Kilograms</span>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3 ml-4">
+                                        <div className="form-record-card__actions">
                                             <button type="button" onClick={() => handleEditCommodity(i)} className="table-action table-action--primary" title="Edit commodity">
                                                 <Pencil className="btn-symbol" aria-hidden="true" />
                                             </button>
@@ -757,13 +758,12 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                             )}
                             
                             <div className="detail-list-item mt-6">
-                                <h4 className="detail-section-title flex items-center gap-2">
-                                    <div className="w-1 h-4 bg-emerald-500 rounded-full"></div>
+                                <h4 className="detail-section-title">
                                     {editingCommodityIndex !== null ? 'Edit Commodity' : 'Add New Commodity'}
                                 </h4>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Commodity Type</label>
+                                        <label className="form-label form-label--compact">Commodity Type</label>
                                         <select 
                                             name="typeName" 
                                             value={currentCommodity.typeName} 
@@ -776,7 +776,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Commodity Name</label>
+                                        <label className="form-label form-label--compact">Commodity Name</label>
                                         <select 
                                             name="name" 
                                             value={currentCommodity.name} 
@@ -802,7 +802,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                                        <label className="form-label form-label--compact">
                                             {currentCommodity.typeName === 'Livestock' ? 'Number of Heads' : 'Total Area (Hectares)'}
                                         </label>
                                         <input 
@@ -817,8 +817,8 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                 </div>
 
                                 {currentCommodity.name && (
-                                    <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border border-emerald-100 dark:border-emerald-900/50 shadow-sm animate-fadeIn">
-                                        <h5 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-3 flex items-center gap-2">
+                                    <div className="form-reference-card animate-fadeIn">
+                                        <h5 className="form-reference-card__title">
                                             <Info className="h-3 w-3" />
                                             Reference Information
                                         </h5>
@@ -827,42 +827,42 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                                 const ref = refCommodities.find(c => c.name === currentCommodity.name);
                                                 if (!ref) return null;
                                                 return (
-                                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 text-[10px] leading-tight">
+                                                    <div className="form-reference-card__grid">
                                                         <div>
-                                                            <span className="text-gray-500 block">Elevation Range</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.min_elevation_masl} - {ref.max_elevation_masl} MASL</span>
+                                                            <span className="form-reference-card__label">Elevation Range</span>
+                                                            <span className="form-reference-card__value">{ref.min_elevation_masl} - {ref.max_elevation_masl} MASL</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Slope</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.max_slope_percent}% Max</span>
+                                                            <span className="form-reference-card__label">Slope</span>
+                                                            <span className="form-reference-card__value">{ref.max_slope_percent}% Max</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Seasonality</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">Wet: {ref.wet_season_start}, Dry: {ref.dry_season_start}</span>
+                                                            <span className="form-reference-card__label">Seasonality</span>
+                                                            <span className="form-reference-card__value">Wet: {ref.wet_season_start}, Dry: {ref.dry_season_start}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Soil Type</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.recommended_soil}</span>
+                                                            <span className="form-reference-card__label">Soil Type</span>
+                                                            <span className="form-reference-card__value">{ref.recommended_soil}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Fertilizer</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.fertilizer_npk}</span>
+                                                            <span className="form-reference-card__label">Fertilizer</span>
+                                                            <span className="form-reference-card__value">{ref.fertilizer_npk}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Watering</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.watering_method}</span>
+                                                            <span className="form-reference-card__label">Watering</span>
+                                                            <span className="form-reference-card__value">{ref.watering_method}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Harvest Period</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.harvest_period_days} Days</span>
+                                                            <span className="form-reference-card__label">Harvest Period</span>
+                                                            <span className="form-reference-card__value">{ref.harvest_period_days} Days</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">pH Range</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.ph_min} - {ref.ph_max}</span>
+                                                            <span className="form-reference-card__label">pH Range</span>
+                                                            <span className="form-reference-card__value">{ref.ph_min} - {ref.ph_max}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Climate Suitability</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.climate_type_suitability}</span>
+                                                            <span className="form-reference-card__label">Climate Suitability</span>
+                                                            <span className="form-reference-card__value">{ref.climate_type_suitability}</span>
                                                         </div>
                                                     </div>
                                                 );
@@ -872,22 +872,22 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                                 const ref = refLivestock.find(c => c.name === currentCommodity.name);
                                                 if (!ref) return null;
                                                 return (
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px] leading-tight">
+                                                    <div className="form-reference-card__grid">
                                                         <div>
-                                                            <span className="text-gray-500 block">Category</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.category}</span>
+                                                            <span className="form-reference-card__label">Category</span>
+                                                            <span className="form-reference-card__value">{ref.category}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Housing Type</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.housing_type}</span>
+                                                            <span className="form-reference-card__label">Housing Type</span>
+                                                            <span className="form-reference-card__value">{ref.housing_type}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Feed Type</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.feed_type}</span>
+                                                            <span className="form-reference-card__label">Feed Type</span>
+                                                            <span className="form-reference-card__value">{ref.feed_type}</span>
                                                         </div>
                                                         <div>
-                                                            <span className="text-gray-500 block">Water Requirement</span>
-                                                            <span className="font-semibold text-gray-900 dark:text-white">{ref.water_liters_per_day} Liters/Day</span>
+                                                            <span className="form-reference-card__label">Water Requirement</span>
+                                                            <span className="form-reference-card__value">{ref.water_liters_per_day} Liters/Day</span>
                                                         </div>
                                                     </div>
                                                 );
@@ -896,26 +896,26 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                     </div>
                                 )}
 
-                                <div className="mt-6 flex flex-col md:flex-row gap-6 items-end">
+                                <div className="form-action-layout">
                                     {currentCommodity.typeName === 'Crop' && (
                                         <div className="w-full md:w-1/3">
-                                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Target Yield (Kilograms)</label>
-                                            <div className="relative">
+                                            <label className="form-label form-label--compact">Target Yield (Kilograms)</label>
+                                            <div className="form-control-wrap">
                                                 <input 
                                                     type="number" 
                                                     name="averageYield" 
                                                     value={currentCommodity.averageYield} 
                                                     readOnly
-                                                    className={commonInputClasses + " bg-gray-100 dark:bg-gray-800 font-bold text-emerald-600 dark:text-emerald-400"} 
+                                                    className={commonInputClasses + " form-control--readonly form-control--accent"}
                                                 />
-                                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                                    <span className="text-gray-400 text-xs">KG</span>
+                                                <div className="form-control-end-icon">
+                                                    <span>KG</span>
                                                 </div>
                                             </div>
-                                            <p className="text-[10px] text-gray-400 mt-1 italic">Calculated based on area and reference target yield.</p>
+                                            <p className="form-help">Calculated based on area and reference target yield.</p>
                                         </div>
                                     )}
-                                    <div className="flex-grow flex justify-end gap-3 w-full">
+                                    <div className="form-action-row">
                                         {editingCommodityIndex !== null && (
                                             <button 
                                                 type="button" 
@@ -923,7 +923,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                                     setEditingCommodityIndex(null);
                                                     setCurrentCommodity({ typeName: '', name: '', area: 0, averageYield: 0 });
                                                 }} 
-                                                className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-bold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                                                className="btn btn-secondary"
                                             >
                                                 Cancel
                                             </button>
@@ -931,7 +931,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         <button 
                                             type="button" 
                                             onClick={handleAddCommodity} 
-                                            className="px-8 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2"
+                                            className="btn btn-primary"
                                         >
                                             {editingCommodityIndex !== null ? 'Update Commodity' : 'Add to List'}
                                         </button>
@@ -941,42 +941,42 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                         </div>
                     )}
                     {activeTab === 'budget' && (
-                        <div className="space-y-4">
+                        <div className="form-stack">
                              {formData.details.map((d, index) => (
-                                <div key={d.id} className={`flex items-center justify-between p-2 rounded-md text-sm ${editingDetailId === d.id ? 'bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                                <div key={d.id} className={`form-record-card ${editingDetailId === d.id ? 'is-editing' : ''}`}>
                                     <div>
-                                        <span className="font-semibold">{d.particulars}</span>
-                                        <div className="text-xs text-gray-500">
+                                        <span className="form-record-card__title">{d.particulars}</span>
+                                        <div className="form-record-card__meta">
                                             <div>{d.uacsCode} {availableUacsCodes.find(c => c.code === d.uacsCode)?.desc ? `- ${availableUacsCodes.find(c => c.code === d.uacsCode)?.desc}` : ''}</div>
                                             <div>{d.numberOfUnits} {d.unitOfMeasure} @ {formatCurrency(Number(d.pricePerUnit))}</div>
                                             <span className="block mt-1">Obligation: {formatMonthYear(d.obligationMonth)} | Disbursement: {formatMonthYear(d.disbursementMonth)}</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <span className="font-bold">{formatCurrency(Number(d.numberOfUnits) * Number(d.pricePerUnit))}</span>
-                                        <div className="flex items-center gap-2">
-                                            <button type="button" onClick={() => handleEditDetail(d.id)} className="text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400">
+                                    <div className="form-record-card__actions">
+                                        <span className="form-record-card__total">{formatCurrency(Number(d.numberOfUnits) * Number(d.pricePerUnit))}</span>
+                                        <div className="form-action-row">
+                                            <button type="button" onClick={() => handleEditDetail(d.id)} className="table-action table-action--primary" aria-label="Edit budget item">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z" /></svg>
                                             </button>
-                                            <button type="button" onClick={() => handleRemoveDetail(d.id)} className="text-red-500 hover:text-red-700">&times;</button>
+                                            <button type="button" onClick={() => handleRemoveDetail(d.id)} className="table-action table-action--danger" aria-label="Remove budget item">&times;</button>
                                         </div>
                                     </div>
                                 </div>
                              ))}
-                             <div className="text-right font-bold text-gray-900 dark:text-white">Total: {formatCurrency(calculateTotalBudget(formData.details))}</div>
+                             <div className="form-record-total">Total: {formatCurrency(calculateTotalBudget(formData.details))}</div>
                              
-                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-end border-t pt-4 mt-4 border-gray-200 dark:border-gray-700">
-                                <div className=""><label className="block text-xs font-medium">Item Type</label><select name="type" value={currentDetail.type} onChange={handleDetailChange} className={commonInputClasses + " py-1.5"}><option value="">Select Type</option>{Object.keys(particularTypes).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                <div className=""><label className="block text-xs font-medium">Particulars</label><select name="particulars" value={currentDetail.particulars} onChange={handleDetailChange} disabled={!currentDetail.type} className={commonInputClasses + " py-1.5"}><option value="">Select Item</option>{currentDetail.type && particularTypes[currentDetail.type]?.map(i => <option key={i} value={i}>{i}</option>)}</select></div>
+                             <div className="form-grid form-grid--compact form-grid--align-end form-divider">
+                                <div><label className="form-label form-label--compact">Item Type</label><select name="type" value={currentDetail.type} onChange={handleDetailChange} className={commonInputClasses + " form-control--compact"}><option value="">Select Type</option>{Object.keys(particularTypes).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                <div><label className="form-label form-label--compact">Particulars</label><select name="particulars" value={currentDetail.particulars} onChange={handleDetailChange} disabled={!currentDetail.type} className={commonInputClasses + " form-control--compact"}><option value="">Select Item</option>{currentDetail.type && particularTypes[currentDetail.type]?.map(i => <option key={i} value={i}>{i}</option>)}</select></div>
                                 
                                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div><label className="block text-xs font-medium">Object Type</label><select name="objectType" value={currentDetail.objectType} onChange={handleDetailChange} className={commonInputClasses + " py-1.5"}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                    <div><label className="block text-xs font-medium">Expense Particular</label><select name="expenseParticular" value={currentDetail.expenseParticular} onChange={handleDetailChange} className={commonInputClasses + " py-1.5"}><option value="">Select Particular</option>{Object.keys(uacsCodes[currentDetail.objectType] || {}).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                                    <div><label className="form-label form-label--compact">Object Type</label><select name="objectType" value={currentDetail.objectType} onChange={handleDetailChange} className={commonInputClasses + " form-control--compact"}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                    <div><label className="form-label form-label--compact">Expense Particular</label><select name="expenseParticular" value={currentDetail.expenseParticular} onChange={handleDetailChange} className={commonInputClasses + " form-control--compact"}><option value="">Select Particular</option>{Object.keys(uacsCodes[currentDetail.objectType] || {}).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                                 </div>
 
                                 <div className="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
-                                        <label className="block text-xs font-medium">UACS Code</label>
+                                        <label className="form-label form-label--compact">UACS Code</label>
                                         <input 
                                             type="text"
                                             name="uacsCode" 
@@ -984,7 +984,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                             onChange={handleDetailChange} 
                                             list="uacs-codes-list-edit"
                                             placeholder="Search UACS..."
-                                            className={commonInputClasses + " py-1.5"}
+                                            className={commonInputClasses + " form-control--compact"}
                                         />
                                         <datalist id="uacs-codes-list-edit">
                                             {availableUacsCodes.map((item) => (
@@ -993,19 +993,19 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         </datalist>
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium">Description</label>
+                                        <label className="form-label form-label--compact">Description</label>
                                         <input 
                                             type="text" 
                                             value={availableUacsCodes.find(c => c.code === currentDetail.uacsCode)?.desc || ''} 
                                             readOnly 
-                                            className={commonInputClasses + " py-1.5 bg-gray-100 dark:bg-gray-800"} 
+                                            className={commonInputClasses + " form-control--compact form-control--readonly"}
                                             placeholder="UACS Description"
                                         />
                                     </div>
                                 </div>
  
                                 <div>
-                                    <label className="block text-xs font-medium">Delivery Month</label>
+                                    <label className="form-label form-label--compact">Delivery Month</label>
                                     <MonthYearPicker
                                         value={currentDetail.deliveryDate}
                                         onChange={(val) => {
@@ -1017,12 +1017,12 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         }}
                                         placeholder="Select month"
                                         defaultYear={formData.fundingYear}
-                                        className="h-9"
+                                        className="form-control--compact"
                                     />
                                 </div>
                                 
                                 <div>
-                                    <label className="block text-xs font-medium">Obligation Month</label>
+                                    <label className="form-label form-label--compact">Obligation Month</label>
                                     <MonthYearPicker
                                         value={currentDetail.obligationMonth}
                                         onChange={(val) => {
@@ -1034,29 +1034,29 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         }}
                                         placeholder="Select month"
                                         defaultYear={formData.fundingYear}
-                                        className="h-9"
+                                        className="form-control--compact"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium">Disbursement Month</label>
+                                    <label className="form-label form-label--compact">Disbursement Month</label>
                                     <MonthYearPicker
                                         value={currentDetail.disbursementMonth}
                                         onChange={(val) => setCurrentDetail(prev => ({ ...prev, disbursementMonth: val }))}
                                         placeholder="Select month"
                                         defaultYear={formData.fundingYear}
-                                        className="h-9"
+                                        className="form-control--compact"
                                     />
                                 </div>
                                 
-                                <div><label className="block text-xs font-medium">Price per Unit</label><input type="number" name="pricePerUnit" value={currentDetail.pricePerUnit} onChange={handleDetailChange} className={commonInputClasses + " py-1.5 text-sm"} /></div>
-                                <div><label className="block text-xs font-medium">Number of Units</label><input type="number" name="numberOfUnits" value={currentDetail.numberOfUnits} onChange={handleDetailChange} className={commonInputClasses + " py-1.5 text-sm"} /></div>
-                                <div><label className="block text-xs font-medium">Unit of Measure</label><select name="unitOfMeasure" value={currentDetail.unitOfMeasure} onChange={handleDetailChange} className={commonInputClasses + " py-1.5 text-sm"}><option value="pcs">pcs</option><option value="grams">grams</option><option value="kg">kg</option><option value="liters">liters</option><option value="boxes">boxes</option><option value="cans">cans</option><option value="sets">sets</option><option value="pax">pax</option><option value="heads">heads</option><option value="months">months</option><option value="days">days</option><option value="ha">ha</option><option value="bags">bags</option><option value="bottles">bottles</option><option value="sachets">sachets</option><option value="rolls">rolls</option><option value="meters">meters</option><option value="units">units</option><option value="packs">packs</option><option value="lots">lots</option></select></div>
+                                <div><label className="form-label form-label--compact">Price per Unit</label><input type="number" name="pricePerUnit" value={currentDetail.pricePerUnit} onChange={handleDetailChange} className={commonInputClasses + " form-control--compact"} /></div>
+                                <div><label className="form-label form-label--compact">Number of Units</label><input type="number" name="numberOfUnits" value={currentDetail.numberOfUnits} onChange={handleDetailChange} className={commonInputClasses + " form-control--compact"} /></div>
+                                <div><label className="form-label form-label--compact">Unit of Measure</label><select name="unitOfMeasure" value={currentDetail.unitOfMeasure} onChange={handleDetailChange} className={commonInputClasses + " form-control--compact"}><option value="pcs">pcs</option><option value="grams">grams</option><option value="kg">kg</option><option value="liters">liters</option><option value="boxes">boxes</option><option value="cans">cans</option><option value="sets">sets</option><option value="pax">pax</option><option value="heads">heads</option><option value="months">months</option><option value="days">days</option><option value="ha">ha</option><option value="bags">bags</option><option value="bottles">bottles</option><option value="sachets">sachets</option><option value="rolls">rolls</option><option value="meters">meters</option><option value="units">units</option><option value="packs">packs</option><option value="lots">lots</option></select></div>
                                 
-                                <div className="lg:col-span-4 flex gap-2 mt-2">
+                                <div className="form-field--full form-action-row">
                                     {editingDetailId !== null && (
-                                        <button type="button" onClick={handleCancelEditDetail} className="flex-1 py-2 bg-gray-400 text-white rounded text-sm hover:bg-gray-500">Cancel</button>
+                                        <button type="button" onClick={handleCancelEditDetail} className="btn btn-secondary">Cancel</button>
                                     )}
-                                    <button type="button" onClick={handleAddDetail} className="flex-1 py-2 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700">
+                                    <button type="button" onClick={handleAddDetail} className="btn btn-primary">
                                         {editingDetailId !== null ? 'Update Item' : 'Add Item'}
                                     </button>
                                 </div>
@@ -1064,12 +1064,12 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                         </div>
                     )}
                     {activeTab === 'summary' && (
-                        <div className="space-y-6 animate-fadeIn">
+                        <div className="form-stack form-stack--spacious animate-fadeIn">
                             {validationErrors.length > 0 && (
-                                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800 mb-4">
-                                    <h5 className="text-red-800 dark:text-red-200 font-bold mb-1">Missing Required Information</h5>
-                                    <p className="text-sm text-red-600 dark:text-red-400">The following fields are required before you can save:</p>
-                                    <ul className="list-disc list-inside text-xs text-red-500 mt-2">
+                                <div className="notice notice--danger">
+                                    <h5 className="notice__title">Missing Required Information</h5>
+                                    <p>The following fields are required before you can save:</p>
+                                    <ul className="notice__list">
                                         {validationErrors.map(field => (
                                             <li key={field}>
                                                 {field === 'indigenousPeopleOrganization' ? 'IPO' : 
@@ -1082,91 +1082,91 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                 </div>
                             )}
                             
-                            <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-lg border border-emerald-100 dark:border-emerald-800">
-                                <h4 className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-2">Subproject Summary</h4>
-                                <p className="text-sm text-emerald-600 dark:text-emerald-400">Please review the details below before confirming the creation of this subproject.</p>
+                            <div className="notice notice--success">
+                                <h4 className="notice__title">Subproject Summary</h4>
+                                <p>Please review the details below before confirming the creation of this subproject.</p>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-4">
-                                    <h5 className="font-bold text-gray-700 dark:text-gray-300 border-b pb-1">General Information</h5>
-                                    <div className="grid grid-cols-2 gap-2 text-sm">
-                                        <span className="text-gray-500">Name:</span> 
-                                        <span className={`font-medium ${!formData.name ? 'text-red-500 italic' : ''}`}>
+                            <div className="form-summary-grid">
+                                <div className="form-stack">
+                                    <h5 className="form-section__title">General Information</h5>
+                                    <div className="form-summary-list">
+                                        <span className="form-summary-label">Name:</span>
+                                        <span className={`form-summary-value ${!formData.name ? 'is-missing' : ''}`}>
                                             {formData.name || 'Missing Name'}
                                         </span>
                                         
-                                        <span className="text-gray-500">IPO:</span> 
-                                        <span className={`font-medium ${!formData.indigenousPeopleOrganization ? 'text-red-500 italic' : ''}`}>
+                                        <span className="form-summary-label">IPO:</span>
+                                        <span className={`form-summary-value ${!formData.indigenousPeopleOrganization ? 'is-missing' : ''}`}>
                                             {formData.indigenousPeopleOrganization || 'Missing IPO'}
                                         </span>
                                         
-                                        <span className="text-gray-500">Location:</span> <span className="font-medium">{formData.location}</span>
-                                        <span className="text-gray-500">OU:</span> <span className="font-medium">{formData.operatingUnit}</span>
+                                        <span className="form-summary-label">Location:</span> <span className="form-summary-value">{formData.location}</span>
+                                        <span className="form-summary-label">OU:</span> <span className="form-summary-value">{formData.operatingUnit}</span>
                                         
-                                        <span className="text-gray-500">Status:</span> 
-                                        <span className={`font-medium ${!formData.status ? 'text-red-500 italic' : ''}`}>
+                                        <span className="form-summary-label">Status:</span>
+                                        <span className={`form-summary-value ${!formData.status ? 'is-missing' : ''}`}>
                                             {formData.status || 'Missing Status'}
                                         </span>
                                         
-                                        <span className="text-gray-500">Package:</span> <span className="font-medium">{formData.packageType}</span>
+                                        <span className="form-summary-label">Package:</span> <span className="form-summary-value">{formData.packageType}</span>
                                         
-                                        <span className="text-gray-500">Est. Completion:</span> 
-                                        <span className={`font-medium ${!formData.estimatedCompletionDate ? 'text-red-500 italic' : ''}`}>
+                                        <span className="form-summary-label">Est. Completion:</span>
+                                        <span className={`form-summary-value ${!formData.estimatedCompletionDate ? 'is-missing' : ''}`}>
                                             {formData.estimatedCompletionDate ? formatMonthYear(formData.estimatedCompletionDate) : 'Missing Date'}
                                         </span>
                                         
-                                        <span className="text-gray-500">Fund Year:</span> <span className="font-medium">{formData.fundingYear}</span>
-                                        <span className="text-gray-500">Fund Type:</span> <span className="font-medium">{formData.fundType}</span>
-                                        <span className="text-gray-500">Tier:</span> <span className="font-medium">{formData.tier}</span>
+                                        <span className="form-summary-label">Fund Year:</span> <span className="form-summary-value">{formData.fundingYear}</span>
+                                        <span className="form-summary-label">Fund Type:</span> <span className="form-summary-value">{formData.fundType}</span>
+                                        <span className="form-summary-label">Tier:</span> <span className="form-summary-value">{formData.tier}</span>
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
-                                    <h5 className="font-bold text-gray-700 dark:text-gray-300 border-b pb-1">Commodities</h5>
+                                <div className="form-stack">
+                                    <h5 className="form-section__title">Commodities</h5>
                                     {formData.subprojectCommodities && formData.subprojectCommodities.length > 0 ? (
-                                        <div className="space-y-2">
+                                        <div className="form-repeat-list form-repeat-list--unbounded">
                                             {formData.subprojectCommodities.map((c, i) => (
-                                                <div key={i} className="text-sm bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
-                                                    <div className="font-medium">{c.name} ({c.typeName})</div>
-                                                    <div className="text-xs text-gray-500">{c.typeName === 'Livestock' ? 'Heads' : 'Area'}: {c.area}</div>
+                                                <div key={i} className="form-repeat-card">
+                                                    <div><div className="form-repeat-card__title">{c.name} ({c.typeName})</div>
+                                                    <div className="form-repeat-card__meta">{c.typeName === 'Livestock' ? 'Heads' : 'Area'}: {c.area}</div></div>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-red-500 italic font-medium">Missing Commodities - Please add at least one commodity.</p>
+                                        <p className="form-error">Missing Commodities - Please add at least one commodity.</p>
                                     )}
                                 </div>
                             </div>
 
-                            <div className="space-y-4">
-                                <h5 className="font-bold text-gray-700 dark:text-gray-300 border-b pb-1">Budget Items</h5>
-                                <div className="overflow-x-auto">
+                            <div className="form-stack">
+                                <h5 className="form-section__title">Budget Items</h5>
+                                <div className="data-table-shell">
                                     {formData.details.length > 0 ? (
-                                        <table className="min-w-full text-sm">
+                                        <table className="data-table">
                                             <thead>
-                                                <tr className="text-left text-gray-500 border-b">
-                                                    <th className="pb-2">Particulars</th>
-                                                    <th className="pb-2">Qty/Unit</th>
-                                                    <th className="pb-2 text-right">Total</th>
+                                                <tr>
+                                                    <th>Particulars</th>
+                                                    <th>Qty/Unit</th>
+                                                    <th className="data-table__numeric">Total</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                            <tbody>
                                                 {formData.details.map(d => (
                                                     <tr key={d.id}>
-                                                        <td className="py-2">{d.particulars}</td>
-                                                        <td className="py-2">{d.numberOfUnits} {d.unitOfMeasure}</td>
-                                                        <td className="py-2 text-right font-medium">{formatCurrency(d.pricePerUnit * d.numberOfUnits)}</td>
+                                                        <td>{d.particulars}</td>
+                                                        <td>{d.numberOfUnits} {d.unitOfMeasure}</td>
+                                                        <td className="data-table__numeric">{formatCurrency(d.pricePerUnit * d.numberOfUnits)}</td>
                                                     </tr>
                                                 ))}
-                                                <tr className="font-bold">
-                                                    <td colSpan={2} className="py-4 text-right">Grand Total:</td>
-                                                    <td className="py-4 text-right text-emerald-600">{formatCurrency(calculateTotalBudget(formData.details))}</td>
+                                                <tr className="data-table__total-row">
+                                                    <td colSpan={2} className="data-table__numeric">Grand Total:</td>
+                                                    <td className="data-table__numeric">{formatCurrency(calculateTotalBudget(formData.details))}</td>
                                                 </tr>
                                             </tbody>
                                         </table>
                                     ) : (
-                                        <p className="text-sm text-red-500 italic font-medium">Missing Budget Items - Please add at least one budget item.</p>
+                                        <p className="form-error">Missing Budget Items - Please add at least one budget item.</p>
                                     )}
                                 </div>
                             </div>
@@ -1204,37 +1204,31 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
 
             {/* Budget Item Date Confirmation Modal */}
             {confirmBudgetItemDate && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="dashboard-modal">
-                        <h3 className="detail-card-title">Confirm Budget Item Date</h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-                            The {budgetItemFieldLabels[confirmBudgetItemDate.field].toLowerCase()} you selected is beyond the subproject's estimated completion date.
-                            Do you want to update the subproject's estimated completion date to match this month?
-                        </p>
-                        <div className="flex justify-end gap-4">
-                            <button type="button" onClick={handleCancelBudgetItemDate} className="btn btn-secondary">Cancel</button>
-                            <button type="button" onClick={handleConfirmBudgetItemDate} className="btn btn-primary">Confirm & Update</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    title="Confirm Budget Item Date"
+                    description={`The ${budgetItemFieldLabels[confirmBudgetItemDate.field].toLowerCase()} you selected is beyond the subproject's estimated completion date. Do you want to update the subproject's estimated completion date to match this month?`}
+                    confirmLabel="Confirm & Update"
+                    onConfirm={handleConfirmBudgetItemDate}
+                    onCancel={handleCancelBudgetItemDate}
+                />
             )}
 
             {budgetItemErrorFields.length > 0 && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="dashboard-modal">
-                        <h3 className="detail-card-title">Complete Budget Item Fields</h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                <div className="modal-backdrop" role="presentation">
+                    <section className="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="budget-fields-title">
+                        <header className="modal-card__header"><h3 id="budget-fields-title">Complete Budget Item Fields</h3></header>
+                        <div className="modal-card__body">
+                        <p>
                             Please complete the following required fields before adding or updating this budget item:
                         </p>
-                        <ul className="list-disc pl-6 text-sm text-gray-700 dark:text-gray-200 mb-6 space-y-1">
+                        <ul className="notice__list">
                             {budgetItemErrorFields.map(field => (
                                 <li key={field}>{budgetItemFieldLabels[field] || field}</li>
                             ))}
                         </ul>
-                        <div className="flex justify-end">
-                            <button type="button" onClick={() => setBudgetItemErrorFields([])} className="btn btn-primary">OK</button>
                         </div>
-                    </div>
+                        <footer className="modal-card__footer"><button type="button" onClick={() => setBudgetItemErrorFields([])} className="btn btn-primary">OK</button></footer>
+                    </section>
                 </div>
             )}
         </div>

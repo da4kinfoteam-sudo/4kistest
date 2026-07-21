@@ -129,8 +129,8 @@ const LeaderboardTable: React.FC<{
                     {rows.map(row => (
                         <tr key={row.ou}>
                             <td className="award-rank-text">{formatRank(row.rank)}</td>
-                            <td className="font-semibold">{row.ou}</td>
-                            <td className="data-table__numeric font-black">{formatScore(row.totalPoints)}</td>
+                            <td className="data-table__emphasis">{row.ou}</td>
+                            <td className="data-table__numeric data-table__emphasis">{formatScore(row.totalPoints)}</td>
                             {columns.map(column => (
                                 <td key={column.key} className="data-table__numeric">{column.render(row)}</td>
                             ))}
@@ -205,8 +205,8 @@ const SpecialAwardsTable: React.FC<{
                     {rows.map(row => (
                         <tr key={row.ou}>
                             <td className="award-rank-text">{formatRank(row.rank)}</td>
-                            <td className="font-semibold">{row.ou}</td>
-                            <td className="data-table__numeric font-black">{row.score.toLocaleString()}</td>
+                            <td className="data-table__emphasis">{row.ou}</td>
+                            <td className="data-table__numeric data-table__emphasis">{row.score.toLocaleString()}</td>
                             {showTarget && <td className="data-table__numeric">{(row.target || 0).toLocaleString()}</td>}
                         </tr>
                     ))}
@@ -538,7 +538,7 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
             <section className="award-hero dashboard-panel">
                 <div>
                     <span className="award-eyebrow">Awards and Rankings</span>
-                    <h3>OU Awarding Dashboard</h3>
+                    <h3 className="dashboard-module-title">OU Awarding Dashboard</h3>
                     <p>Fund Year {awardsData.effectiveYear} / {selectedTier} / {selectedFundType}</p>
                     {error && <p className="award-message award-message--error">{error}</p>}
                     {message && <p className="award-message award-message--success">{message}</p>}
@@ -669,7 +669,7 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
                                         .filter(row => row.period === activeManualPeriod)
                                         .map(row => (
                                             <tr key={`${row.period}-${row.operating_unit}`}>
-                                                <td className="font-semibold">{row.operating_unit}</td>
+                                                <td className="data-table__emphasis">{row.operating_unit}</td>
                                                 <td className="data-table__numeric"><input type="number" value={row.reportorial_required} onChange={event => updateManual(row.period, row.operating_unit, 'reportorial_required', event.target.value)} /></td>
                                                 <td className="data-table__numeric"><input type="number" value={row.reportorial_submitted} onChange={event => updateManual(row.period, row.operating_unit, 'reportorial_submitted', event.target.value)} /></td>
                                                 <td className="data-table__numeric"><input type="number" value={row.national_activities_required} onChange={event => updateManual(row.period, row.operating_unit, 'national_activities_required', event.target.value)} /></td>
@@ -830,7 +830,7 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
                                     <tr key={`${row.period}-${row.ou}`}>
                                         <td>{row.period}</td>
                                         <td className="award-rank-text">{formatRank(row.rank)}</td>
-                                        <td className="font-semibold">{row.ou}</td>
+                                        <td className="data-table__emphasis">{row.ou}</td>
                                         <td className="data-table__numeric">{formatCurrency(row.allocation)}</td>
                                         <td className="data-table__numeric">{formatCurrency(row.obligation)}</td>
                                         <td className="data-table__numeric">{formatCurrency(row.disbursement)}</td>
@@ -870,7 +870,7 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
                                         <td>{row.period}</td>
                                         <td>{row.componentLabel}</td>
                                         <td className="award-rank-text">{formatRank(row.rank)}</td>
-                                        <td className="font-semibold">{row.ou}</td>
+                                        <td className="data-table__emphasis">{row.ou}</td>
                                         <td className="data-table__numeric">{formatScore(row.points)}</td>
                                         <td className="data-table__numeric">{formatScore(row.score)}</td>
                                         <td className="data-table__numeric">{formatPercent(row.completionRate)}</td>

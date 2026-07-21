@@ -1,5 +1,5 @@
 
-// Author: 4K 
+// Author: 4K
 import React, { useMemo, useState } from 'react';
 import { Download, Printer, Search, X } from 'lucide-react';
 import { Subproject, Training, OtherActivity, OfficeRequirement, StaffingRequirement, OtherProgramExpense, IPO, Deadline } from '../../constants';
@@ -62,7 +62,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
         });
     };
 
-    const indentClasses: { [key: number]: string } = { 0: '', 1: 'pl-6', 2: 'pl-10', 3: 'pl-14', 4: 'pl-20' };
+    const indentClasses: { [key: number]: string } = { 0: '', 1: 'bar1-report__indent--1', 2: 'bar1-report__indent--2', 3: 'bar1-report__indent--3', 4: 'bar1-report__indent--4' };
     const dataCellClass = "bar1-report__cell";
 
     const bar1Data = useMemo(() => {
@@ -221,11 +221,11 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
     };
 
     const renderDataCells = (item: any, isTotal: boolean = false, rowLabel?: string) => {
-        const cellClass = `${dataCellClass} text-center ${isTotal ? 'font-bold' : ''}`;
-        const totalClass = `${dataCellClass} bar1-report__cell--total text-center font-bold`;
-        const calculatedClass = `${dataCellClass} bar1-report__cell--calculated text-center font-bold`;
-        const yearEndClass = `${dataCellClass} bar1-report__cell--year-end text-center font-bold`;
-        const percentClass = `${dataCellClass} bar1-report__cell--percent text-center text-[10px] font-bold`;
+        const cellClass = `${dataCellClass} bar1-report__cell--center ${isTotal ? 'bar1-report__cell--emphasis' : ''}`;
+        const totalClass = `${dataCellClass} bar1-report__cell--total bar1-report__cell--center bar1-report__cell--emphasis`;
+        const calculatedClass = `${dataCellClass} bar1-report__cell--calculated bar1-report__cell--center bar1-report__cell--emphasis`;
+        const yearEndClass = `${dataCellClass} bar1-report__cell--year-end bar1-report__cell--center bar1-report__cell--emphasis`;
+        const percentClass = `${dataCellClass} bar1-report__cell--percent bar1-report__cell--center bar1-report__cell--emphasis`;
 
         const getVals = (source: any) => {
              const semestralTotal = (source.q1 || 0) + (source.q2 || 0);
@@ -257,14 +257,14 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
             const usableRecords = (records || []).filter(record => record.type !== 'participant');
             const isParticipantMetric = /participant/i.test(item.indicator || rowLabel || '');
             if (isParticipantMetric || usableRecords.length === 0) return <span>{val}</span>;
-            
+
             return (
-                <button 
+                <button
                     onClick={() => {
                         setPopup({ indicator: item.indicator || rowLabel || 'Summary', month, items, records: usableRecords, type });
                         setPopupSearch('');
                     }}
-                    className="hover:text-emerald-600 hover:underline transition-colors focus:outline-none"
+                    className="table-link"
                 >
                     {val}
                 </button>
@@ -298,7 +298,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                 <td className={totalClass}><ClickableValue val={t.q4} items={collectMonthItems(t, [10, 11, 12])} records={collectMonthRecords(t, [10, 11, 12])} month="4th Quarter" type="Target" /></td>
 
                 <td className={yearEndClass}><ClickableValue val={t.yearEndNov} items={collectMonthItems(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])} records={collectMonthRecords(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])} month="Year-end (Nov)" type="Target" /></td>
-                <td className={`${dataCellClass} bar1-report__cell--grand-target text-center font-bold`}><ClickableValue val={t.total} items={collectMonthItems(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} records={collectMonthRecords(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} month="Annual Total" type="Target" /></td>
+                <td className={`${dataCellClass} bar1-report__cell--grand-target bar1-report__cell--center bar1-report__cell--emphasis`}><ClickableValue val={t.total} items={collectMonthItems(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} records={collectMonthRecords(t, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} month="Annual Total" type="Target" /></td>
             </>
         );
 
@@ -337,7 +337,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                 <td className={`${yearEndClass} ${getUnmetClass(a.yearEndNov, t.yearEndNov)}`}><ClickableValue val={a.yearEndNov} items={collectMonthItems(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])} records={collectMonthRecords(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])} month="Year-end (Nov)" type="Accomplishment" /></td>
                 <td className={`${percentClass} ${getUnmetClass(a.yearEndNov, t.yearEndNov)}`}>{getPct(a.yearEndNov, t.yearEndNov)}</td>
 
-                <td className={`${dataCellClass} bar1-report__cell--grand-actual text-center font-bold ${getUnmetClass(a.total, t.total)}`}><ClickableValue val={a.total} items={collectMonthItems(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} records={collectMonthRecords(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} month="Annual Total" type="Accomplishment" /></td>
+                <td className={`${dataCellClass} bar1-report__cell--grand-actual bar1-report__cell--center bar1-report__cell--emphasis ${getUnmetClass(a.total, t.total)}`}><ClickableValue val={a.total} items={collectMonthItems(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} records={collectMonthRecords(a, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])} month="Annual Total" type="Accomplishment" /></td>
                 <td className={`${percentClass} ${getUnmetClass(a.total, t.total)}`}>{getPct(a.total, t.total)}</td>
             </>
         );
@@ -345,7 +345,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
         return (
             <>
                 {renderTargetSection()}
-                <td className="bar1-report__separator"></td> 
+                <td className="bar1-report__separator"></td>
                 {renderActualSection()}
             </>
         );
@@ -354,8 +354,8 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
     const renderTotalsRow = (items: any[], label: string) => {
         const totals = calculateTotals(items);
         return (
-            <tr className="bar1-report__row bar1-report__row--total text-xs">
-                <td className={`${dataCellClass} sticky left-0 z-10`}>{label}</td>
+            <tr className="bar1-report__row bar1-report__row--total">
+                <td className={`${dataCellClass} bar1-report__cell--sticky`}>{label}</td>
                 {renderDataCells(totals, true, label)}
             </tr>
         );
@@ -364,24 +364,24 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
     const renderSummaryRow = (items: any[], label: string, rowKey: string, isExpanded: boolean, indentLevel = 0, showTotals: boolean = true) => {
         if (items.length === 0) {
             return (
-                <tr className="bar1-report__row bar1-report__row--summary text-xs">
-                     <td className={`${dataCellClass} ${indentClasses[indentLevel]} sticky left-0 z-10`}>
-                        <span className="inline-block w-5"></span> {label}
+                <tr className="bar1-report__row bar1-report__row--summary">
+                     <td className={`${dataCellClass} ${indentClasses[indentLevel]} bar1-report__cell--sticky`}>
+                        <span className="bar1-report__expand" aria-hidden="true"></span> {label}
                     </td>
-                    <td colSpan={53} className={`${dataCellClass} text-center italic`}>No activities for this component.</td>
+                    <td colSpan={53} className={`${dataCellClass} bar1-report__cell--empty`}>No activities for this component.</td>
                 </tr>
             )
         }
-        
+
         let totals: any = null;
         if (showTotals) {
             totals = calculateTotals(items);
         }
 
         return (
-             <tr onClick={() => toggleRow(rowKey)} className="bar1-report__row bar1-report__row--summary cursor-pointer text-xs">
-                <td className={`${dataCellClass} ${indentClasses[indentLevel]} sticky left-0 z-10`}>
-                    <span className="inline-block w-5 text-center text-gray-500 dark:text-gray-400">{isExpanded ? '−' : '+'}</span> {label}
+             <tr onClick={() => toggleRow(rowKey)} className="bar1-report__row bar1-report__row--summary is-interactive">
+                <td className={`${dataCellClass} ${indentClasses[indentLevel]} bar1-report__cell--sticky`}>
+                    <span className="bar1-report__expand" aria-hidden="true">{isExpanded ? '−' : '+'}</span> {label}
                 </td>
                 {showTotals && totals ? renderDataCells(totals, true, label) : <td colSpan={53} className={dataCellClass}></td>}
             </tr>
@@ -391,7 +391,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
     const renderDataRow = (item: any, key: string, indentLevel = 0) => {
         return (
             <tr key={key} className="bar1-report__row">
-                <td className={`${dataCellClass} ${indentClasses[indentLevel]} sticky left-0 z-10`}>{item.indicator}</td>
+                <td className={`${dataCellClass} ${indentClasses[indentLevel]} bar1-report__cell--sticky`}>{item.indicator}</td>
                 {renderDataCells(item, false, item.indicator)}
             </tr>
         )
@@ -445,28 +445,28 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
         };
 
         const header1 = [null];
-        const header2 = [null]; 
+        const header2 = [null];
 
         const sectionHeaders1 = [
-            "1st Quarter", null, null, null, 
-            "2nd Quarter", null, null, null, 
+            "1st Quarter", null, null, null,
+            "2nd Quarter", null, null, null,
             "Semestral Total",
-            "3rd Quarter", null, null, null, 
+            "3rd Quarter", null, null, null,
             "As of September",
-            "4th Quarter", null, null, null, 
+            "4th Quarter", null, null, null,
             "Year End (As of Nov)",
             "Grand Total"
         ];
-        
+
         const sectionHeadersTarget = [
             "Jan", "Feb", "Mar", "Total",
             "Apr", "May", "Jun", "Total",
-            null, 
+            null,
             "Jul", "Aug", "Sep", "Total",
-            null, 
+            null,
             "Oct", "Nov", "Dec", "Total",
-            null, 
-            null  
+            null,
+            null
         ];
 
         const sectionHeadersActual = [
@@ -482,7 +482,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
 
         const sectionHeadersActualGroups = [
             "1st Quarter", null, null, null, null,
-            "2nd Quarter", null, null, null, null, 
+            "2nd Quarter", null, null, null, null,
             "Semestral Total", null,
             "3rd Quarter", null, null, null, null,
             "As of September", null,
@@ -543,7 +543,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                     t.m10, t.m11, t.m12, t.q4,
                     t.yearEndNov,
                     t.total,
-                    null, 
+                    null,
                     a.m1, a.m2, a.m3, a.q1, getPct(a.q1, t.q1),
                     a.m4, a.m5, a.m6, a.q2, getPct(a.q2, t.q2),
                     a.semestralTotal, getPct(a.semestralTotal, t.semestralTotal),
@@ -560,7 +560,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
         Object.entries(bar1Data).forEach(([component, items]) => {
             // Component Header - No Totals
             aoa.push(normalizeExcelRow([component, ...Array(BAR1_COLUMN_COUNT - 1).fill(null)]));
-            
+
             if (Array.isArray(items)) {
                 if (items.length > 0) processItems(items, "  ");
             } else if ((items as any).isExpandable) {
@@ -573,11 +573,11 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
             }
         });
 
-        // Grand Totals - Removed per user request to not total component groups, 
-        // but user didn't explicitly say remove Grand Total. 
+        // Grand Totals - Removed per user request to not total component groups,
+        // but user didn't explicitly say remove Grand Total.
         // However, if components are different and can't be summed, Grand Total is also meaningless.
         // I will remove Grand Total as well to be safe and consistent.
-        
+
         const rows = aoa.map(normalizeExcelRow);
 
         const columnFormats = rows[0].reduce<Record<number, 'physical' | 'percent'>>((acc, _, index) => {
@@ -621,85 +621,44 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
         });
     };
 
-    const SectionHeaderTarget = ({ bgColor }: { bgColor: string }) => (
+    const SectionHeaderTarget = () => (
         <>
-            <th colSpan={4} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>1st Quarter</th>
-            <th colSpan={4} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>2nd Quarter</th>
-            <th rowSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center align-middle font-bold ${bgColor} opacity-90`}>Semestral Total</th>
-            <th colSpan={4} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>3rd Quarter</th>
-            <th rowSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center align-middle font-bold ${bgColor} opacity-90`}>As of September</th>
-            <th colSpan={4} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>4th Quarter</th>
-            <th rowSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center align-middle font-bold ${bgColor} opacity-80`}>Year End (As of Nov)</th>
-            <th rowSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center align-middle font-bold ${bgColor} opacity-90`}>Grand Total</th>
+            <th colSpan={4} className="bar1-report__header-cell bar1-report__header-cell--target">1st Quarter</th>
+            <th colSpan={4} className="bar1-report__header-cell bar1-report__header-cell--target">2nd Quarter</th>
+            <th rowSpan={2} className="bar1-report__header-cell bar1-report__header-cell--target bar1-report__header-cell--aggregate">Semestral Total</th>
+            <th colSpan={4} className="bar1-report__header-cell bar1-report__header-cell--target">3rd Quarter</th>
+            <th rowSpan={2} className="bar1-report__header-cell bar1-report__header-cell--target bar1-report__header-cell--aggregate">As of September</th>
+            <th colSpan={4} className="bar1-report__header-cell bar1-report__header-cell--target">4th Quarter</th>
+            <th rowSpan={2} className="bar1-report__header-cell bar1-report__header-cell--target bar1-report__header-cell--aggregate">Year End (As of Nov)</th>
+            <th rowSpan={2} className="bar1-report__header-cell bar1-report__header-cell--target bar1-report__header-cell--aggregate">Grand Total</th>
         </>
     );
 
-    const SectionHeaderActual = ({ bgColor }: { bgColor: string }) => (
+    const SectionHeaderActual = () => (
         <>
-            <th colSpan={5} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>1st Quarter</th>
-            <th colSpan={5} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>2nd Quarter</th>
-            <th colSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>Semestral Total</th>
-            <th colSpan={5} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>3rd Quarter</th>
-            <th colSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>As of September</th>
-            <th colSpan={5} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>4th Quarter</th>
-            <th colSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>Year End (As of Nov)</th>
-            <th colSpan={2} className={`p-2 border border-gray-300 dark:border-gray-600 text-center font-bold ${bgColor}`}>Grand Total</th>
+            <th colSpan={5} className="bar1-report__header-cell bar1-report__header-cell--actual">1st Quarter</th>
+            <th colSpan={5} className="bar1-report__header-cell bar1-report__header-cell--actual">2nd Quarter</th>
+            <th colSpan={2} className="bar1-report__header-cell bar1-report__header-cell--actual">Semestral Total</th>
+            <th colSpan={5} className="bar1-report__header-cell bar1-report__header-cell--actual">3rd Quarter</th>
+            <th colSpan={2} className="bar1-report__header-cell bar1-report__header-cell--actual">As of September</th>
+            <th colSpan={5} className="bar1-report__header-cell bar1-report__header-cell--actual">4th Quarter</th>
+            <th colSpan={2} className="bar1-report__header-cell bar1-report__header-cell--actual">Year End (As of Nov)</th>
+            <th colSpan={2} className="bar1-report__header-cell bar1-report__header-cell--actual">Grand Total</th>
         </>
     );
 
-    const SubHeadersTarget = () => (
-        <>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Jan</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Feb</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Mar</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Apr</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">May</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Jun</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Jul</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Aug</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Sep</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Oct</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Nov</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Dec</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-        </>
-    );
+    const renderSubHeaders = (labels: string[]) => labels.map((label, index) => (
+        <th
+            key={`${label}-${index}`}
+            className={`bar1-report__header-cell bar1-report__header-cell--sub${label === 'Total' ? ' bar1-report__header-cell--total' : ''}${label === '%' ? ' bar1-report__header-cell--percent' : ''}`}
+        >
+            {label}
+        </th>
+    ));
 
-    const SubHeadersActual = () => (
-        <>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Jan</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Feb</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Mar</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Apr</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">May</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Jun</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Jul</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Aug</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Sep</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Oct</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Nov</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[50px]">Dec</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[60px] bg-gray-300 dark:bg-gray-600">Total</th>
-            <th className="p-2 border border-gray-300 dark:border-gray-600 text-center min-w-[40px] italic text-[9px]">%</th>
-        </>
-    );
+    const SubHeadersTarget = () => <>{renderSubHeaders(['Jan', 'Feb', 'Mar', 'Total', 'Apr', 'May', 'Jun', 'Total', 'Jul', 'Aug', 'Sep', 'Total', 'Oct', 'Nov', 'Dec', 'Total'])}</>;
+
+    const SubHeadersActual = () => <>{renderSubHeaders(['Jan', 'Feb', 'Mar', 'Total', '%', 'Apr', 'May', 'Jun', 'Total', '%', 'Total', '%', 'Jul', 'Aug', 'Sep', 'Total', '%', 'Total', '%', 'Oct', 'Nov', 'Dec', 'Total', '%', 'Total', '%', 'Total', '%'])}</>;
 
     const renderRecordDateLabel = (record: BAR1DrilldownRecord) => {
         return popup?.type === 'Target'
@@ -781,7 +740,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                                 <h4 id="bar1-drilldown-title">{popup.indicator}</h4>
                                 <p>{popup.type} · {popup.month} · {popupRecords.length} record{popupRecords.length === 1 ? '' : 's'}</p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setPopup(null)}
                                 className="bar1-drilldown-modal__close"
                                 type="button"
@@ -834,7 +793,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
             <div className="report-card__header print-hidden">
                 <div className="bar1-report-header-main">
                     <h3 className="report-card__title">Physical Report of Operations (BAR No. 1)</h3>
-                    
+
                     <div className="bar1-as-of-filter">
                         <label htmlFor="as-of-date-preset" className="bar1-as-of-filter__label">As of:</label>
                         <select
@@ -843,9 +802,9 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                             onChange={(e) => onSelectedAsOfDateChange(e.target.value === 'current' ? '' : e.target.value)}
                             className="form-control form-control--compact"
                         >
-                            <option value="current" className="text-gray-900 dark:text-white dark:bg-gray-800">Current approved data</option>
+                            <option value="current">Current approved data</option>
                             {sortedDeadlines.map(deadline => (
-                                <option key={deadline.id} value={deadline.date} className="text-gray-900 dark:text-white dark:bg-gray-800">
+                                <option key={deadline.id} value={deadline.date}>
                                     {deadline.name}: {new Date(deadline.date + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                                 </option>
                             ))}
@@ -867,7 +826,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                         )}
                     </div>
                 </div>
-                
+
                 <div className="report-card__actions">
                     <button onClick={handleDownloadBar1Xlsx} className="btn btn-primary btn-responsive">
                         <Download className="btn-symbol" aria-hidden="true" />
@@ -887,17 +846,17 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                 </div>
             </div>
             <div id="bar1-report" className="report-table-scroll bar1-report-scroll">
-                <table className="bar1-report-table min-w-full border-collapse text-[10px] whitespace-nowrap">
-                    <thead className="sticky top-0 z-10">
+                <table className="bar1-report-table">
+                    <thead className="bar1-report__head">
                         <tr>
-                            <th rowSpan={3} className="p-2 border border-gray-300 dark:border-gray-600 align-bottom min-w-[250px] sticky left-0 bg-gray-200 dark:bg-gray-700 z-20 text-left">Program/Activity/Project</th>
-                            <th colSpan={20} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold bg-teal-200 dark:bg-teal-900">Physical Targets</th>
-                            <th rowSpan={3} className="w-2 bg-gray-400 dark:bg-gray-600"></th> 
-                            <th colSpan={28} className="p-2 border border-gray-300 dark:border-gray-600 text-center font-bold bg-emerald-200 dark:bg-emerald-900">Physical Accomplishments</th>
+                            <th rowSpan={3} className="bar1-report__header-cell bar1-report__header-cell--sticky bar1-report__header-cell--label">Program/Activity/Project</th>
+                            <th colSpan={20} className="bar1-report__header-cell bar1-report__header-cell--target">Physical Targets</th>
+                            <th rowSpan={3} className="bar1-report__separator"></th>
+                            <th colSpan={28} className="bar1-report__header-cell bar1-report__header-cell--actual">Physical Accomplishments</th>
                         </tr>
                         <tr>
-                            <SectionHeaderTarget bgColor="bg-teal-50 dark:bg-teal-900/30" />
-                            <SectionHeaderActual bgColor="bg-emerald-50 dark:bg-emerald-900/30" />
+                            <SectionHeaderTarget />
+                            <SectionHeaderActual />
                         </tr>
                         <tr>
                             <SubHeadersTarget />
@@ -932,7 +891,7 @@ const BAR1Report: React.FC<BAR1ReportProps> = ({ data, uacsCodes, selectedYear, 
                                 const isComponentExpanded = expandedRows.has(key);
                                 const sortedPackageKeys = Object.keys(componentData.packages).sort((a,b) => a.localeCompare(b));
                                 const allPackageItems = Object.values(componentData.packages).flatMap((pkg: any) => pkg.items);
-                                
+
                                  return (
                                     <React.Fragment key={key}>
                                         {renderSummaryRow(allPackageItems, key, key, isComponentExpanded, 0, false)}

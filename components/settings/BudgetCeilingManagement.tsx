@@ -183,14 +183,14 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
         return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount);
     };
 
-    if (loading) return <div className="p-4 text-center">Loading budget data...</div>;
+    if (loading) return <div className="ui-state">Loading budget data...</div>;
 
     return (
-        <div className="h-[calc(100vh-280px)] overflow-auto relative border border-gray-200 dark:border-gray-700 rounded-lg shadow-inner bg-gray-50 dark:bg-gray-900">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
-                <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-30 shadow-sm">
+        <div className="data-table-scroll budget-ceiling-scroll">
+            <table className="data-table budget-ceiling-table">
+                <thead>
                     <tr>
-                        <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider sticky left-0 bg-gray-50 dark:bg-gray-800 z-40 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        <th className="data-table__sticky-left">
                             Operating Unit
                         </th>
                         {years.map(year => {
@@ -199,11 +199,11 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                                 <th 
                                     key={year} 
                                     onClick={() => toggleYear(year)}
-                                    className={`px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all ${isExpanded ? 'min-w-[280px]' : 'w-24 min-w-[100px]'}`}
+                                    className={`budget-ceiling-table__year ${isExpanded ? 'is-expanded' : ''}`}
                                 >
-                                    <div className="flex items-center justify-center gap-1">
+                                    <div className="budget-ceiling-table__year-label">
                                         {year}
-                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className={`btn-symbol ${isExpanded ? 'is-expanded' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </div>
@@ -212,17 +212,17 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                         })}
                     </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody>
                     {operatingUnits.map(ou => {
                         const isOUCollapsed = collapsedOUs.has(ou);
                         return (
-                            <tr key={ou} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white sticky left-0 bg-white dark:bg-gray-800 z-20 border-r border-gray-200 dark:border-gray-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] align-top">
+                            <tr key={ou}>
+                                <td className="data-table__sticky-left data-table__cell--primary data-table__cell--nowrap">
                                     <div 
-                                        className="flex items-center gap-2 cursor-pointer group"
+                                        className="budget-ceiling-table__ou-toggle"
                                         onClick={() => toggleOU(ou)}
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 text-gray-400 group-hover:text-emerald-500 transition-transform ${isOUCollapsed ? '-rotate-90' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className={`btn-symbol ${isOUCollapsed ? 'is-collapsed' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
                                         {ou}
@@ -232,7 +232,7 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                                     const isYearExpanded = expandedYears.has(year);
                                     
                                     if (isOUCollapsed) {
-                                        return <td key={`${ou}-${year}`} className="border-r border-gray-100 dark:border-gray-700"></td>;
+                                        return <td key={`${ou}-${year}`} />;
                                     }
 
                                     const ceiling = getCeiling(ou, year);
@@ -251,30 +251,29 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                                     const isExpanded = expandedCells.has(cellId);
 
                                     return (
-                                        <td key={cellId} className="px-4 py-4 whitespace-nowrap text-sm text-right border-r border-gray-100 dark:border-gray-700 align-top">
+                                        <td key={cellId} className="data-table__cell--numeric data-table__cell--nowrap">
                                             {isYearExpanded ? (
                                                 // Expanded View
-                                                <div className="flex flex-col gap-2">
+                                                <div className="budget-ceiling-cell">
                                                     {/* Main Focus: Tier 1 Current */}
-                                                    <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded border border-emerald-100 dark:border-emerald-800">
-                                                        <div className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase mb-1 text-center">Tier 1 (Current)</div>
+                                                    <div className="budget-ceiling-card">
+                                                        <div className="budget-ceiling-card__title">Tier 1 (Current)</div>
                                                         
                                                         {isEditing ? (
-                                                            <div className="flex items-center gap-1 justify-end mb-1">
-                                                                <span className="text-xs text-gray-500">Ceiling:</span>
+                                                            <div className="budget-ceiling-card__edit"><span>Ceiling:</span>
                                                                 <input
                                                                     type="number"
                                                                     value={editValue}
                                                                     onChange={(e) => setEditValue(e.target.value)}
-                                                                    className="w-24 px-1 py-0.5 text-sm border rounded focus:ring-emerald-500 focus:border-emerald-500 dark:bg-gray-700 dark:border-gray-600 text-right"
+                                                                    className="form-control form-control--compact"
                                                                     autoFocus
                                                                     onKeyDown={(e) => {
                                                                         if (e.key === 'Enter') handleSave();
                                                                         if (e.key === 'Escape') setEditingCell(null);
                                                                     }}
                                                                 />
-                                                                <button onClick={handleSave} className="text-emerald-600 hover:text-emerald-700">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                <button onClick={handleSave} className="table-action table-action--edit" aria-label="Save ceiling">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" viewBox="0 0 20 20" fill="currentColor">
                                                                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                                                     </svg>
                                                                 </button>
@@ -282,25 +281,22 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                                                         ) : (
                                                             <div 
                                                                 onClick={() => handleCellClick(ou, year, ceiling)}
-                                                                className="flex justify-between items-center cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded px-1 transition-colors group"
+                                                                className="budget-ceiling-card__row budget-ceiling-card__row--interactive"
                                                                 title="Click to edit ceiling"
                                                             >
-                                                                <span className="text-xs text-gray-500">Ceiling:</span>
-                                                                <div className="flex items-center gap-1 font-bold text-gray-800 dark:text-gray-200">
+                                                                <span>Ceiling:</span><strong>
                                                                     {formatCurrency(ceiling)}
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol budget-ceiling-card__edit-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                                     </svg>
-                                                                </div>
+                                                                </strong>
                                                             </div>
                                                         )}
 
-                                                        <div className="flex justify-between items-center px-1 mt-1">
-                                                            <span className="text-xs text-gray-500">Used:</span>
-                                                            <span className="font-medium text-gray-700 dark:text-gray-300">{formatCurrency(usedTier1Current)}</span>
+                                                        <div className="budget-ceiling-card__row"><span>Used:</span><strong>{formatCurrency(usedTier1Current)}</strong>
                                                         </div>
                                                         
-                                                        <div className={`flex justify-between items-center px-1 mt-1 font-bold text-xs border-t border-emerald-200 dark:border-emerald-800 pt-1 ${diff < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                        <div className={`budget-ceiling-card__row budget-ceiling-card__remaining ${diff < 0 ? 'is-negative' : ''}`}>
                                                             <span>{diff < 0 ? 'Over:' : 'Rem:'}</span>
                                                             <span>{formatCurrency(Math.abs(diff))}</span>
                                                         </div>
@@ -309,26 +305,26 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                                                     {/* Details Toggle */}
                                                     <button 
                                                         onClick={(e) => toggleDetails(cellId, e)}
-                                                        className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center gap-1 w-full py-1"
+                                                        className="budget-ceiling-card__breakdown-toggle"
                                                     >
                                                         {isExpanded ? 'Hide Details' : 'Show All Funds'}
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className={`btn-symbol ${isExpanded ? 'is-expanded' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                         </svg>
                                                     </button>
 
                                                     {/* Collapsible Details */}
                                                     {isExpanded && (
-                                                        <div className="text-xs space-y-1 bg-gray-50 dark:bg-gray-700/30 p-2 rounded animate-fadeIn">
-                                                            <div className="flex justify-between text-gray-500">
+                                                        <div className="budget-ceiling-card__breakdown animate-fadeIn">
+                                                            <div>
                                                                 <span>Tier 2 (Current):</span>
                                                                 <span>{formatCurrency(usedTier2Current)}</span>
                                                             </div>
-                                                            <div className="flex justify-between text-gray-500">
+                                                            <div>
                                                                 <span>Other Funds:</span>
                                                                 <span>{formatCurrency(usedOthers)}</span>
                                                             </div>
-                                                            <div className="flex justify-between font-bold text-gray-700 dark:text-gray-300 border-t border-gray-200 dark:border-gray-600 pt-1 mt-1">
+                                                            <div className="budget-ceiling-card__breakdown-total">
                                                                 <span>Grand Total:</span>
                                                                 <span>{formatCurrency(totalUsedAll)}</span>
                                                             </div>
@@ -337,13 +333,13 @@ const BudgetCeilingManagement: React.FC<BudgetCeilingManagementProps> = ({
                                                 </div>
                                             ) : (
                                                 // Collapsed View
-                                                <div className="flex flex-col gap-1 items-end justify-center h-full">
-                                                    <div className="text-xs font-bold text-gray-700 dark:text-gray-300" title="Ceiling">
+                                                <div className="budget-ceiling-cell__compact">
+                                                    <strong title="Ceiling">
                                                         {formatCurrency(ceiling)}
-                                                    </div>
-                                                    <div className={`text-[10px] font-semibold ${diff < 0 ? 'text-red-600' : 'text-emerald-600'}`} title="Remaining">
+                                                    </strong>
+                                                    <small className={diff < 0 ? 'is-negative' : ''} title="Remaining">
                                                         {diff < 0 ? '-' : '+'}{formatCurrency(Math.abs(diff))}
-                                                    </div>
+                                                    </small>
                                                 </div>
                                             )}
                                         </td>

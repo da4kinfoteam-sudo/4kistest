@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
     BarChart3,
     BookOpen,
@@ -9,7 +8,6 @@ import {
     CircleDollarSign,
     ClipboardList,
     Database,
-    FileText,
     Folder,
     Home,
     LayoutDashboard,
@@ -17,182 +15,89 @@ import {
     Settings,
     Store,
     TrendingUp,
-    UsersRound
+    UsersRound,
+    X,
 } from 'lucide-react';
-import { navigationStructure, NavItem } from '../constants';
+import { NavItem, navigationStructure } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
 
 interface SidebarProps {
     isOpen: boolean;
-    toggleSidebar: () => void;
     closeSidebar: () => void;
     currentPage: string;
     setCurrentPage: (page: string, options?: { resetReports?: boolean }) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar, closeSidebar, currentPage, setCurrentPage }) => {
-    const { currentUser, hasAccess } = useAuth();
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+const navIconMap: Record<string, React.ReactNode> = {
+    Homepage: <Home />,
+    Reports: <BarChart3 />,
+    Dashboard: <LayoutDashboard />,
+    'Data Collection Forms': <ClipboardList />,
+    Subprojects: <Folder />,
+    Activities: <CalendarDays />,
+    'Program Management': <Briefcase />,
+    'Accomplishment Forms': <CheckCircle2 />,
+    Financial: <CircleDollarSign />,
+    Physical: <TrendingUp />,
+    'Indigenous Peoples Organization': <UsersRound />,
+    Resources: <Database />,
+    'Marketing Database': <Store />,
+    'Level of Development': <MapPinned />,
+    'Commodity Mapping': <MapPinned />,
+    References: <BookOpen />,
+    'User Settings': <Settings />,
+};
 
-    const navIconMap: Record<string, React.ReactNode> = {
-        'Homepage': <Home />,
-        'Reports': <BarChart3 />,
-        'Dashboard': <LayoutDashboard />,
-        'Data Collection Forms': <ClipboardList />,
-        'Subprojects': <Folder />,
-        'Activities': <CalendarDays />,
-        'Program Management': <Briefcase />,
-        'Accomplishment Forms': <CheckCircle2 />,
-        'Financial': <CircleDollarSign />,
-        'Physical': <TrendingUp />,
-        'Indigenous Peoples Organization': <UsersRound />,
-        'Resources': <Database />,
-        'Marketing Database': <Store />,
-        'Level of Development': <MapPinned />,
-        'Commodity Mapping': <MapPinned />,
-        'References': <BookOpen />,
-        'User Settings': <Settings />
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar, currentPage, setCurrentPage }) => {
+    const { currentUser, hasAccess } = useAuth();
+
+    const moduleMapping: Record<string, string> = {
+        Dashboards: 'Dashboards',
+        Dashboard: 'Dashboards',
+        Reports: 'Reports',
+        Subprojects: 'Subprojects',
+        Activities: 'Activities',
+        'Program Management': 'Program Management',
+        Financial: 'Accomplishment - Financial',
+        Physical: 'Accomplishment - Physical',
+        'Indigenous Peoples Organization': 'IPO Management',
+        'Marketing Database': 'Marketing Database',
+        'Level of Development': 'Level of Development',
+        'Commodity Mapping': 'Commodity Mapping',
+        References: 'References',
     };
 
-    const getInitials = (name: string) => name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map(part => part[0])
-        .join('')
-        .toUpperCase();
-
-    // Auto-expand groups based on current page
-    useEffect(() => {
-        const newExpanded = new Set(expandedGroups);
-        let changed = false;
-        navigationStructure.forEach(item => {
-            if (item.children) {
-                if (item.children.some(child => child.href === currentPage)) {
-                    if (!newExpanded.has(item.name)) {
-                        newExpanded.add(item.name);
-                        changed = true;
-                    }
-                }
-            }
-        });
-        if (changed) setExpandedGroups(newExpanded);
-    }, [currentPage]);
-
-    const toggleGroup = (name: string) => {
-        setExpandedGroups(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(name)) newSet.delete(name);
-            else newSet.add(name);
-            return newSet;
-        });
+    const canViewItem = (item: NavItem): boolean => {
+        if (item.hiddenFor && currentUser && item.hiddenFor.includes(currentUser.role)) return false;
+        if (item.name === 'Homepage') return true;
+        if (item.children) return item.children.some(canViewItem);
+        return hasAccess(moduleMapping[item.name] || item.name, 'view');
     };
 
     const handleLinkClick = (href: string) => {
         setCurrentPage(href, { resetReports: href === '/reports' });
-        if (window.innerWidth < 768) {
-            closeSidebar();
-        }
+        if (window.innerWidth < 768) closeSidebar();
     };
 
-    const ChevronDown = () => (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-    );
-
-    const ChevronRight = () => (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-    );
-
-    const renderNavIcon = (item: NavItem) => (
-        <span className="app-sidebar__nav-icon" aria-hidden="true">
-            {navIconMap[item.name] || item.icon || <span className="app-sidebar__nav-initials">{getInitials(item.name)}</span>}
-        </span>
-    );
-
-    const renderNavItem = (item: NavItem) => {
-        // Legacy Permission Check
-        if (item.hiddenFor && currentUser && item.hiddenFor.includes(currentUser.role)) {
-            return null;
-        }
-
-        // Granular Management checks based on modules
-        if (item.name === 'Homepage') return (
-            <li key={item.name} className="mb-1">
-                <a
-                    href={item.href}
-                    onClick={(e) => { e.preventDefault(); if(item.href) handleLinkClick(item.href); }}
-                    className={`app-sidebar__nav-item ${item.href === currentPage ? 'app-sidebar__nav-item--active' : ''}`}
-                    title={item.name}
-                >
-                    {renderNavIcon(item)}
-                    <span className="app-sidebar__label">{item.name}</span>
-                </a>
-            </li>
-        );
-
-        const moduleMapping: Record<string, string> = {
-            'Dashboards': 'Dashboards',
-            'Reports': 'Reports',
-            'Subprojects': 'Subprojects',
-            'Activities': 'Activities',
-            'Program Management': 'Program Management',
-            'Financial': 'Accomplishment - Financial',
-            'Physical': 'Accomplishment - Physical',
-            'Indigenous Peoples Organization': 'IPO Management',
-            'Marketing Database': 'Marketing Database',
-            'Level of Development': 'Level of Development',
-            'Commodity Mapping': 'Commodity Mapping',
-            'References': 'References'
-        };
-
-        const checkAccessRecursive = (navItem: NavItem): boolean => {
-            if (navItem.children) {
-                return navItem.children.some(child => checkAccessRecursive(child));
-            }
-            const moduleName = moduleMapping[navItem.name] || navItem.name;
-            return hasAccess(moduleName, 'view');
-        };
-
-        if (!checkAccessRecursive(item)) return null;
-
-        const isGroup = !!item.children;
-        const isExpanded = expandedGroups.has(item.name);
-        const isActive = item.href === currentPage || (isGroup && item.children?.some(c => c.href === currentPage));
-
-        if (isGroup) {
-            return (
-                <li key={item.name} className="mb-1">
-                    <button
-                        onClick={() => toggleGroup(item.name)}
-                        className={`app-sidebar__nav-item ${isActive ? 'app-sidebar__nav-item--active' : ''}`}
-                        title={item.name}
-                    >
-                        {renderNavIcon(item)}
-                        <span className="app-sidebar__label">{item.name}</span>
-                        <span className="app-sidebar__chevron">{isExpanded ? <ChevronDown /> : <ChevronRight />}</span>
-                    </button>
-                    {isExpanded && (
-                        <ul className="app-sidebar__subnav space-y-1">
-                            {item.children?.map(child => renderNavItem(child))}
-                        </ul>
-                    )}
-                </li>
-            );
-        }
+    const renderLink = (item: NavItem) => {
+        if (!item.href || !canViewItem(item)) return null;
+        const active = item.href === currentPage;
 
         return (
-            <li key={item.name} className="mb-1">
+            <li key={`${item.name}-${item.href}`}>
                 <a
                     href={item.href}
-                    onClick={(e) => { e.preventDefault(); if(item.href) handleLinkClick(item.href); }}
-                    className={`app-sidebar__nav-item ${item.href === currentPage ? 'app-sidebar__nav-item--active' : ''}`}
+                    onClick={event => {
+                        event.preventDefault();
+                        handleLinkClick(item.href!);
+                    }}
+                    className={`app-sidebar__nav-item ${active ? 'app-sidebar__nav-item--active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
                     title={item.name}
                 >
-                    {renderNavIcon(item)}
+                    <span className="app-sidebar__nav-icon" aria-hidden="true">
+                        {navIconMap[item.name] || item.icon}
+                    </span>
                     <span className="app-sidebar__label">{item.name}</span>
                 </a>
             </li>
@@ -201,56 +106,77 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar, closeSidebar, 
 
     return (
         <>
-            {/* Overlay for mobile */}
             <div
-                className={`app-sidebar-overlay md:hidden ${isOpen ? '' : 'app-sidebar-overlay--hidden'}`}
+                className={`app-sidebar-overlay ${isOpen ? '' : 'app-sidebar-overlay--hidden'}`}
                 onClick={closeSidebar}
-            ></div>
-
-            {/* Sidebar Wrapper */}
+                aria-hidden="true"
+            />
             <div className={`app-sidebar-shell ${isOpen ? 'app-sidebar-shell--open' : ''}`}>
-                {/* Main Aside */}
-                <aside
-                    className={`app-sidebar ${isOpen ? 'app-sidebar--open' : ''}`}
-                >
-                    {/* Header / Logo */}
+                <aside className={`app-sidebar ${isOpen ? 'app-sidebar--open' : ''}`} aria-label="Primary navigation">
                     <div className="relative flex-shrink-0">
-                        <a href="/" onClick={(e) => { e.preventDefault(); setCurrentPage('/'); }} className="app-sidebar__brand group">
-                            <div className="app-sidebar__logo group-hover:shadow-md transition-shadow">
-                                <img 
-                                    src="/assets/4klogo.png" 
-                                    alt="DA 4K Logo" 
-                                />
-                            </div>
-                            <div className="app-sidebar__title">
+                        <a
+                            href="/"
+                            onClick={event => {
+                                event.preventDefault();
+                                handleLinkClick('/');
+                            }}
+                            className="app-sidebar__brand"
+                        >
+                            <span className="app-sidebar__logo">
+                                <img src="/assets/4klogo.png" alt="4K Program" />
+                            </span>
+                            <span className="app-sidebar__title">
                                 <strong>4K Information System</strong>
-                            </div>
+                                <span>Department of Agriculture</span>
+                            </span>
                         </a>
-                        
-                        {/* Mobile Close Button */}
-                        <button onClick={closeSidebar} className="app-sidebar__mobile-close md:hidden" aria-label="Close sidebar">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                        <button
+                            type="button"
+                            onClick={closeSidebar}
+                            className="app-sidebar__mobile-close"
+                            aria-label="Close navigation"
+                            title="Close navigation"
+                        >
+                            <X aria-hidden="true" />
                         </button>
                     </div>
 
-                    {/* Navigation */}
-                    <nav className="app-sidebar__nav custom-scrollbar">
+                    <nav className="app-sidebar__nav">
                         <ul className="app-sidebar__nav-list">
-                            {navigationStructure.map(item => renderNavItem(item))}
+                            {navigationStructure.map(item => {
+                                if (!canViewItem(item)) return null;
+                                if (item.children) {
+                                    const visibleChildren = item.children.filter(canViewItem);
+                                    if (visibleChildren.length === 0) return null;
+                                    return (
+                                        <li className="app-sidebar__section" key={item.name}>
+                                            <span className="app-sidebar__section-label">{item.name}</span>
+                                            <ul className="app-sidebar__section-items">
+                                                {visibleChildren.map(renderLink)}
+                                            </ul>
+                                        </li>
+                                    );
+                                }
+
+                                return (
+                                    <li className="app-sidebar__section" key={item.name}>
+                                        {item.name === 'Homepage' && <span className="app-sidebar__section-label">Overview</span>}
+                                        <ul className="app-sidebar__section-items">{renderLink(item)}</ul>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </nav>
-                    
-                    {/* Footer / Settings */}
+
                     <div className="app-sidebar__footer">
-                        <a 
+                        <a
                             href="/settings"
-                            onClick={(e) => {
-                                e.preventDefault();
+                            onClick={event => {
+                                event.preventDefault();
                                 handleLinkClick('/settings');
                             }}
                             className={`app-sidebar__nav-item ${currentPage === '/settings' ? 'app-sidebar__nav-item--active' : ''}`}
+                            aria-current={currentPage === '/settings' ? 'page' : undefined}
                             title="User Settings"
                         >
                             <span className="app-sidebar__nav-icon" aria-hidden="true">{navIconMap['User Settings']}</span>

@@ -34,6 +34,7 @@ import CommodityMappingPage from './components/resources/CommodityMappingPage';
 import LODPage from './components/LOD/LODPage';
 import LODDetails from './components/LOD/LODDetails';
 import AIChatbot from './components/AIChatbot'; // Import Chatbot
+import { EmptyState, ErrorState, LoadingState } from './components/ui/enterprise';
 
 import useLocalStorageState from './hooks/useLocalStorageState';
 import { useSupabaseTable } from './hooks/useSupabaseTable'; 
@@ -62,10 +63,12 @@ import {
     applyTheme,
     getSavedThemePreference,
     getSystemThemePreference,
-    resolveInitialTheme,
+    resolveThemeMode,
+    resolveThemePreference,
     saveThemePreference,
     THEME_STORAGE_KEY,
-    ThemeMode
+    ThemeMode,
+    ThemePreference
 } from './lib/theme';
 
 const parseAppRoute = (fullPath: string) => {
@@ -112,25 +115,11 @@ const getPageName = (path: string) => {
 };
 
 const AccessDenied: React.FC<{ onBackToHome: () => void }> = ({ onBackToHome }) => (
-    <div className="flex flex-col items-center justify-center h-full space-y-6 text-center">
-        <div className="bg-red-100 dark:bg-red-900/30 p-6 rounded-full">
-            <svg className="w-16 h-16 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-        </div>
-        <div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">403 Access Denied</h2>
-            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-                You do not have permission to view this specific page or module based on your current role and settings.
-            </p>
-        </div>
-        <button 
-            onClick={onBackToHome}
-            className="px-6 py-2 bg-accent text-white rounded-md font-medium hover:bg-opacity-90 transition-colors shadow-sm"
-        >
-            Return to Dashboard
-        </button>
-    </div>
+    <ErrorState
+        title="403 · Access denied"
+        message="Your current role does not have permission to view this page or module."
+        action={<button onClick={onBackToHome} className="btn btn-primary">Return to Dashboard</button>}
+    />
 );
 
 const DetailRouteFallback: React.FC<{
@@ -139,19 +128,11 @@ const DetailRouteFallback: React.FC<{
     actionLabel: string;
     onAction: () => void;
 }> = ({ title, message, actionLabel, onAction }) => (
-    <div className="flex h-full items-center justify-center p-6">
-        <div className="max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h2>
-            <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">{message}</p>
-            <button
-                type="button"
-                onClick={onAction}
-                className="mt-6 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-opacity-90"
-            >
-                {actionLabel}
-            </button>
-        </div>
-    </div>
+    <EmptyState
+        title={title}
+        message={message}
+        action={<button type="button" onClick={onAction} className="btn btn-primary">{actionLabel}</button>}
+    />
 );
 
 interface NavigationOptions {
@@ -185,7 +166,8 @@ const AppContent: React.FC = () => {
     const { getStatusDecision } = useDcfPolicyGuard();
     // Initialize Sidebar state based on screen width (Open on Desktop by default)
     const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
-    const [themeMode, setThemeMode] = useState<ThemeMode>(() => resolveInitialTheme());
+    const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() => resolveThemePreference());
+    const [themeMode, setThemeMode] = useState<ThemeMode>(() => resolveThemeMode(resolveThemePreference()));
     const [currentPage, setCurrentPage] = useState('/');
     const currentRoute = useMemo(() => parseAppRoute(currentPage), [currentPage]);
     const routePath = currentRoute.path;
@@ -798,36 +780,48 @@ const AppContent: React.FC = () => {
     }, [currentUser]);
 
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-    const toggleDarkMode = () => {
-        setThemeMode(prevTheme => {
-            const nextTheme = prevTheme === 'dark' ? 'light' : 'dark';
-            saveThemePreference(nextTheme);
-            return nextTheme;
-        });
+
+    useEffect(() => {
+        const mobileQuery = window.matchMedia('(max-width: 767px)');
+        const syncSidebarToViewport = (event: MediaQueryListEvent | MediaQueryList) => {
+            setIsSidebarOpen(!event.matches);
+        };
+
+        syncSidebarToViewport(mobileQuery);
+        mobileQuery.addEventListener('change', syncSidebarToViewport);
+        return () => mobileQuery.removeEventListener('change', syncSidebarToViewport);
+    }, []);
+
+    const updateThemePreference = (preference: ThemePreference) => {
+        saveThemePreference(preference);
+        setThemePreferenceState(preference);
+        setThemeMode(resolveThemeMode(preference));
     };
 
     useEffect(() => {
-        applyTheme(themeMode);
-    }, [themeMode]);
+        applyTheme(themeMode, themePreference);
+    }, [themeMode, themePreference]);
 
     useEffect(() => {
         const themeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
         if (!themeQuery) return;
 
         const handleSystemThemeChange = () => {
-            if (!getSavedThemePreference()) {
+            if (themePreference === 'system' && !getSavedThemePreference()) {
                 setThemeMode(getSystemThemePreference());
             }
         };
 
         themeQuery.addEventListener('change', handleSystemThemeChange);
         return () => themeQuery.removeEventListener('change', handleSystemThemeChange);
-    }, []);
+    }, [themePreference]);
 
     useEffect(() => {
         const handleThemeStorageChange = (event: StorageEvent) => {
             if (event.key !== THEME_STORAGE_KEY && event.key !== null) return;
-            setThemeMode(resolveInitialTheme());
+            const nextPreference = resolveThemePreference();
+            setThemePreferenceState(nextPreference);
+            setThemeMode(resolveThemeMode(nextPreference));
         };
 
         window.addEventListener('storage', handleThemeStorageChange);
@@ -955,16 +949,11 @@ const AppContent: React.FC = () => {
 
     if (!isAuthReady) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-                <div className="flex flex-col items-center">
-                    <div className="relative h-16 w-16">
-                        <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full"></div>
-                        <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                    <p className="mt-6 text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-widest text-[10px] animate-pulse text-center max-w-xs leading-relaxed">
-                        Empowering Indigenous Peoples towards Self Determination
-                    </p>
-                </div>
+            <div className="app-boot-screen" role="status" aria-live="polite">
+                <img src="/assets/4klogo.png" alt="" aria-hidden="true" />
+                <span className="app-boot-screen__spinner" aria-hidden="true" />
+                <strong>Preparing 4K Information System</strong>
+                <p>Empowering Indigenous Peoples towards self-determination.</p>
             </div>
         );
     }
@@ -1282,7 +1271,7 @@ const AppContent: React.FC = () => {
                     : selectedOfficeReq;
                 if (!latestOffice) {
                     if (routeId === null) return <div>Select an item</div>;
-                    if (isRouteDataLoading) return <div className="p-6 text-gray-500 dark:text-gray-400">Loading office requirement...</div>;
+                    if (isRouteDataLoading) return <LoadingState label="Loading office requirement..." />;
                     return (
                         <DetailRouteFallback
                             title="Office requirement not found"
@@ -1310,7 +1299,7 @@ const AppContent: React.FC = () => {
                     : selectedStaffingReq;
                 if (!latestStaff) {
                     if (routeId === null) return <div>Select an item</div>;
-                    if (isRouteDataLoading) return <div className="p-6 text-gray-500 dark:text-gray-400">Loading staffing requirement...</div>;
+                    if (isRouteDataLoading) return <LoadingState label="Loading staffing requirement..." />;
                     return (
                         <DetailRouteFallback
                             title="Staffing requirement not found"
@@ -1338,7 +1327,7 @@ const AppContent: React.FC = () => {
                     : selectedOtherExpense;
                 if (!latestOther) {
                     if (routeId === null) return <div>Select an item</div>;
-                    if (isRouteDataLoading) return <div className="p-6 text-gray-500 dark:text-gray-400">Loading other program expense...</div>;
+                    if (isRouteDataLoading) return <LoadingState label="Loading other program expense..." />;
                     return (
                         <DetailRouteFallback
                             title="Program expense not found"
@@ -1429,7 +1418,7 @@ const AppContent: React.FC = () => {
                     : selectedSubproject;
                 if (!latestSp) {
                     if (routeId === null) return <div>Select a subproject</div>;
-                    if (isRouteDataLoading) return <div className="p-6 text-gray-500 dark:text-gray-400">Loading subproject...</div>;
+                    if (isRouteDataLoading) return <LoadingState label="Loading subproject..." />;
                     return (
                         <DetailRouteFallback
                             title="Subproject not found"
@@ -1513,7 +1502,7 @@ const AppContent: React.FC = () => {
                     : selectedActivity;
                 if (!latestAct) {
                     if (routeId === null) return <div>Select an activity</div>;
-                    if (isRouteDataLoading) return <div className="p-6 text-gray-500 dark:text-gray-400">Loading activity...</div>;
+                    if (isRouteDataLoading) return <LoadingState label="Loading activity..." />;
                     return (
                         <DetailRouteFallback
                             title="Activity not found"
@@ -1559,7 +1548,8 @@ const AppContent: React.FC = () => {
             case '/settings':
                 return <Settings 
                             isDarkMode={isDarkMode} 
-                            toggleDarkMode={toggleDarkMode}
+                            themePreference={themePreference}
+                            onThemePreferenceChange={updateThemePreference}
                             deadlines={deadlines}
                             setDeadlines={setDeadlines}
                             // Pass data for DCF Management
@@ -1649,7 +1639,6 @@ const AppContent: React.FC = () => {
         <div className="app-shell">
             <Sidebar 
                 isOpen={isSidebarOpen} 
-                toggleSidebar={toggleSidebar}
                 closeSidebar={() => setIsSidebarOpen(false)} 
                 currentPage={routePath} 
                 setCurrentPage={navigateTo} 
@@ -1657,8 +1646,9 @@ const AppContent: React.FC = () => {
             <div className="app-workspace">
                 <Header 
                     toggleSidebar={toggleSidebar} 
-                    toggleDarkMode={toggleDarkMode} 
                     isDarkMode={isDarkMode} 
+                    themePreference={themePreference}
+                    onThemePreferenceChange={updateThemePreference}
                     setCurrentPage={navigateTo}
                     onRefreshData={refreshAllData}
                     onClearLocalCache={clearLocalCache}

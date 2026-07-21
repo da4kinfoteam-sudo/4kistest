@@ -69,8 +69,8 @@ function MonthPicker({
 }: React.HTMLAttributes<HTMLDivElement> & MonthCalProps) {
     return (
         <div className={cn("month-picker", className)} {...props}>
-            <div className="flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0">
-                <div className="space-y-4 w-full">
+            <div className="month-picker__layout">
+                <div className="month-picker__body">
                     <MonthCal
                         onMonthSelect={onMonthSelect}
                         callbacks={callbacks}
@@ -102,9 +102,9 @@ function MonthCal({ selectedMonth, onMonthSelect, callbacks, variant, minDate, m
 
     return (
         <>
-            <div className="flex justify-center pt-1 relative items-center">
+            <div className="month-picker__header">
                 <div className="month-picker__year">{callbacks?.yearLabel ? callbacks?.yearLabel(menuYear) : menuYear}</div>
-                <div className="space-x-1 flex items-center">
+                <div className="month-picker__nav-group">
                     <button
                         onClick={() => {
                             setMenuYear(menuYear - 1);
@@ -115,7 +115,7 @@ function MonthCal({ selectedMonth, onMonthSelect, callbacks, variant, minDate, m
                             "month-picker__nav month-picker__nav--prev"
                         )}
                     >
-                        <ChevronLeft className="opacity-50 h-4 w-4" />
+                        <ChevronLeft className="btn-symbol" />
                     </button>
                     <button
                         onClick={() => {
@@ -127,20 +127,20 @@ function MonthCal({ selectedMonth, onMonthSelect, callbacks, variant, minDate, m
                             "month-picker__nav month-picker__nav--next"
                         )}
                     >
-                        <ChevronRight className="opacity-50 h-4 w-4" />
+                        <ChevronRight className="btn-symbol" />
                     </button>
                 </div>
             </div>
-            <table className="w-full border-collapse space-y-1">
+            <table className="month-picker__table">
                 <tbody>
                     {MONTHS.map((monthRow, a) => {
                         return (
-                            <tr key={"row-" + a} className="flex w-full mt-2">
+                            <tr key={"row-" + a} className="month-picker__row">
                                 {monthRow.map((m) => {
                                     return (
                                         <td
                                             key={m.number}
-                                            className="h-10 w-1/4 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20"
+                                            className="month-picker__cell"
                                         >
                                             <button
                                                 onClick={() => {

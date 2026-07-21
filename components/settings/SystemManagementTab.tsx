@@ -1,15 +1,16 @@
 
 // Author: 4K
 import React, { useState, useMemo } from 'react';
-import { Deadline, PlanningSchedule } from '../../constants';
+import { Deadline } from '../../constants';
 import { supabase } from '../../supabaseClient';
+import { ConfirmDialog, SortableTableHeader } from '../ui/enterprise';
 
 interface SystemManagementTabProps {
     deadlines: Deadline[];
     setDeadlines: React.Dispatch<React.SetStateAction<Deadline[]>>;
 }
 
-const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent sm:text-sm";
+const commonInputClasses = "form-control";
 
 const SystemManagementTab: React.FC<SystemManagementTabProps> = ({ 
     deadlines, setDeadlines 
@@ -28,6 +29,7 @@ const SystemManagementTab: React.FC<SystemManagementTabProps> = ({
 
     // Bulk Selection State
     const [selectedDeadlines, setSelectedDeadlines] = useState<number[]>([]);
+    const [deleteRequested, setDeleteRequested] = useState(false);
 
     // --- Helpers ---
     const handleSort = (key: string, type: 'deadline') => {
@@ -49,8 +51,6 @@ const SystemManagementTab: React.FC<SystemManagementTabProps> = ({
         const ids = selectedDeadlines;
         if (!ids.length) return;
         
-        if (!window.confirm(`Are you sure you want to delete ${ids.length} items?`)) return;
-
         try {
             const table = 'deadlines';
             if (supabase) {
@@ -118,122 +118,84 @@ const SystemManagementTab: React.FC<SystemManagementTabProps> = ({
     }, [deadlines, deadlineSort]);
 
     const SortableHeader = ({ label, sortKey }: { label: string, sortKey: string }) => {
-        const isSorted = deadlineSort?.key === sortKey;
-        const directionIcon = isSorted ? (deadlineSort?.direction === 'asc' ? '▲' : '▼') : '↕';
-        
-        return (
-            <th 
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 select-none group"
-                onClick={() => handleSort(sortKey, 'deadline')}
-            >
-                <div className="flex items-center gap-1">
-                    {label}
-                    <span className={`text-gray-400 group-hover:text-gray-600 ${isSorted ? 'text-accent opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                        {directionIcon}
-                    </span>
-                </div>
-            </th>
-        );
+        const config = deadlineSort?.key === sortKey ? { key: sortKey, direction: deadlineSort.direction === 'asc' ? 'ascending' as const : 'descending' as const } : null;
+        return <SortableTableHeader label={label} columnKey={sortKey} sortConfig={config} onSort={() => handleSort(sortKey, 'deadline')} />;
     };
 
     return (
-        <div className="space-y-12">
+        <div className="system-management form-stack form-stack--spacious">
             
             {/* 1. Deadlines Management */}
-            <section>
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-gray-800 dark:text-white">System Deadlines</h3>
-                    <div className="flex gap-2">
+            <section className="form-stack">
+                <header className="section-heading system-management__header">
+                    <h3 className="section-heading__title">System Deadlines</h3><div className="system-management__actions">
                         {selectedDeadlines.length > 0 && (
                             <button 
-                                onClick={() => handleBulkDelete('deadline')}
-                                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 flex items-center gap-2"
+                                onClick={() => setDeleteRequested(true)}
+                                className="btn-danger"
                             >
                                 Delete Selected ({selectedDeadlines.length})
                             </button>
                         )}
                         <button 
                             onClick={() => openDeadlineModal()} 
-                            className="px-4 py-2 bg-accent text-white rounded-md text-sm hover:bg-opacity-90"
+                            className="btn-primary"
                         >
                             + Add Deadline
                         </button>
                     </div>
-                </div>
-                <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead className="bg-gray-50 dark:bg-gray-700/50">
+                </header>
+                <div className="data-table-card"><div className="data-table-scroll system-management__table-scroll">
+                        <table className="data-table system-management__table">
+                            <thead>
                                 <tr>
-                                    <th className="px-4 py-3 text-left w-12">
+                                    <th className="data-table__cell--selection">
                                         <input 
                                             type="checkbox" 
                                             onChange={(e) => handleSelectAll(e, 'deadline')}
                                             checked={deadlines.length > 0 && selectedDeadlines.length === deadlines.length}
-                                            className="rounded border-gray-300 text-accent focus:ring-accent"
+                                            className="form-checkbox"
                                         />
                                     </th>
                                     <SortableHeader label="Name" sortKey="name" />
                                     <SortableHeader label="Date" sortKey="date" />
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                    <th className="data-table__head--actions">Actions</th>
                                 </tr>
                             </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody>
                                  {getSortedDeadlines.length === 0 ? (
-                                     <tr><td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500 italic">No deadlines set.</td></tr>
+                                     <tr><td colSpan={4} className="data-table__empty-cell">No deadlines set.</td></tr>
                                  ) : (
                                      getSortedDeadlines.map(d => (
-                                         <tr key={d.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                             <td className="px-4 py-4">
+                                         <tr key={d.id} className={selectedDeadlines.includes(d.id) ? 'data-table__row--selected' : undefined}>
+                                             <td className="data-table__cell--selection">
                                                  <input 
                                                      type="checkbox" 
                                                      checked={selectedDeadlines.includes(d.id)}
                                                      onChange={() => handleSelectRow(d.id, 'deadline')}
-                                                     className="rounded border-gray-300 text-accent focus:ring-accent"
+                                                     className="form-checkbox"
                                                  />
                                              </td>
-                                             <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{d.name}</td>
-                                             <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{d.date}</td>
-                                             <td className="px-6 py-4 text-right text-sm font-medium">
-                                                 <button onClick={() => openDeadlineModal(d)} className="text-accent hover:text-green-900 mr-4">Edit</button>
+                                             <td className="data-table__cell--primary">{d.name}</td><td className="data-table__cell--muted data-table__cell--nowrap">{d.date}</td>
+                                             <td className="data-table__cell--actions"><button onClick={() => openDeadlineModal(d)} className="table-action table-action--edit">Edit</button>
                                              </td>
                                          </tr>
                                      ))
                                  )}
                             </tbody>
                         </table>
-                    </div>
-                </div>
+                    </div></div>
             </section>
 
             {/* Modals */}
             {isDeadlineModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-sm w-full p-6">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                            {editingDeadline ? 'Edit Deadline' : 'Add New Deadline'}
-                        </h3>
-                        <form onSubmit={handleDeadlineSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
-                                <input type="text" required value={deadlineForm.name} onChange={e => setDeadlineForm({...deadlineForm, name: e.target.value})} className={commonInputClasses} />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
-                                <input type="date" required value={deadlineForm.date} onChange={e => setDeadlineForm({...deadlineForm, date: e.target.value})} className={commonInputClasses} />
-                            </div>
-                            <div className="flex justify-end space-x-3 pt-4">
-                                <button type="button" onClick={() => setIsDeadlineModalOpen(false)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600">
-                                    Cancel
-                                </button>
-                                <button type="submit" className="px-4 py-2 bg-accent text-white rounded-md text-sm font-medium hover:bg-opacity-90">
-                                    Save
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                <div className="modal-backdrop" role="presentation"><section className="modal-card system-deadline-modal" role="dialog" aria-modal="true" aria-labelledby="deadline-editor-title">
+                        <header className="modal-card__header"><h3 id="deadline-editor-title">{editingDeadline ? 'Edit Deadline' : 'Add New Deadline'}</h3></header>
+                        <form onSubmit={handleDeadlineSubmit} className="form-stack"><div className="modal-card__body form-stack"><label className="form-field"><span className="form-label">Name</span><input type="text" required value={deadlineForm.name} onChange={e => setDeadlineForm({...deadlineForm, name: e.target.value})} className={commonInputClasses} /></label><label className="form-field"><span className="form-label">Date</span><input type="date" required value={deadlineForm.date} onChange={e => setDeadlineForm({...deadlineForm, date: e.target.value})} className={commonInputClasses} /></label></div><footer className="modal-card__footer"><button type="button" onClick={() => setIsDeadlineModalOpen(false)} className="btn-secondary">Cancel</button><button type="submit" className="btn-primary">Save</button></footer></form>
+                    </section>
                 </div>
              )}
+            {deleteRequested && <ConfirmDialog title="Delete deadlines?" description={`Delete ${selectedDeadlines.length} selected deadline(s)? This cannot be undone.`} confirmLabel="Delete Deadlines" tone="danger" onConfirm={async () => { await handleBulkDelete('deadline'); setDeleteRequested(false); }} onCancel={() => setDeleteRequested(false)} />}
         </div>
     );
 };

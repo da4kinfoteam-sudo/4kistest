@@ -14,12 +14,15 @@ import UserLogsTab from './settings/UserLogsTab';
 import DCFManagementTab from './settings/DCFManagementTab';
 import LODManagementTab from './settings/LODManagementTab';
 import ArchiveManagementTab from './settings/ArchiveManagementTab';
+import { ThemePreference } from '../lib/theme';
 import UserControlCenterTab from './settings/UserControlCenterTab';
 import GoogleDriveStorageTab from './settings/GoogleDriveStorageTab';
+import { PageHeader } from './ui/enterprise';
 
 interface SettingsProps {
     isDarkMode: boolean;
-    toggleDarkMode: () => void;
+    themePreference: ThemePreference;
+    onThemePreferenceChange: (preference: ThemePreference) => void;
     deadlines: Deadline[];
     setDeadlines: React.Dispatch<React.SetStateAction<Deadline[]>>;
     
@@ -44,7 +47,7 @@ interface SettingsProps {
 type TabName = 'profile' | 'management' | 'control_center' | 'drive' | 'system' | 'logs' | 'dcf' | 'lod' | 'archive';
 
 const Settings: React.FC<SettingsProps> = ({ 
-    isDarkMode, toggleDarkMode, 
+    isDarkMode, themePreference, onThemePreferenceChange,
     deadlines, setDeadlines,
     subprojects, setSubprojects,
     activities, setActivities,
@@ -108,12 +111,11 @@ const Settings: React.FC<SettingsProps> = ({
         const isActive = activeTab === name;
         return (
             <button
+                type="button"
                 onClick={() => isTabAllowed(name) && setActiveTab(name)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors duration-200 whitespace-nowrap
-                    ${isActive
-                        ? 'border-accent text-accent'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
+                className={`settings-tabs__button ${isActive ? 'is-active' : ''}`}
+                aria-selected={isActive}
+                role="tab"
             >
                 {label}
             </button>
@@ -121,14 +123,14 @@ const Settings: React.FC<SettingsProps> = ({
     };
 
     return (
-        <div className="max-w-7xl mx-auto animate-fadeIn pb-10">
-             <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-6">Settings</h2>
+        <div className="settings-page animate-fadeIn">
+             <PageHeader title="Settings" metadata="Manage your profile, access controls, integrations, and system preferences." />
 
              {!isGuest && <SystemHealthCard />}
 
-             <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg mb-6 overflow-hidden">
-                <div className="border-b border-gray-200 dark:border-gray-700">
-                    <nav className="-mb-px flex space-x-2 px-4 overflow-x-auto" aria-label="Tabs">
+             <section className="settings-panel">
+                <div className="settings-tabs">
+                    <nav className="settings-tabs__list" aria-label="Settings sections" role="tablist">
                         <TabButton name="profile" label="User Profile" />
                         {isAdmin && <TabButton name="management" label="Users Management" />}
                         {isSuperAdmin && <TabButton name="control_center" label="User Control Center" />}
@@ -141,9 +143,13 @@ const Settings: React.FC<SettingsProps> = ({
                     </nav>
                 </div>
 
-                <div className="p-6">
+                <div className="settings-panel__content" role="tabpanel">
                     {activeTab === 'profile' && (
-                        <UserProfileTab isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+                        <UserProfileTab
+                            isDarkMode={isDarkMode}
+                            themePreference={themePreference}
+                            onThemePreferenceChange={onThemePreferenceChange}
+                        />
                     )}
                     
                     {activeTab === 'control_center' && isSuperAdmin && (
@@ -197,7 +203,7 @@ const Settings: React.FC<SettingsProps> = ({
                         <ArchiveManagementTab />
                     )}
                 </div>
-             </div>
+             </section>
         </div>
     );
 };

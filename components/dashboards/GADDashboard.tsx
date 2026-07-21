@@ -1,5 +1,5 @@
 
-// Author: 4K 
+// Author: 4K
 import React, { useMemo } from 'react';
 import { Training, OtherActivity, IPO, Subproject } from '../../constants';
 
@@ -11,7 +11,7 @@ interface GADDashboardProps {
 }
 
 const GADDashboard: React.FC<GADDashboardProps> = ({ trainings, ipos, subprojects }) => {
-    
+
     const stats = useMemo(() => {
         let targetMale = 0;
         let targetFemale = 0;
@@ -46,7 +46,7 @@ const GADDashboard: React.FC<GADDashboardProps> = ({ trainings, ipos, subproject
 
         // 3. Identify Trainings linked to WL IPOs
         // Note: 'trainings' prop is already filtered by the selected Year/FundYear in the parent component
-        const linkedTrainings = (trainings || []).filter(t => 
+        const linkedTrainings = (trainings || []).filter(t =>
             (t.participatingIpos || []).some(ipoName => womenLedIpoNames.has(ipoName))
         );
 
@@ -64,10 +64,10 @@ const GADDashboard: React.FC<GADDashboardProps> = ({ trainings, ipos, subproject
         // 5. Count "Total Women-led IPOs" (Engaged)
         // Definition: IPOs that are tagged as Women-led with linked subprojects and trainings in the selected year
         const engagedWomenLedIPOs = new Set<string>();
-        
+
         // Add from Subprojects
         linkedSubprojects.forEach(sp => engagedWomenLedIPOs.add(sp.indigenousPeopleOrganization));
-        
+
         // Add from Trainings
         linkedTrainings.forEach(t => {
             (t.participatingIpos || []).forEach(ipo => {
@@ -96,181 +96,181 @@ const GADDashboard: React.FC<GADDashboardProps> = ({ trainings, ipos, subproject
         const femalePercent = total > 0 ? (female / total) * 100 : 0;
 
         return (
-            <div className="flex flex-col gap-1 w-full">
-                <div className="flex justify-between text-xs font-semibold mb-1">
-                    <span className="text-blue-600 dark:text-blue-400">Male: {male.toLocaleString()} ({malePercent.toFixed(1)}%)</span>
-                    <span className="text-pink-600 dark:text-pink-400">Female: {female.toLocaleString()} ({femalePercent.toFixed(1)}%)</span>
+            <div className="gad-comparison-chart">
+                <div className="gad-comparison-chart__legend">
+                    <span className="gad-sex-label gad-sex-label--male">Male: {male.toLocaleString()} ({malePercent.toFixed(1)}%)</span>
+                    <span className="gad-sex-label gad-sex-label--female">Female: {female.toLocaleString()} ({femalePercent.toFixed(1)}%)</span>
                 </div>
-                <div className="w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex">
-                    <div 
-                        className="h-full bg-blue-500" 
-                        style={{ width: `${malePercent}%` }} 
+                <div className="gad-comparison-chart__track">
+                    <div
+                        className="gad-comparison-chart__segment gad-comparison-chart__segment--male"
+                        style={{ width: `${malePercent}%` }}
                         title={`Male ${type}: ${male}`}
                     ></div>
-                    <div 
-                        className="h-full bg-pink-500" 
-                        style={{ width: `${femalePercent}%` }} 
+                    <div
+                        className="gad-comparison-chart__segment gad-comparison-chart__segment--female"
+                        style={{ width: `${femalePercent}%` }}
                         title={`Female ${type}: ${female}`}
                     ></div>
                 </div>
-                <p className="text-xs text-center mt-1 text-gray-500 dark:text-gray-400">{label}: {total.toLocaleString()}</p>
+                <p className="gad-comparison-chart__total">{label}: {total.toLocaleString()}</p>
             </div>
         );
     };
 
-    const WomenLedCard = ({ title, value, icon, colorClass, subtext }: { title: string, value: string, icon: React.ReactNode, colorClass: string, subtext?: string }) => (
-        <div className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md border-l-4 ${colorClass} flex items-center justify-between transition hover:-translate-y-1`}>
+    const WomenLedCard = ({ title, value, icon, tone, subtext }: { title: string, value: string, icon: React.ReactNode, tone: 'purple' | 'pink' | 'indigo' | 'violet', subtext?: string }) => (
+        <article className={`gad-kpi gad-kpi--${tone}`}>
             <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-                <p className="text-2xl font-bold text-gray-800 dark:text-white mt-1">{value}</p>
-                {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+                <p className="gad-kpi__label">{title}</p>
+                <p className="gad-kpi__value">{value}</p>
+                {subtext && <p className="gad-kpi__meta">{subtext}</p>}
             </div>
-            <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300">
+            <div className="gad-kpi__icon">
                 {icon}
             </div>
-        </div>
+        </article>
     );
 
     return (
-        <div className="space-y-8 animate-fadeIn">
+        <div className="gad-dashboard dashboard-view animate-fadeIn">
             {/* Header Section */}
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md flex items-center justify-between">
+            <div className="content-card dashboard-module-hero">
                 <div>
-                    <h3 className="text-2xl font-bold text-gray-800 dark:text-white">Gender and Development (GAD) Dashboard</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Monitoring sex-disaggregated data and support for women-led organizations.</p>
+                    <h3 className="dashboard-module-title">Gender and Development (GAD) Dashboard</h3>
+                    <p className="dashboard-module-copy">Monitoring sex-disaggregated data and support for women-led organizations.</p>
                 </div>
-                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="dashboard-module-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                 </div>
             </div>
 
             {/* Women-Led IPOs Section */}
-            <section aria-labelledby="women-led-ipos">
-                <h3 id="women-led-ipos" className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Women-Led IPO Overview (Engaged)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <WomenLedCard 
-                        title="Total Women-Led IPOs" 
-                        value={womenLedStats.totalIpos.toLocaleString()} 
+            <section className="gad-section" aria-labelledby="women-led-ipos">
+                <h3 id="women-led-ipos" className="gad-section__title">Women-Led IPO Overview (Engaged)</h3>
+                <div className="gad-kpi-grid">
+                    <WomenLedCard
+                        title="Total Women-Led IPOs"
+                        value={womenLedStats.totalIpos.toLocaleString()}
                         subtext="Engaged via SP/Training"
-                        colorClass="border-purple-500"
+                        tone="purple"
                         icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.184-1.268-.5-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.184-1.268.5-1.857m0 0a5.002 5.002 0 019 0m-4.5 5.002v-10a4.5 4.5 0 00-9 0v10m9 0a4.5 4.5 0 00-9 0" /></svg>}
                     />
-                    <WomenLedCard 
-                        title="Total Allocation" 
-                        value={formatCurrency(womenLedStats.totalAllocation)} 
-                        colorClass="border-pink-500"
+                    <WomenLedCard
+                        title="Total Allocation"
+                        value={formatCurrency(womenLedStats.totalAllocation)}
+                        tone="pink"
                         icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
                     />
-                    <WomenLedCard 
-                        title="Subprojects Granted" 
-                        value={womenLedStats.totalSubprojects.toLocaleString()} 
-                        colorClass="border-indigo-500"
+                    <WomenLedCard
+                        title="Subprojects Granted"
+                        value={womenLedStats.totalSubprojects.toLocaleString()}
+                        tone="indigo"
                         icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>}
                     />
-                    <WomenLedCard 
-                        title="Trainings Participated" 
-                        value={womenLedStats.totalTrainings.toLocaleString()} 
-                        colorClass="border-violet-500"
+                    <WomenLedCard
+                        title="Trainings Participated"
+                        value={womenLedStats.totalTrainings.toLocaleString()}
+                        tone="violet"
                         icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>}
                     />
                 </div>
             </section>
 
             {/* Sex Disaggregated Data Section */}
-            <section aria-labelledby="sex-disaggregated-data">
-                <h3 id="sex-disaggregated-data" className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Sex Disaggregated Data - Trainings</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <section className="gad-section" aria-labelledby="sex-disaggregated-data">
+                <h3 id="sex-disaggregated-data" className="gad-section__title">Sex Disaggregated Data - Trainings</h3>
+
+                <div className="gad-stat-grid">
                     {/* Stat Cards */}
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-lg shadow border-l-4 border-blue-500">
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Male Target</p>
-                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.targetMale.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-lg shadow border-l-4 border-pink-500">
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Female Target</p>
-                        <p className="text-3xl font-bold text-pink-600 dark:text-pink-400">{stats.targetFemale.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-lg shadow border-l-4 border-blue-700">
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Actual Male Participants</p>
-                        <p className="text-3xl font-bold text-blue-800 dark:text-blue-300">{stats.actualMale.toLocaleString()}</p>
-                        <p className="text-xs text-gray-400 mt-1">
+                    <article className="gad-stat gad-stat--male">
+                        <p className="gad-stat__label">Total Male Target</p>
+                        <p className="gad-stat__value">{stats.targetMale.toLocaleString()}</p>
+                    </article>
+                    <article className="gad-stat gad-stat--female">
+                        <p className="gad-stat__label">Total Female Target</p>
+                        <p className="gad-stat__value">{stats.targetFemale.toLocaleString()}</p>
+                    </article>
+                    <article className="gad-stat gad-stat--male-actual">
+                        <p className="gad-stat__label">Actual Male Participants</p>
+                        <p className="gad-stat__value">{stats.actualMale.toLocaleString()}</p>
+                        <p className="gad-stat__meta">
                             {stats.targetMale > 0 ? `${Math.round((stats.actualMale / stats.targetMale) * 100)}% of Target` : 'No Target'}
                         </p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 p-5 rounded-lg shadow border-l-4 border-pink-700">
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Actual Female Participants</p>
-                        <p className="text-3xl font-bold text-pink-800 dark:text-pink-300">{stats.actualFemale.toLocaleString()}</p>
-                        <p className="text-xs text-gray-400 mt-1">
+                    </article>
+                    <article className="gad-stat gad-stat--female-actual">
+                        <p className="gad-stat__label">Actual Female Participants</p>
+                        <p className="gad-stat__value">{stats.actualFemale.toLocaleString()}</p>
+                        <p className="gad-stat__meta">
                             {stats.targetFemale > 0 ? `${Math.round((stats.actualFemale / stats.targetFemale) * 100)}% of Target` : 'No Target'}
                         </p>
-                    </div>
+                    </article>
                 </div>
 
                 {/* Comparative Charts */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                        <h4 className="font-bold text-gray-700 dark:text-gray-200 mb-4 text-center">Target Distribution by Sex</h4>
+                <div className="gad-chart-grid">
+                    <article className="dashboard-panel gad-chart-card">
+                        <h4 className="gad-chart-card__title">Target Distribution by Sex</h4>
                         <div className="flex items-center justify-center h-40">
-                            <SimpleComparisonChart 
-                                label="Total Targets" 
-                                male={stats.targetMale} 
-                                female={stats.targetFemale} 
-                                type="Target" 
+                            <SimpleComparisonChart
+                                label="Total Targets"
+                                male={stats.targetMale}
+                                female={stats.targetFemale}
+                                type="Target"
                             />
                         </div>
-                    </div>
+                    </article>
 
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                        <h4 className="font-bold text-gray-700 dark:text-gray-200 mb-4 text-center">Accomplishment Distribution by Sex</h4>
+                    <article className="dashboard-panel gad-chart-card">
+                        <h4 className="gad-chart-card__title">Accomplishment Distribution by Sex</h4>
                         <div className="flex items-center justify-center h-40">
-                            <SimpleComparisonChart 
-                                label="Total Accomplishment" 
-                                male={stats.actualMale} 
-                                female={stats.actualFemale} 
-                                type="Accomplishment" 
+                            <SimpleComparisonChart
+                                label="Total Accomplishment"
+                                male={stats.actualMale}
+                                female={stats.actualFemale}
+                                type="Accomplishment"
                             />
                         </div>
-                    </div>
+                    </article>
                 </div>
             </section>
 
             {/* Comparison Bar Chart: Target vs Actual per Sex */}
-            <section className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-                <h4 className="font-bold text-gray-700 dark:text-gray-200 mb-6">Target vs Accomplishment Comparison</h4>
-                <div className="space-y-6">
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="font-medium text-blue-600 dark:text-blue-400">Male</span>
-                            <span className="text-gray-500 dark:text-gray-400">
+            <section className="dashboard-panel gad-target-card">
+                <h4 className="gad-chart-card__title">Target vs Accomplishment Comparison</h4>
+                <div className="gad-target-list">
+                    <div className="gad-target-row">
+                        <div className="gad-target-row__header">
+                            <span className="gad-sex-label gad-sex-label--male">Male</span>
+                            <span className="gad-target-row__value">
                                 {stats.actualMale.toLocaleString()} / {stats.targetMale.toLocaleString()}
                             </span>
                         </div>
-                        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
+                        <div className="gad-target-row__track">
                             {/* Target Bar (Background/Basis) */}
-                            <div className="absolute top-0 left-0 h-full w-full bg-gray-200 dark:bg-gray-600"></div>
+                            <div className="gad-target-row__baseline"></div>
                             {/* Actual Bar */}
-                            <div 
-                                className="absolute top-0 left-0 h-full bg-blue-500 rounded-full transition-all duration-500" 
+                            <div
+                                className="gad-target-row__actual gad-target-row__actual--male"
                                 style={{ width: `${stats.targetMale > 0 ? Math.min((stats.actualMale / stats.targetMale) * 100, 100) : 0}%` }}
                             ></div>
                         </div>
                     </div>
 
-                    <div>
-                        <div className="flex justify-between text-sm mb-1">
-                            <span className="font-medium text-pink-600 dark:text-pink-400">Female</span>
-                            <span className="text-gray-500 dark:text-gray-400">
+                    <div className="gad-target-row">
+                        <div className="gad-target-row__header">
+                            <span className="gad-sex-label gad-sex-label--female">Female</span>
+                            <span className="gad-target-row__value">
                                 {stats.actualFemale.toLocaleString()} / {stats.targetFemale.toLocaleString()}
                             </span>
                         </div>
-                        <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
+                        <div className="gad-target-row__track">
                             {/* Target Bar (Background/Basis) */}
-                            <div className="absolute top-0 left-0 h-full w-full bg-gray-200 dark:bg-gray-600"></div>
+                            <div className="gad-target-row__baseline"></div>
                             {/* Actual Bar */}
-                            <div 
-                                className="absolute top-0 left-0 h-full bg-pink-500 rounded-full transition-all duration-500" 
+                            <div
+                                className="gad-target-row__actual gad-target-row__actual--female"
                                 style={{ width: `${stats.targetFemale > 0 ? Math.min((stats.actualFemale / stats.targetFemale) * 100, 100) : 0}%` }}
                             ></div>
                         </div>

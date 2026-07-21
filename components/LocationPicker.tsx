@@ -330,12 +330,12 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange, onRegi
         onChange(loc);
     };
 
-    const commonClasses = "mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent sm:text-sm disabled:bg-gray-200 dark:disabled:bg-gray-600";
+    const commonClasses = "form-control";
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="location-picker">
             <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Region</label>
+                <label className="form-label">Region</label>
                 <select 
                     value={isOnline ? 'Online' : selectedRegionCode} 
                     onChange={handleRegionChange} 
@@ -351,7 +351,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange, onRegi
             {!isOnline && (
                 <>
                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Province</label>
+                        <label className="form-label">Province</label>
                         <select 
                             value={selectedProvinceCode} 
                             onChange={handleProvinceChange} 
@@ -363,7 +363,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange, onRegi
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City/Municipality</label>
+                        <label className="form-label">City/Municipality</label>
                         <select 
                             value={selectedCityCode} 
                             onChange={handleCityChange} 
@@ -375,7 +375,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange, onRegi
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Barangay(s)</label>
+                        <label className="form-label">Barangay(s)</label>
                         <select 
                             onChange={handleAddBarangay} 
                             disabled={!selectedCityCode || barangays.length === 0} 
@@ -385,14 +385,15 @@ const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange, onRegi
                             <option value="">Add Barangay...</option>
                             {barangays.map(b => <option key={b.code} value={b.name}>{b.name}</option>)}
                         </select>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="location-picker__chips">
                             {selectedBarangayNames.map(b => (
-                                <span key={b} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
+                                <span key={b} className="location-picker__chip">
                                     {b}
                                     <button 
                                         type="button" 
                                         onClick={() => handleRemoveBarangay(b)} 
-                                        className="ml-1 text-gray-500 hover:text-red-500 focus:outline-none"
+                                        className="location-picker__chip-remove"
+                                        aria-label={`Remove ${b}`}
                                     >
                                         &times;
                                     </button>

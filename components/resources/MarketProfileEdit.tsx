@@ -17,7 +17,7 @@ const BUYER_TYPES = ['Private Company', 'Government'];
 const PAYMENT_METHODS = ['Bank Transfer', 'Cash', 'Cash on Delivery', 'Voucher'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm text-gray-900 dark:text-white";
+const commonInputClasses = "form-control";
 
 // PSGC Region Codes Mapping for Province Fetching
 const REGION_CODE_MAP: Record<string, string> = {
@@ -157,115 +157,115 @@ const MarketProfileEdit: React.FC<MarketProfileEditProps> = ({ partner, onBack, 
     };
 
     return (
-        <div className="space-y-6 animate-fadeIn pb-20">
-            <header className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Edit Partner Details</h1>
-                    <p className="text-sm text-gray-500">{partner.companyName} | {partner.uid}</p>
+        <div className="form-page animate-fadeIn">
+            <header className="detail-header">
+                <div className="detail-heading">
+                    <h1 className="detail-title">Edit Partner Details</h1>
+                    <p className="detail-meta">{partner.companyName} | {partner.uid}</p>
                 </div>
-                <button onClick={onBack} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-bold">Back to Profile</button>
+                <button onClick={onBack} className="btn btn-secondary">Back to Profile</button>
             </header>
 
-            <form onSubmit={handleSave} className="space-y-8 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+            <form onSubmit={handleSave} className="form-card form-stack form-stack--spacious">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4">
-                        <h3 className="font-bold text-emerald-600 border-b pb-1">Company Profile</h3>
+                        <h3 className="form-section__title">Company Profile</h3>
                         <div>
-                            <label className="block text-sm font-medium">Company Name</label>
+                            <label className="form-label">Company Name</label>
                             <input type="text" name="companyName" value={formData.companyName} onChange={handleInputChange} required className={commonInputClasses} />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium">Buyer Type</label>
+                                <label className="form-label">Buyer Type</label>
                                 <select name="buyerType" value={formData.buyerType} onChange={handleInputChange} className={commonInputClasses}>
                                     {BUYER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium">Owner / Contact</label>
+                                <label className="form-label">Owner / Contact</label>
                                 <input type="text" name="ownerName" value={formData.ownerName} onChange={handleInputChange} className={commonInputClasses} />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium">Contact Number</label>
+                                <label className="form-label">Contact Number</label>
                                 <input type="text" name="contactNumber" value={formData.contactNumber} onChange={handleInputChange} className={commonInputClasses} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium">Email Address</label>
+                                <label className="form-label">Email Address</label>
                                 <input type="email" name="email" value={formData.email} onChange={handleInputChange} className={commonInputClasses} />
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1">Company Location</label>
+                            <label className="form-label">Company Location</label>
                             <LocationPicker value={formData.location} onChange={handleLocationChange} />
                         </div>
                     </div>
 
                     <div className="space-y-4">
-                        <h3 className="font-bold text-emerald-600 border-b pb-1">Preferences</h3>
+                        <h3 className="form-section__title">Preferences</h3>
                         <div>
-                            <label className="block text-sm font-medium mb-2">Preferred Payment Methods</label>
+                            <label className="form-label">Preferred Payment Methods</label>
                             <div className="flex flex-wrap gap-2">
                                 {PAYMENT_METHODS.map(m => (
-                                    <button key={m} type="button" onClick={() => handlePaymentToggle(m)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${formData.paymentMethods.includes(m) ? 'bg-emerald-100 border-emerald-500 text-emerald-700' : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-500'}`}>{m}</button>
+                                    <button key={m} type="button" onClick={() => handlePaymentToggle(m)} className={`form-choice-button ${formData.paymentMethods.includes(m) ? 'is-selected' : ''}`}>{m}</button>
                                 ))}
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium">Remarks</label>
+                            <label className="form-label">Remarks</label>
                             <textarea name="remarks" value={formData.remarks} onChange={handleInputChange} rows={5} className={commonInputClasses} />
                         </div>
                     </div>
                 </div>
 
                 <div className="space-y-4 border-t pt-6">
-                    <h3 className="font-bold text-emerald-600">Commodity Requirements</h3>
-                    <div className="bg-gray-50 dark:bg-gray-900/40 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <h3 className="form-section__title">Commodity Requirements</h3>
+                    <div className="form-subsection">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                            <div><label className="block text-xs font-bold uppercase text-gray-500">Type</label><select name="type" value={tempCommodity.type} onChange={handleTempCommodityChange} className={commonInputClasses}><option value="">Select Type</option>{referenceCommodityTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                            <div><label className="block text-xs font-bold uppercase text-gray-500">Commodity Name</label><select name="name" value={tempCommodity.name} onChange={handleTempCommodityChange} disabled={!tempCommodity.type} className={commonInputClasses}><option value="">Select Commodity</option>{tempCommodity.type && commodityCategories[tempCommodity.type]?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                            <div><label className="block text-xs font-bold uppercase text-gray-500">Source Region</label><select name="sourceRegion" value={tempCommodity.sourceRegion} onChange={handleTempCommodityChange} className={commonInputClasses}><option value="">Select Region</option>{philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                            <div><label className="block text-xs font-bold uppercase text-gray-500">Source Province</label><select name="sourceProvince" value={tempCommodity.sourceProvince} onChange={handleTempCommodityChange} className={commonInputClasses} disabled={provinceOptions.length === 0}><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                            <div><label className="form-label form-label--compact">Type</label><select name="type" value={tempCommodity.type} onChange={handleTempCommodityChange} className={commonInputClasses}><option value="">Select Type</option>{referenceCommodityTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                            <div><label className="form-label form-label--compact">Commodity Name</label><select name="name" value={tempCommodity.name} onChange={handleTempCommodityChange} disabled={!tempCommodity.type} className={commonInputClasses}><option value="">Select Commodity</option>{tempCommodity.type && commodityCategories[tempCommodity.type]?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                            <div><label className="form-label form-label--compact">Source Region</label><select name="sourceRegion" value={tempCommodity.sourceRegion} onChange={handleTempCommodityChange} className={commonInputClasses}><option value="">Select Region</option>{philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                            <div><label className="form-label form-label--compact">Source Province</label><select name="sourceProvince" value={tempCommodity.sourceProvince} onChange={handleTempCommodityChange} className={commonInputClasses} disabled={provinceOptions.length === 0}><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className="block text-xs font-bold uppercase text-gray-500">Quality Standard</label><input type="text" name="qualityStandard" value={tempCommodity.qualityStandard} onChange={handleTempCommodityChange} className={commonInputClasses} placeholder="Grade A, Organic, etc." /></div>
+                            <div><label className="form-label form-label--compact">Quality Standard</label><input type="text" name="qualityStandard" value={tempCommodity.qualityStandard} onChange={handleTempCommodityChange} className={commonInputClasses} placeholder="Grade A, Organic, etc." /></div>
                             <div>
-                                <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Monthly Volume (Kg/Month)</label>
+                                <label className="form-label form-label--compact">Monthly Volume (Kg/Month)</label>
                                 <div className="grid grid-cols-6 gap-2">
                                     {MONTHS.map(m => (
                                         <div key={m}>
-                                            <label className="block text-[10px] text-gray-400">{m}</label>
-                                            <input type="number" value={(tempCommodity as any)[`volume${m}`] || ''} onChange={e => setTempCommodity({...tempCommodity, [`volume${m}`]: parseFloat(e.target.value) || 0})} className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:border-gray-600" />
+                                            <label className="form-label form-label--compact">{m}</label>
+                                            <input type="number" value={(tempCommodity as any)[`volume${m}`] || ''} onChange={e => setTempCommodity({...tempCommodity, [`volume${m}`]: parseFloat(e.target.value) || 0})} className="form-control form-control--compact" />
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         </div>
                         <div className="mt-4 flex justify-end gap-2">
-                            {editingCommodityIdx !== null && <button type="button" onClick={resetTempCommodity} className="px-4 py-1 text-xs font-bold bg-gray-200 text-gray-700 rounded">Cancel Edit</button>}
-                            <button type="button" onClick={saveTempCommodity} className="px-6 py-2 bg-emerald-600 text-white rounded font-bold text-sm hover:bg-emerald-700">{editingCommodityIdx !== null ? 'Update Item' : 'Add Requirement'}</button>
+                            {editingCommodityIdx !== null && <button type="button" onClick={resetTempCommodity} className="btn btn-secondary btn-sm">Cancel Edit</button>}
+                            <button type="button" onClick={saveTempCommodity} className="btn btn-primary btn-sm">{editingCommodityIdx !== null ? 'Update Item' : 'Add Requirement'}</button>
                         </div>
                     </div>
 
                     <div className="space-y-2 mt-4">
                         {formData.commodityNeeds?.map((c, i) => (
-                            <div key={i} className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 flex justify-between items-center shadow-sm">
+                            <div key={i} className="form-record-card">
                                 <div>
-                                    <p className="font-bold text-gray-800 dark:text-white">{c.name} <span className="text-xs font-normal text-gray-400">({c.type})</span></p>
-                                    <p className="text-xs text-gray-500">{c.sourceProvince || 'Any Province'}, {c.sourceRegion}</p>
+                                    <p className="form-record-card__title">{c.name} <span className="form-record-card__meta">({c.type})</span></p>
+                                    <p className="form-record-card__meta">{c.sourceProvince || 'Any Province'}, {c.sourceRegion}</p>
                                 </div>
                                 <div className="flex gap-4">
-                                    <button type="button" onClick={() => handleEditCommodity(i)} className="text-emerald-600 font-bold text-xs">Edit</button>
-                                    <button type="button" onClick={() => setFormData(prev => ({...prev, commodityNeeds: prev.commodityNeeds.filter((_, idx) => idx !== i)}))} className="text-red-600 font-bold text-xs">Delete</button>
+                                    <button type="button" onClick={() => handleEditCommodity(i)} className="table-action table-action--primary">Edit</button>
+                                    <button type="button" onClick={() => setFormData(prev => ({...prev, commodityNeeds: prev.commodityNeeds.filter((_, idx) => idx !== i)}))} className="table-action table-action--danger">Delete</button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="pt-6 flex justify-end border-t">
-                    <button type="submit" className="px-10 py-3 bg-emerald-600 text-white rounded-md font-bold hover:bg-emerald-700 shadow-lg transition-all">Save Changes</button>
+                <div className="form-footer">
+                    <button type="submit" className="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>

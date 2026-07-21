@@ -72,7 +72,7 @@ const getStatusBadge = (status: Activity['status']) => {
 const DetailItem: React.FC<{ label: string; value?: string | number | React.ReactNode }> = ({ label, value }) => (
     <div className="detail-item">
         <dt className="detail-label">{label}</dt>
-        <dd className="detail-value font-semibold">{value || 'N/A'}</dd>
+        <dd className="detail-value">{value || 'N/A'}</dd>
     </div>
 );
 
@@ -493,7 +493,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                 <img
                                     src={getActivityDriveImageUrl(selectedGalleryFile, 1400)}
                                     alt={selectedGalleryFile.file_name}
-                                    className="max-h-[72vh] max-w-full rounded-lg object-contain"
+                                    className="detail-preview-image"
                                     onError={() => setGalleryImageFailed(true)}
                                 />
                             ) : (
@@ -633,14 +633,14 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                         <th>UACS Code</th>
                                         <th>Obligation</th>
                                         <th>Disbursement</th>
-                                        <th className="text-right">Amount</th>
+                                        <th className="data-table__numeric">Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {activity.expenses.length > 0 ? (
                                         activity.expenses.map(exp => (
                                             <tr key={exp.id} className={`${isBudgetLineExcludedFromTargets(exp) ? 'budget-item-card--excluded' : ''} ${exp.isCancelled ? 'budget-item-card--cancelled' : ''} ${exp.isRealignment ? 'budget-item-card--realignment' : ''} ${exp.isSavings ? 'budget-item-card--savings' : ''}`}>
-                                                <td className="font-medium">
+                                                <td className="data-table__primary">
                                                     {exp.expenseParticular}
                                                 </td>
                                                 <td>
@@ -649,7 +649,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                                             {getBudgetLineTag(exp)}
                                                         </span>
                                                     ) : (
-                                                        <span className="text-gray-400">-</span>
+                                                        <span className="detail-empty">-</span>
                                                     )}
                                                 </td>
                                                 <td>
@@ -660,7 +660,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                                 </td>
                                                 <td>{formatMonthYear(exp.obligationMonth)}</td>
                                                 <td>{formatMonthYear(exp.disbursementMonth)}</td>
-                                                <td className="text-right font-medium">{formatCurrency(getBudgetLineAmount(exp))}</td>
+                                                <td className="data-table__numeric">{formatCurrency(getBudgetLineAmount(exp))}</td>
                                             </tr>
                                         ))
                                     ) : (
@@ -669,8 +669,8 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <td colSpan={5} className="text-right font-bold">Active Target Budget</td>
-                                        <td className="text-right font-bold">{formatCurrency(totalBudget)}</td>
+                                        <td colSpan={5} className="data-table__numeric data-table__total-label">Active Target Budget</td>
+                                        <td className="data-table__numeric data-table__total-value">{formatCurrency(totalBudget)}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -732,13 +732,13 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
 
                                                     return (
                                                         <tr key={exp.id}>
-                                                            <td className="font-medium">{exp.expenseParticular}</td>
+                                                            <td className="data-table__primary">{exp.expenseParticular}</td>
                                                             <td>{formatMonthYear(obligationSummary.date)}</td>
                                                             <td>{formatMonthYear(disbursementSummary.date)}</td>
-                                                            <td className="text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                                            <td className="data-table__numeric data-table__positive">
                                                                 {obligationSummary.amount > 0 ? formatCurrency(obligationSummary.amount) : '-'}
                                                             </td>
-                                                            <td className="text-right font-medium text-emerald-600 dark:text-emerald-400">
+                                                            <td className="data-table__numeric data-table__positive">
                                                                 {disbursementSummary.amount > 0 ? formatCurrency(disbursementSummary.amount) : '-'}
                                                             </td>
                                                         </tr>
@@ -963,14 +963,14 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                     <div className="detail-card">
                         <h3 className="detail-card-title">History</h3>
                         {activity.history && activity.history.length > 0 ? (
-                            <div className="relative border-l-2 border-gray-200 dark:border-gray-700 ml-2 py-2">
-                                <ul className="space-y-8">
+                            <div className="detail-timeline">
+                                <ul className="detail-timeline__list">
                                     {activity.history.map((entry, index) => (
-                                        <li key={index} className="ml-8 relative">
-                                            <span className="absolute flex items-center justify-center w-4 h-4 bg-emerald-500 rounded-full -left-[35px] ring-4 ring-white dark:ring-gray-800"></span>
-                                            <time className="mb-1 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">{formatDate(entry.date)}</time>
+                                        <li key={index} className="detail-timeline__item">
+                                            <span className="detail-timeline__marker"></span>
+                                            <time className="detail-timeline__time">{formatDate(entry.date)}</time>
                                             <p className="detail-list-name">{entry.event}</p>
-                                            <p className="text-sm font-normal text-gray-500 dark:text-gray-400">by {entry.user}</p>
+                                            <p className="detail-timeline__byline">by {entry.user}</p>
                                         </li>
                                     ))}
                                 </ul>

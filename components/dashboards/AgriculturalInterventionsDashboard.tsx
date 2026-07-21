@@ -641,7 +641,7 @@ const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) =>
         <div className="agri-dashboard dashboard-view animate-fadeIn">
             <section className="agri-dashboard-hero" aria-labelledby="agri-interventions-title">
                 <div>
-                    <h3 id="agri-interventions-title">Agricultural Interventions Dashboard</h3>
+                    <h3 id="agri-interventions-title" className="dashboard-module-title">Agricultural Interventions Dashboard</h3>
                 </div>
                 <button type="button" className="btn btn-primary btn-responsive" onClick={handleDownloadExcel}>
                     <Download aria-hidden="true" />

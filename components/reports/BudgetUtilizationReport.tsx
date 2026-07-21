@@ -93,7 +93,7 @@ const MetricsColumns: React.FC<{ metrics: any, allotmentTotal: number, obligatio
         <>
             <td className={cellClass}>{formatCurrencyWhole(metrics.mooe)}</td>
             <td className={cellClass}>{formatCurrencyWhole(metrics.co)}</td>
-            <td className={`${cellClass} font-bold`}>{formatCurrencyWhole(metrics.total)}</td>
+            <td className={`${cellClass} bur-report__cell--emphasis`}>{formatCurrencyWhole(metrics.total)}</td>
             {showPercent && !isUnpaid && (
                 <>
                     {obligationTotal !== undefined && (
@@ -146,17 +146,17 @@ const ActivityRow: React.FC<{
             {/* Allotment */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}>{formatCurrencyWhole(activity.allotment.mooe)}</td>
             <td className={`${dataCellClass} text-right whitespace-nowrap`}>{formatCurrencyWhole(activity.allotment.co)}</td>
-            <td className={`${dataCellClass} bur-report__cell--total font-bold text-right whitespace-nowrap`}>{formatCurrencyWhole(activity.allotment.total)}</td>
+            <td className={`${dataCellClass} bur-report__cell--total text-right whitespace-nowrap`}>{formatCurrencyWhole(activity.allotment.total)}</td>
             
             {/* Adjustment (Placeholder) */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
-            <td className={`${dataCellClass} bur-report__cell--total font-bold text-right whitespace-nowrap`}></td>
+            <td className={`${dataCellClass} bur-report__cell--total text-right whitespace-nowrap`}></td>
 
             {/* Adjusted Allotment (Placeholder) */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
-            <td className={`${dataCellClass} bur-report__cell--total font-bold text-right whitespace-nowrap`}></td>
+            <td className={`${dataCellClass} bur-report__cell--total text-right whitespace-nowrap`}></td>
 
             {/* Months and Quarters */}
             {QUARTERS.map((q, qIdx) => (
@@ -230,17 +230,17 @@ const SummaryRow: React.FC<{
             {/* Allotment */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}>{formatCurrencyWhole(summary.allotment.mooe)}</td>
             <td className={`${dataCellClass} text-right whitespace-nowrap`}>{formatCurrencyWhole(summary.allotment.co)}</td>
-            <td className={`${dataCellClass} bur-report__cell--summary-total font-bold text-right whitespace-nowrap`}>{formatCurrencyWhole(summary.allotment.total)}</td>
+            <td className={`${dataCellClass} bur-report__cell--summary-total text-right whitespace-nowrap`}>{formatCurrencyWhole(summary.allotment.total)}</td>
             
             {/* Adjustment (Placeholder) */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
-            <td className={`${dataCellClass} bur-report__cell--summary-total font-bold text-right whitespace-nowrap`}></td>
+            <td className={`${dataCellClass} bur-report__cell--summary-total text-right whitespace-nowrap`}></td>
 
             {/* Adjusted Allotment (Placeholder) */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
             <td className={`${dataCellClass} text-right whitespace-nowrap`}></td>
-            <td className={`${dataCellClass} bur-report__cell--summary-total font-bold text-right whitespace-nowrap`}></td>
+            <td className={`${dataCellClass} bur-report__cell--summary-total text-right whitespace-nowrap`}></td>
 
             {/* Months and Quarters */}
             {QUARTERS.map((q, qIdx) => (
@@ -518,7 +518,7 @@ const BudgetUtilizationReport: React.FC<BudgetUtilizationReportProps> = ({ data,
     };
 
     const indentClasses = ['pl-2', 'pl-6', 'pl-10'];
-    const headerCellClass = "bur-report__head-cell text-center align-middle font-bold";
+    const headerCellClass = "bur-report__head-cell";
     const dataCellClass = "bur-report__cell";
 
     const renderMetricsHeaders = (title: string, showPercent: boolean = true, isUnpaid: boolean = false) => (
@@ -569,10 +569,10 @@ const BudgetUtilizationReport: React.FC<BudgetUtilizationReportProps> = ({ data,
                 </div>
             </div>
             <div id="bur-table" className="report-table-scroll bur-report-scroll">
-                <table className="bur-report-table min-w-full border-collapse text-[10px]">
+                <table className="bur-report-table">
                     <thead className="sticky top-0 z-20">
                         <tr>
-                            <th rowSpan={3} className={`${headerCellClass} min-w-[250px] sticky left-0 z-30 bur-report__sticky`}>Program/Activity/Project</th>
+                            <th rowSpan={3} className={`${headerCellClass} bur-report__sticky bur-report__header-cell--label`}>Program/Activity/Project</th>
                             
                             <th colSpan={3} className={headerCellClass}>Allotment</th>
                             <th colSpan={3} className={headerCellClass}>Adjustment (+/-)</th>

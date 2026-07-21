@@ -974,7 +974,7 @@ const IPOLevelDashboard: React.FC<IPOLevelDashboardProps> = ({ ipos, selectedYea
             <section className="lod-dashboard-hero" aria-labelledby="lod-dashboard-title">
                 <div>
                     <p className="lod-dashboard-eyebrow">IPO Level of Development</p>
-                    <h3 id="lod-dashboard-title">LOD Dashboard</h3>
+                    <h3 id="lod-dashboard-title" className="dashboard-module-title">LOD Dashboard</h3>
                 </div>
                 <div className="lod-dashboard-hero__meta">
                     <span>{metrics.assessedTotal} assessed IPOs</span>
@@ -1396,7 +1396,7 @@ const IPOLevelDashboard: React.FC<IPOLevelDashboardProps> = ({ ipos, selectedYea
                                                 <polyline points={buildSparklinePoints(row.history)} fill="none" stroke={row.status === 'Declined' ? '#dc2626' : '#16a34a'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                                             </svg>
                                         ) : (
-                                            <span className="text-gray-400">No Data</span>
+                                            <span className="detail-empty">No Data</span>
                                         )}
                                     </td>
                                 </tr>

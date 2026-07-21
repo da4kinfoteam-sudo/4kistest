@@ -24,6 +24,7 @@ import {
     listIpoDriveFiles,
     uploadIpoDriveFile
 } from '../lib/googleDriveStorage';
+import { ConfirmDialog, DataTablePagination } from './ui/enterprise';
 
 
 interface IPODetailProps {
@@ -143,7 +144,7 @@ const MembershipRow: React.FC<{ label: string; value?: number | string | null }>
     return (
         <div className="detail-item">
             <dt className="detail-label">{label}</dt>
-            <dd className="detail-value font-semibold" title={fullValue}>{displayValue}</dd>
+            <dd className="detail-value detail-value--emphasis" title={fullValue}>{displayValue}</dd>
         </div>
     );
 };
@@ -201,42 +202,15 @@ const PaginationControls: React.FC<{
     onItemsPerPageChange: (val: number) => void;
     totalItems: number;
 }> = ({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }) => (
-    <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-3 text-xs">
-        <div className="flex items-center gap-2">
-            <span className="text-gray-600 dark:text-gray-400">Show</span>
-            <select
-                value={itemsPerPage}
-                onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-sm py-1 px-2 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 text-gray-700 dark:text-gray-200"
-            >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-            </select>
-            <span className="text-gray-600 dark:text-gray-400">entries</span>
-        </div>
-        <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:gap-4 sm:text-left">
-            <span className="text-gray-600 dark:text-gray-400">
-                {totalItems === 0 ? 'No entries' : `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(currentPage * itemsPerPage, totalItems)} of ${totalItems}`}
-            </span>
-            <div className="flex gap-1">
-                <button
-                    onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50"
-                >
-                    Prev
-                </button>
-                <button
-                    onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50"
-                >
-                    Next
-                </button>
-            </div>
-        </div>
-    </div>
+    <DataTablePagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={onPageChange}
+        onItemsPerPageChange={onItemsPerPageChange}
+        pageSizeOptions={[5, 10, 20]}
+    />
 );
 
 type IpoDetailSectionKey = 'subprojects' | 'trainings' | 'monitoringReports' | 'marketLinkages' | 'gallery' | 'files' | 'history';
@@ -892,16 +866,14 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         return (
              <div className="form-page">
                  {isConfirmModalOpen && (
-                    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
-                        <div className="dashboard-modal">
-                            <h3 className="detail-card-title">Confirm Changes</h3>
-                            <p className="my-4 text-gray-600 dark:text-gray-300">Are you sure you want to save these changes?</p>
-                            <div className="flex justify-end gap-4 mt-6">
-                                <button onClick={() => setIsConfirmModalOpen(false)} className="btn btn-secondary">Cancel</button>
-                                <button onClick={handleConfirmSave} className="btn btn-primary">Confirm</button>
-                            </div>
-                        </div>
-                    </div>
+                    <ConfirmDialog
+                        title="Confirm Changes"
+                        description="Are you sure you want to save these changes?"
+                        confirmLabel="Confirm"
+                        tone="primary"
+                        onCancel={() => setIsConfirmModalOpen(false)}
+                        onConfirm={handleConfirmSave}
+                    />
                 )}
                 <header className="detail-header">
                     <div className="detail-heading">
@@ -975,7 +947,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                     <input type="checkbox" name="isWithinElcac" id="isWithinElcac" checked={editedIpo.isWithinElcac} onChange={handleInputChange} />
                                     <span>Within ELCAC area</span>
                                 </label>
-                                <label className="form-check text-gray-400 dark:text-gray-500">
+                                <label className="form-check is-disabled">
                                     <input type="checkbox" name="isWithScad" checked={editedIpo.isWithScad} disabled />
                                     <span>With SCAD</span>
                                 </label>
@@ -987,24 +959,24 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         <legend>Commodities</legend>
                         <div className="space-y-2 mb-4">
                             {editedIpo.commodities.map((commodity, index) => (
-                                <div key={index} className={`flex flex-col gap-3 p-2 rounded-md text-sm sm:flex-row sm:items-center sm:justify-between ${editingCommodityIndex === index ? 'bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-700' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
+                                <div key={index} className={`form-repeat-card ${editingCommodityIndex === index ? 'is-editing' : ''}`}>
                                     <div className="flex min-w-0 flex-col">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span className="font-semibold break-words">{commodity.particular}</span>
-                                            <span className="text-gray-500 dark:text-gray-400"> ({commodity.type}) - </span>
+                                            <span className="form-repeat-card__title break-words">{commodity.particular}</span>
+                                            <span className="form-repeat-card__type"> ({commodity.type}) — </span>
                                             <span>
                                                 {formatFullNumber(commodity.value)} {commodity.type === 'Livestock' ? 'heads' : 'hectares'}
                                                 {commodity.yield ? ` | Yield: ${formatFullNumber(commodity.yield)} kg/ha` : ''}
                                             </span>
                                             {commodity.isScad && <span className="status-badge status-badge--cyan status-badge--compact">SCAD</span>}
                                         </div>
-                                        <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500 mt-1 pl-1">
+                                        <div className="form-repeat-card__meta form-repeat-card__meta--inline">
                                             {(commodity.marketingPercentage || 0) > 0 && <span>Marketing: {formatFullNumber(commodity.marketingPercentage)}%</span>}
                                             {(commodity.foodSecurityPercentage || 0) > 0 && <span>Food Security: {formatFullNumber(commodity.foodSecurityPercentage)}%</span>}
                                             {(commodity.averageIncome || 0) > 0 && <span title={formatCurrency(commodity.averageIncome || 0)}>Income: {formatCurrency(commodity.averageIncome || 0)}</span>}
                                         </div>
                                     </div>
-                                    <div className="flex flex-shrink-0 items-center gap-2 self-end sm:self-center">
+                                    <div className="form-repeat-card__actions">
                                         <button type="button" onClick={() => handleEditCommodity(index)} className="table-action table-action--primary" title="Edit commodity">
                                             <Pencil className="btn-symbol" aria-hidden="true" />
                                         </button>
@@ -1043,7 +1015,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                 )}
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end mt-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+                        <div className="commodity-edit-metrics commodity-edit-metrics--allocation">
                             <div>
                                 <label className="form-label">Marketing %</label>
                                 <input type="number" name="marketingPercentage" value={currentCommodity.marketingPercentage} onChange={handleCommodityChange} min="0" max="100" className={commonInputClasses} placeholder="0-100" />
@@ -1313,7 +1285,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                 key={assessment.id}
                                                 type="button"
                                                 onClick={() => onSelectLodYear?.(ipo, assessment.year)}
-                                                className={`detail-metric detail-metric--button transition-colors hover:border-emerald-300 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:hover:border-emerald-700 dark:hover:bg-emerald-900/30 ${isCurrentYear ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/40' : ''}`}
+                                                className={`detail-metric detail-metric--button ${isCurrentYear ? 'is-current' : ''}`}
                                                 title={`Open ${assessment.year} LOD assessment`}
                                             >
                                                 <span className="flex items-center justify-between gap-3">
@@ -1336,16 +1308,16 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                         <li key={i} className="detail-list-item flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="flex min-w-0 flex-col">
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="break-words">{c.particular} <span className="text-xs text-gray-400">({c.type})</span></span>
+                                                    <span className="detail-list-title break-words">{c.particular} <span className="detail-list-type">({c.type})</span></span>
                                                     {c.isScad && <span className="status-badge status-badge--cyan status-badge--compact">SCAD</span>}
                                                 </div>
-                                                <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 pl-1 text-xs text-gray-500 dark:text-gray-400">
+                                                <div className="detail-list-meta">
                                                     {(c.marketingPercentage || 0) > 0 && <span>Marketing: {formatFullNumber(c.marketingPercentage)}%</span>}
                                                     {(c.foodSecurityPercentage || 0) > 0 && <span>Food Security: {formatFullNumber(c.foodSecurityPercentage)}%</span>}
                                                     {(c.averageIncome || 0) > 0 && <span title={formatCurrency(c.averageIncome || 0)}>Income: {formatCurrency(c.averageIncome || 0)}</span>}
                                                 </div>
                                             </div>
-                                            <span className="font-medium sm:text-right" title={`${formatFullNumber(c.value)} ${c.type === 'Livestock' ? 'heads' : 'hectares'}${c.yield ? ` | Yield: ${formatFullNumber(c.yield)} kg/ha` : ''}`}>
+                                            <span className="detail-list-value" title={`${formatFullNumber(c.value)} ${c.type === 'Livestock' ? 'heads' : 'hectares'}${c.yield ? ` | Yield: ${formatFullNumber(c.yield)} kg/ha` : ''}`}>
                                                 {formatFullNumber(c.value)} {c.type === 'Livestock' ? 'heads' : 'hectares'}
                                                 {c.yield ? ` | Yield: ${formatFullNumber(c.yield)} kg/ha` : ''}
                                             </span>
@@ -1415,9 +1387,9 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                 </div>
                                                 <span className={`${getStatusBadge(p.status)} self-start flex-shrink-0`}>{p.status}</span>
                                             </div>
-                                            <div className="mt-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-300 sm:flex-row sm:flex-wrap sm:gap-x-3">
-                                                <span title={formatCurrency(calculateTotalBudget(p.details))}><span className="font-semibold text-emerald-700 dark:text-emerald-400">Budget:</span> {formatCompactCurrency(calculateTotalBudget(p.details))}</span>
-                                                <span><span className="font-semibold text-emerald-700 dark:text-emerald-400">Timeline:</span> {formatDate(p.startDate)} to {formatDate(p.estimatedCompletionDate)}</span>
+                                            <div className="detail-list-meta">
+                                                <span title={formatCurrency(calculateTotalBudget(p.details))}><span className="detail-list-meta__label">Budget:</span> {formatCompactCurrency(calculateTotalBudget(p.details))}</span>
+                                                <span><span className="detail-list-meta__label">Timeline:</span> {formatDate(p.startDate)} to {formatDate(p.estimatedCompletionDate)}</span>
                                             </div>
                                         </li>
                                     ))}
@@ -1479,7 +1451,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                 </div>
                                                 <div className="flex flex-shrink-0 flex-col items-start gap-1 sm:items-end">
                                                     <span className={getTrainingStatusBadge(t.status)}>{t.status}</span>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(t.date)}</p>
+                                                    <p className="detail-list-meta">{formatDate(t.date)}</p>
                                                 </div>
                                             </div>
                                             <p className="detail-list-copy mt-2 line-clamp-2">{t.description}</p>
@@ -1592,7 +1564,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                         return (
                                         <div
                                             key={linkageKey}
-                                            className="detail-list-item cursor-pointer transition-colors hover:border-emerald-200 hover:bg-emerald-50/40 dark:hover:border-emerald-800 dark:hover:bg-emerald-900/10"
+                                            className="detail-list-item ipo-market-link"
                                             role="button"
                                             tabIndex={0}
                                             aria-expanded={isExpanded}
@@ -1617,12 +1589,12 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                     >
                                                         {item.partner.companyName}
                                                     </button>
-                                                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                                                        <span className="font-semibold">Agreement:</span> {formatFullNumber(item.quantity)} {item.unitOfMeasure} ({item.link.agreedQuantityTimeframe}) @ {formatCurrency(item.pricePerUnit)}/{item.unitOfMeasure}
+                                                    <p className="ipo-market-link__meta">
+                                                        <span className="ipo-market-link__label">Agreement:</span> {formatFullNumber(item.quantity)} {item.unitOfMeasure} ({item.link.agreedQuantityTimeframe}) @ {formatCurrency(item.pricePerUnit)}/{item.unitOfMeasure}
                                                     </p>
-                                                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                                                        <span className="font-semibold">Commodity Sold:</span>{' '}
-                                                        <span className={item.link.commodityName ? '' : 'font-semibold text-amber-600 dark:text-amber-300'}>
+                                                    <p className="ipo-market-link__meta">
+                                                        <span className="ipo-market-link__label">Commodity Sold:</span>{' '}
+                                                        <span className={item.link.commodityName ? '' : 'ipo-market-link__missing'}>
                                                             {getMarketLinkageCommodityLabel(item.link)}
                                                         </span>
                                                     </p>
@@ -1631,63 +1603,63 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                     <span className={`status-badge status-badge--compact ${item.link.negotiationStatus === 'Contract Signed' ? 'status-badge--completed' : 'status-badge--pending'}`}>
                                                         {item.link.negotiationStatus}
                                                     </span>
-                                                    <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                                                    <span className="ipo-market-link__sales">
                                                         {formatCurrency(item.salesValue)}
                                                     </span>
-                                                    <span className="text-xs font-bold text-gray-400">{isExpanded ? 'Collapse' : 'Expand'}</span>
+                                                    <span className="ipo-market-link__toggle">{isExpanded ? 'Collapse' : 'Expand'}</span>
                                                 </div>
                                             </div>
                                             {isExpanded && (
-                                                <div className="mt-3 space-y-3 border-t border-gray-100 pt-3 dark:border-gray-700">
-                                                    <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
-                                                        <p><span className="font-semibold">Sales Value:</span> {formatCurrency(item.salesValue)}</p>
-                                                        <p><span className="font-semibold">Commodity Sold:</span> <span className={item.link.commodityName ? '' : 'font-semibold text-amber-600 dark:text-amber-300'}>{getMarketLinkageCommodityLabel(item.link)}</span></p>
-                                                        <p><span className="font-semibold">Type:</span> {item.link.agreementType}</p>
-                                                        <p><span className="font-semibold">Date:</span> {item.link.agreementDate ? new Date(item.link.agreementDate).toLocaleDateString() : 'N/A'}</p>
+                                                <div className="ipo-market-link__details">
+                                                    <div className="ipo-market-link__facts">
+                                                        <p><span className="ipo-market-link__label">Sales Value:</span> {formatCurrency(item.salesValue)}</p>
+                                                        <p><span className="ipo-market-link__label">Commodity Sold:</span> <span className={item.link.commodityName ? '' : 'ipo-market-link__missing'}>{getMarketLinkageCommodityLabel(item.link)}</span></p>
+                                                        <p><span className="ipo-market-link__label">Type:</span> {item.link.agreementType}</p>
+                                                        <p><span className="ipo-market-link__label">Date:</span> {item.link.agreementDate ? new Date(item.link.agreementDate).toLocaleDateString() : 'N/A'}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">Commodity Bought by Buyer</p>
+                                                        <p className="detail-kicker">Commodity Bought by Buyer</p>
                                                         {item.link.commodityName ? (
-                                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                            <div className="ipo-market-link__needs">
                                                                 {selectedCommodityNeed ? (
-                                                                    <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-xs dark:border-teal-800 dark:bg-teal-900/20">
+                                                                    <div className="market-need-card">
                                                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                            <span className="font-bold text-teal-700 dark:text-teal-300">{selectedCommodityNeed.name}</span>
-                                                                            <span className="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">{selectedCommodityNeed.type}</span>
+                                                                            <span className="market-need-card__title">{selectedCommodityNeed.name}</span>
+                                                                            <span className="status-badge status-badge--compact status-badge--neutral">{selectedCommodityNeed.type}</span>
                                                                         </div>
-                                                                        <p className="mt-1 text-gray-600 dark:text-gray-300"><span className="font-semibold">Source:</span> {selectedCommodityNeed.sourceProvince || 'Any Province'}, {selectedCommodityNeed.sourceRegion || 'Any Region'}</p>
-                                                                        <p className="text-gray-600 dark:text-gray-300"><span className="font-semibold">Annual Need:</span> {formatFullNumber(getCommodityNeedAnnualVolume(selectedCommodityNeed))} Kg/Yr</p>
-                                                                        <p className="text-gray-600 dark:text-gray-300"><span className="font-semibold">Quality:</span> {selectedCommodityNeed.qualityStandard || 'Not specified'}</p>
+                                                                        <p className="market-need-card__copy"><span className="market-need-card__label">Source:</span> {selectedCommodityNeed.sourceProvince || 'Any Province'}, {selectedCommodityNeed.sourceRegion || 'Any Region'}</p>
+                                                                        <p className="market-need-card__copy"><span className="market-need-card__label">Annual Need:</span> {formatFullNumber(getCommodityNeedAnnualVolume(selectedCommodityNeed))} Kg/Yr</p>
+                                                                        <p className="market-need-card__copy"><span className="market-need-card__label">Quality:</span> {selectedCommodityNeed.qualityStandard || 'Not specified'}</p>
                                                                     </div>
                                                                 ) : (
-                                                                    <div className="rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-xs dark:border-teal-800 dark:bg-teal-900/20">
+                                                                    <div className="market-need-card">
                                                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                            <span className="font-bold text-teal-700 dark:text-teal-300">{item.link.commodityName}</span>
-                                                                            <span className="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">{item.link.commodityType || 'Unspecified'}</span>
+                                                                            <span className="market-need-card__title">{item.link.commodityName}</span>
+                                                                            <span className="status-badge status-badge--compact status-badge--neutral">{item.link.commodityType || 'Unspecified'}</span>
                                                                         </div>
-                                                                        <p className="mt-1 text-gray-600 dark:text-gray-300">Saved from linkage commodity snapshot.</p>
+                                                                        <p className="market-need-card__copy">Saved from linkage commodity snapshot.</p>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                         ) : matchedBuyerNeeds.length > 0 ? (
-                                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                            <div className="ipo-market-link__needs">
                                                                 {matchedBuyerNeeds.map(need => {
                                                                     const annualVolume = getCommodityNeedAnnualVolume(need);
                                                                     return (
-                                                                        <div key={need.id} className="rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-xs dark:border-teal-800 dark:bg-teal-900/20">
+                                                                        <div key={need.id} className="market-need-card">
                                                                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                                <span className="font-bold text-teal-700 dark:text-teal-300">{need.name}</span>
-                                                                                <span className="rounded bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-gray-500 dark:bg-gray-800 dark:text-gray-300">{need.type}</span>
+                                                                                <span className="market-need-card__title">{need.name}</span>
+                                                                                <span className="status-badge status-badge--compact status-badge--neutral">{need.type}</span>
                                                                             </div>
-                                                                            <p className="mt-1 text-gray-600 dark:text-gray-300"><span className="font-semibold">Source:</span> {need.sourceProvince || 'Any Province'}, {need.sourceRegion || 'Any Region'}</p>
-                                                                            <p className="text-gray-600 dark:text-gray-300"><span className="font-semibold">Annual Need:</span> {formatFullNumber(annualVolume)} Kg/Yr</p>
-                                                                            <p className="text-gray-600 dark:text-gray-300"><span className="font-semibold">Quality:</span> {need.qualityStandard || 'Not specified'}</p>
+                                                                            <p className="market-need-card__copy"><span className="market-need-card__label">Source:</span> {need.sourceProvince || 'Any Province'}, {need.sourceRegion || 'Any Region'}</p>
+                                                                            <p className="market-need-card__copy"><span className="market-need-card__label">Annual Need:</span> {formatFullNumber(annualVolume)} Kg/Yr</p>
+                                                                            <p className="market-need-card__copy"><span className="market-need-card__label">Quality:</span> {need.qualityStandard || 'Not specified'}</p>
                                                                         </div>
                                                                     );
                                                                 })}
                                                             </div>
                                                         ) : (
-                                                            <p className="text-xs italic text-gray-400">No matching commodity requirement is listed for this IPO.</p>
+                                                            <p className="detail-empty">No matching commodity requirement is listed for this IPO.</p>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1829,19 +1801,14 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     <CollapsibleDetailCard title="History" isOpen={expandedSections.history} onToggle={() => toggleSection('history')}>
                         {histPagination.paginatedData.length > 0 ? (
                             <>
-                                <div className="relative border-l-2 border-gray-200 dark:border-gray-700 ml-2 py-2">
-                                    <ul className="space-y-8">
+                                <div className="detail-timeline">
+                                    <ul className="detail-timeline__list">
                                         {histPagination.paginatedData.map((entry, index) => (
-                                            <li key={index} className="ml-8 relative">
-                                                <span className="absolute flex items-center justify-center w-4 h-4 bg-emerald-500 rounded-full -left-[35px] ring-4 ring-white dark:ring-gray-800 shadow-sm">
-                                                    <svg className="w-1.5 h-1.5 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path d="M20 4a2 2 0 0 0-2-2h-2V1a1 1 0 0 0-2 0v1h-3V1a1 1 0 0 0-2 0v1H6V1a1 1 0 0 0-2 0v1H2a2 2 0 0 0-2 2v2h20V4Z"/>
-                                                        <path d="M0 18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8H0v10Zm5-8h10a1 1 0 0 1 0 2H5a1 1 0 0 1 0-2Z"/>
-                                                    </svg>
-                                                </span>
-                                                <time className="mb-1 text-sm font-normal leading-none text-gray-400 dark:text-gray-500">{formatDate(entry.date)}</time>
-                                                <p className="font-semibold text-gray-900 dark:text-white">{entry.event}</p>
-                                                <p className="text-sm font-normal text-gray-500 dark:text-gray-400">by {entry.user}</p>
+                                            <li key={index} className="detail-timeline__item">
+                                                <span className="detail-timeline__marker" aria-hidden="true" />
+                                                <time className="detail-timeline__time">{formatDate(entry.date)}</time>
+                                                <p className="detail-list-title">{entry.event}</p>
+                                                <p className="detail-timeline__byline">by {entry.user}</p>
                                             </li>
                                         ))}
                                     </ul>

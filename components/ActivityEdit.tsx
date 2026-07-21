@@ -889,11 +889,11 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
     };
 
     const TabButton = ({ name, label }: { name: any, label: string }) => (
-        <button type="button" onClick={() => setActiveTab(name)} className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === name ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{label}</button>
+        <button type="button" onClick={() => setActiveTab(name)} className={`data-tab ${activeTab === name ? 'is-active' : ''}`}>{label}</button>
     );
 
     return (
-        <div className="form-page animate-fadeIn pb-20">
+        <div className="form-page animate-fadeIn">
              <div className="detail-header">
                 <div className="detail-heading">
                 <h1 className="detail-title">
@@ -905,35 +905,35 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
 
             <form onSubmit={handleSubmit} className="form-card">
                 {monthLockMessage && (
-                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800" role="status">
+                    <div className="notice notice--warning" role="status">
                         {monthLockMessage}
                     </div>
                 )}
                 
                 {/* Mode: Create - Tabs */}
                 {mode === 'create' && (
-                    <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                        <div className="flex gap-4 overflow-x-auto">
-                            <button type="button" onClick={() => setActiveTab('details')} className={`pb-2 border-b-2 text-sm font-medium transition-colors ${activeTab === 'details' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Basic Info</button>
-                            <button type="button" onClick={() => setActiveTab('expenses')} className={`pb-2 border-b-2 text-sm font-medium transition-colors ${activeTab === 'expenses' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Expenses</button>
+                    <div className="data-tabs">
+                        <div className="data-tabs__nav">
+                            <button type="button" onClick={() => setActiveTab('details')} className={`data-tab ${activeTab === 'details' ? 'is-active' : ''}`}>Basic Info</button>
+                            <button type="button" onClick={() => setActiveTab('expenses')} className={`data-tab ${activeTab === 'expenses' ? 'is-active' : ''}`}>Expenses</button>
                         </div>
                     </div>
                 )}
 
                 {/* CREATE / DETAILS MODE */}
                 {((mode === 'create' && activeTab === 'details') || mode === 'details') && (
-                    <div className="space-y-6">
-                        <fieldset className="border border-gray-300 dark:border-gray-600 p-4 rounded-md" disabled={isDetailsLocked}>
-                            <legend className="px-2 font-semibold text-emerald-700 dark:text-emerald-400">Basic Information</legend>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="form-stack form-stack--spacious">
+                        <fieldset className="form-fieldset" disabled={isDetailsLocked}>
+                            <legend className="form-legend">Basic Information</legend>
+                            <div className="form-grid">
                                 <div>
-                                    <label className="block text-sm font-medium">Status</label>
+                                    <label className="form-label">Status</label>
                                     <select name="status" value={formData.status} onChange={handleInputChange} className={commonInputClasses} disabled={mode === 'create'}>
                                         {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium">Operating Unit</label>
+                                    <label className="form-label">Operating Unit</label>
                                     <select 
                                         name="operatingUnit" 
                                         value={formData.operatingUnit || ''} 
@@ -947,28 +947,28 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium">Component <span className="text-red-500">*</span></label>
-                                    <select name="component" value={formData.component} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('component') ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
+                                    <label className="form-label">Component <span className="form-required">*</span></label>
+                                    <select name="component" value={formData.component} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('component') ? 'form-control--invalid' : ''}`}>
                                         {otherActivityComponents.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium">Activity Type <span className="text-red-500">*</span></label>
-                                    <select value={selectedActivityType} onChange={handleActivityTypeChange} className={`${commonInputClasses} ${missingFields.includes('type') ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
+                                    <label className="form-label">Activity Type <span className="form-required">*</span></label>
+                                    <select value={selectedActivityType} onChange={handleActivityTypeChange} className={`${commonInputClasses} ${missingFields.includes('type') ? 'form-control--invalid' : ''}`}>
                                         <option value="">Select Activity</option>
                                         {activityOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
                                 </div>
                                 {formData.type === 'Training' && (
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium">Specific Title <span className="text-red-500">*</span></label>
-                                        <input type="text" name="name" value={formData.name} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('name') ? 'border-red-500 ring-1 ring-red-500' : ''}`} required />
+                                    <div className="form-field--full">
+                                        <label className="form-label">Specific Title <span className="form-required">*</span></label>
+                                        <input type="text" name="name" value={formData.name} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('name') ? 'form-control--invalid' : ''}`} required />
                                     </div>
                                 )}
                                 
                                 {(mode === 'create' || mode === 'details') && (
                                     <div>
-                                        <label className="block text-sm font-medium">Conduct Type</label>
+                                        <label className="form-label">Conduct Type</label>
                                         <select value={conductType} onChange={handleConductTypeChange} className={commonInputClasses} disabled={isDetailsLocked}>
                                             <option value="Single">Single Day</option>
                                             <option value="Multi-day">Multi-Day</option>
@@ -980,21 +980,21 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                 {conductType !== 'Repeating' && (
                                     <>
                                         <div>
-                                            <label className="block text-sm font-medium">Start Date <span className="text-red-500">*</span></label>
-                                            <input type="date" name="date" value={formData.date} onChange={handleInputChange} required className={`${commonInputClasses} ${missingFields.includes('date') ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                                            <label className="form-label">Start Date <span className="form-required">*</span></label>
+                                            <input type="date" name="date" value={formData.date} onChange={handleInputChange} required className={`${commonInputClasses} ${missingFields.includes('date') ? 'form-control--invalid' : ''}`} />
                                         </div>
                                         {conductType === 'Multi-day' && (
                                             <div>
-                                                <label className="block text-sm font-medium">End Date <span className="text-red-500">*</span></label>
-                                                <input type="date" name="endDate" value={formData.endDate} onChange={handleInputChange} required className={`${commonInputClasses} ${missingFields.includes('endDate') ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                                                <label className="form-label">End Date <span className="form-required">*</span></label>
+                                                <input type="date" name="endDate" value={formData.endDate} onChange={handleInputChange} required className={`${commonInputClasses} ${missingFields.includes('endDate') ? 'form-control--invalid' : ''}`} />
                                             </div>
                                         )}
                                     </>
                                 )}
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium">Location <span className="text-red-500">*</span></label>
-                                    <div className={missingFields.includes('location') ? 'border-red-500 ring-1 ring-red-500 rounded-md' : ''}>
+                                    <label className="form-label">Location <span className="form-required">*</span></label>
+                                    <div className={missingFields.includes('location') ? 'form-control-wrap form-control--invalid' : ''}>
                                         <LocationPicker value={formData.location} onChange={(val) => {
                                             setFormData(prev => ({...prev, location: val}));
                                             if (missingFields.includes('location')) {
@@ -1004,7 +1004,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                     </div>
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium">Description</label>
+                                    <label className="form-label">Description</label>
                                     <textarea name="description" value={formData.description} onChange={handleInputChange} className={commonInputClasses} rows={3} />
                                 </div>
                             </div>
@@ -1013,48 +1013,48 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                         {/* Participants Section */}
                         {conductType !== 'Repeating' && (
                             <>
-                                <fieldset className="border border-gray-300 dark:border-gray-600 p-4 rounded-md" disabled={isDetailsLocked}>
-                                    <legend className="px-2 font-semibold text-emerald-700 dark:text-emerald-400">Participants</legend>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div><label className="block text-sm font-medium">Male</label><input type="number" name="participantsMale" value={formData.participantsMale} onChange={handleNumericChange} className={commonInputClasses} /></div>
-                                        <div><label className="block text-sm font-medium">Female</label><input type="number" name="participantsFemale" value={formData.participantsFemale} onChange={handleNumericChange} className={commonInputClasses} /></div>
+                                <fieldset className="form-fieldset" disabled={isDetailsLocked}>
+                                    <legend className="form-legend">Participants</legend>
+                                    <div className="form-grid">
+                                        <div><label className="form-label">Male</label><input type="number" name="participantsMale" value={formData.participantsMale} onChange={handleNumericChange} className={commonInputClasses} /></div>
+                                        <div><label className="form-label">Female</label><input type="number" name="participantsFemale" value={formData.participantsFemale} onChange={handleNumericChange} className={commonInputClasses} /></div>
                                         
-                                        <div className="md:col-span-2">
-                                            <label className="block text-sm font-medium mb-1">Filter IPOs by Region</label>
+                                        <div className="form-field--full">
+                                            <label className="form-label">Filter IPOs by Region</label>
                                             <select value={ipoRegionFilter} onChange={(e) => setIpoRegionFilter(e.target.value)} className={commonInputClasses}>
                                                 <option value="All">All Regions</option>
                                                 {philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}
                                             </select>
                                         </div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-sm font-medium mb-1">Participating IPOs</label>
-                                            <select multiple value={formData.participatingIpos} onChange={(e) => setFormData(prev => ({ ...prev, participatingIpos: Array.from(e.target.selectedOptions, (o: HTMLOptionElement) => o.value) }))} className={`${commonInputClasses} h-32`}>
+                                        <div className="form-field--full">
+                                            <label className="form-label">Participating IPOs</label>
+                                            <select multiple value={formData.participatingIpos} onChange={(e) => setFormData(prev => ({ ...prev, participatingIpos: Array.from(e.target.selectedOptions, (o: HTMLOptionElement) => o.value) }))} className={`${commonInputClasses} form-control--multiselect`}>
                                                 {filteredIpos.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
                                             </select>
-                                            <p className="text-xs text-gray-500 mt-1">Hold Ctrl (Cmd on Mac) to select multiple IPOs.</p>
+                                            <p className="form-help">Hold Ctrl (Cmd on Mac) to select multiple IPOs.</p>
                                         </div>
                                     </div>
                                 </fieldset>
 
-                                <fieldset className="border border-gray-300 dark:border-gray-600 p-4 rounded-md" disabled={isDetailsLocked}>
-                                    <legend className="px-2 font-semibold text-emerald-700 dark:text-emerald-400">Funding</legend>
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                        <div><label className="block text-sm font-medium">Fund Year</label><input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleNumericChange} className={commonInputClasses} /></div>
-                                        <div><label className="block text-sm font-medium">Fund Type</label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={commonInputClasses}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
+                                <fieldset className="form-fieldset" disabled={isDetailsLocked}>
+                                    <legend className="form-legend">Funding</legend>
+                                    <div className="form-grid form-grid--compact">
+                                        <div><label className="form-label">Fund Year</label><input type="number" name="fundingYear" value={formData.fundingYear} onChange={handleNumericChange} className={commonInputClasses} /></div>
+                                        <div><label className="form-label">Fund Type</label><select name="fundType" value={formData.fundType} onChange={handleInputChange} className={commonInputClasses}>{fundTypes.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
                                         <div>
-                                            <label className="block text-sm font-medium">Tier</label>
+                                            <label className="form-label">Tier</label>
                                             <select name="tier" value={formData.tier} onChange={handleInputChange} className={commonInputClasses}>
                                                 <option value="">Select Tier</option>
                                                 {tiers.map(t => <option key={t} value={t}>{t}</option>)}
                                             </select>
                                         </div>
-                                        <div className="flex flex-col justify-center space-y-2 mt-4 md:mt-0">
-                                            <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                <input type="checkbox" checked={formData.isRealignment || false} onChange={e => setFormData(prev => ({ ...prev, isRealignment: e.target.checked, isSavings: e.target.checked ? false : prev.isSavings }))} className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" />
+                                        <div className="form-check-group">
+                                            <label className="form-check">
+                                                <input type="checkbox" checked={formData.isRealignment || false} onChange={e => setFormData(prev => ({ ...prev, isRealignment: e.target.checked, isSavings: e.target.checked ? false : prev.isSavings }))} className="form-checkbox" />
                                                 <span>Realignment</span>
                                             </label>
-                                            <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                <input type="checkbox" checked={formData.isSavings || false} onChange={e => setFormData(prev => ({ ...prev, isSavings: e.target.checked, isRealignment: e.target.checked ? false : prev.isRealignment }))} className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500" />
+                                            <label className="form-check">
+                                                <input type="checkbox" checked={formData.isSavings || false} onChange={e => setFormData(prev => ({ ...prev, isSavings: e.target.checked, isRealignment: e.target.checked ? false : prev.isRealignment }))} className="form-checkbox" />
                                                 <span>Savings</span>
                                             </label>
                                         </div>
@@ -1065,20 +1065,20 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                         
                         {/* Repeating Entry Form (Create Only) */}
                         {mode === 'create' && conductType === 'Repeating' && (
-                             <fieldset className="border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/10 p-4 rounded-md">
-                                <legend className="px-2 font-semibold text-blue-700 dark:text-blue-300">Repeating Schedule</legend>
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-white dark:bg-gray-800 rounded mb-4">
-                                    <div className="md:col-span-4 flex items-center gap-2 mb-2">
-                                        <input type="checkbox" name="isMultiDay" checked={currentRepeatingEntry.isMultiDay} onChange={handleRepeatingEntryChange} className="h-4 w-4 rounded" />
-                                        <label className="text-sm font-medium">Is Multi-day?</label>
+                             <fieldset className="form-fieldset form-fieldset--highlight">
+                                <legend className="form-legend">Repeating Schedule</legend>
+                                <div className="form-subsection form-grid form-grid--compact">
+                                    <div className="form-field--full form-check-group">
+                                        <input type="checkbox" name="isMultiDay" checked={currentRepeatingEntry.isMultiDay} onChange={handleRepeatingEntryChange} className="form-checkbox" />
+                                        <label className="form-label form-label--inline">Is Multi-day?</label>
                                     </div>
-                                    <div><label className="block text-xs font-medium">Start Date</label><input type="date" name="date" value={currentRepeatingEntry.date} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>
-                                    {currentRepeatingEntry.isMultiDay && <div><label className="block text-xs font-medium">End Date</label><input type="date" name="endDate" value={currentRepeatingEntry.endDate} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>}
-                                    <div><label className="block text-xs font-medium">Male</label><input type="number" name="participantsMale" value={currentRepeatingEntry.participantsMale} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>
-                                    <div><label className="block text-xs font-medium">Female</label><input type="number" name="participantsFemale" value={currentRepeatingEntry.participantsFemale} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>
+                                    <div><label className="form-label form-label--compact">Start Date</label><input type="date" name="date" value={currentRepeatingEntry.date} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>
+                                    {currentRepeatingEntry.isMultiDay && <div><label className="form-label form-label--compact">End Date</label><input type="date" name="endDate" value={currentRepeatingEntry.endDate} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>}
+                                    <div><label className="form-label form-label--compact">Male</label><input type="number" name="participantsMale" value={currentRepeatingEntry.participantsMale} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>
+                                    <div><label className="form-label form-label--compact">Female</label><input type="number" name="participantsFemale" value={currentRepeatingEntry.participantsFemale} onChange={handleRepeatingEntryChange} className={commonInputClasses} /></div>
                                     
                                     <div className="md:col-span-4">
-                                         <label className="block text-xs font-medium mb-1">Filter IPOs by Region</label>
+                                         <label className="form-label form-label--compact">Filter IPOs by Region</label>
                                          <select value={ipoRegionFilter} onChange={(e) => setIpoRegionFilter(e.target.value)} className={commonInputClasses}>
                                             <option value="All">All Regions</option>
                                             {philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}
@@ -1086,15 +1086,15 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                     </div>
 
                                     <div className="md:col-span-4">
-                                        <label className="block text-xs font-medium mb-1">IPOs</label>
+                                        <label className="form-label form-label--compact">IPOs</label>
                                         <select multiple value={currentRepeatingEntry.participatingIpos} onChange={handleRepeatingIpoSelect} className={`${commonInputClasses} h-20`}>{filteredIpos.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}</select>
                                     </div>
-                                    <div className="md:col-span-4"><button type="button" onClick={handleAddRepeatingEntry} className="w-full py-2 bg-blue-600 text-white rounded text-sm">Add to Schedule</button></div>
+                                    <div className="form-field--full"><button type="button" onClick={handleAddRepeatingEntry} className="btn btn-primary btn-block">Add to Schedule</button></div>
                                 </div>
                                 {/* List of entries to be created */}
-                                <div className="space-y-2">
+                                <div className="form-repeat-list">
                                     {repeatingEntries.map((entry, idx) => (
-                                        <div key={idx} className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 flex justify-between text-sm">
+                                        <div key={idx} className="form-repeat-card">
                                             <span>{entry.date} {entry.endDate ? `to ${entry.endDate}` : ''} | M:{entry.participantsMale} F:{entry.participantsFemale}</span>
                                             <span>{entry.participatingIpos.length} IPOs</span>
                                         </div>
@@ -1107,8 +1107,8 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
 
                 {/* EXPENSES MODE (and Create Tab) */}
                 {((mode === 'create' && activeTab === 'expenses') || mode === 'expenses') && (
-                     <fieldset className="border border-gray-300 dark:border-gray-600 p-4 rounded-md mt-6" disabled={isDetailsLocked}>
-                        <legend className="px-2 font-semibold text-emerald-700 dark:text-emerald-400">Expenses</legend>
+                     <fieldset className="form-fieldset" disabled={isDetailsLocked}>
+                        <legend className="form-legend">Expenses</legend>
                         <div className="mb-4 budget-item-list">
                             {formData.expenses.map((exp, idx) => (
                                 <div key={idx} className={`budget-item-card ${editingExpenseId === exp.id ? 'budget-item-card--editing' : ''} ${isBudgetLineExcludedFromTargets(exp) ? 'budget-item-card--excluded' : ''} ${exp.isCancelled ? 'budget-item-card--cancelled' : ''} ${exp.isRealignment ? 'budget-item-card--realignment' : ''} ${exp.isSavings ? 'budget-item-card--savings' : ''}`}>
@@ -1148,14 +1148,14 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                         </div>
                         
                         {!isDetailsLocked && (
-                            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700">
-                                <h4 className="text-xs font-bold uppercase text-gray-500 mb-2">{editingExpenseId !== null ? 'Update Expense' : 'Add New Expense'}</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                            <div className="form-subsection">
+                                <h4 className="form-section__title">{editingExpenseId !== null ? 'Update Expense' : 'Add New Expense'}</h4>
+                                <div className="form-grid form-grid--compact form-grid--align-end">
                                     {/* Row 1: UACS Selection */}
-                                    <div><label className="block text-xs font-medium">Object Type</label><select name="objectType" value={currentExpense.objectType} onChange={handleExpenseChange} className={commonInputClasses}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                    <div><label className="block text-xs font-medium">Particular</label><select name="expenseParticular" value={currentExpense.expenseParticular} onChange={handleExpenseChange} className={commonInputClasses}><option value="">Select</option>{uacsCodes[currentExpense.objectType] && Object.keys(uacsCodes[currentExpense.objectType]).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
+                                    <div><label className="form-label form-label--compact">Object Type</label><select name="objectType" value={currentExpense.objectType} onChange={handleExpenseChange} className={commonInputClasses}>{objectTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                    <div><label className="form-label form-label--compact">Particular</label><select name="expenseParticular" value={currentExpense.expenseParticular} onChange={handleExpenseChange} className={commonInputClasses}><option value="">Select</option>{uacsCodes[currentExpense.objectType] && Object.keys(uacsCodes[currentExpense.objectType]).map(p => <option key={p} value={p}>{p}</option>)}</select></div>
                                     <div>
-                                        <label className="block text-xs font-medium">UACS Code</label>
+                                        <label className="form-label form-label--compact">UACS Code</label>
                                         <input 
                                             type="text"
                                             name="uacsCode" 
@@ -1171,13 +1171,13 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                             ))}
                                         </datalist>
                                         {currentExpense.uacsCode && availableUacsCodes.find(c => c.code === currentExpense.uacsCode)?.desc && (
-                                            <p className="text-xs text-gray-500 mt-1">{availableUacsCodes.find(c => c.code === currentExpense.uacsCode)?.desc}</p>
+                                            <p className="form-help">{availableUacsCodes.find(c => c.code === currentExpense.uacsCode)?.desc}</p>
                                         )}
                                     </div>
                                     
                                     {/* Row 2: Financial Details */}
                                     <div>
-                                        <label className="block text-xs font-medium">Obligation Month</label>
+                                        <label className="form-label form-label--compact">Obligation Month</label>
                                         <MonthYearPicker
                                             value={currentExpense.obligationMonth}
                                             onChange={(val) => setCurrentExpense(prev => ({ ...prev, obligationMonth: val }))}
@@ -1187,7 +1187,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium">Disbursement Month</label>
+                                        <label className="form-label form-label--compact">Disbursement Month</label>
                                         <MonthYearPicker
                                             value={currentExpense.disbursementMonth}
                                             onChange={(val) => setCurrentExpense(prev => ({ ...prev, disbursementMonth: val }))}
@@ -1196,10 +1196,10 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                             className="h-9"
                                         />
                                     </div>
-                                    <div><label className="block text-xs font-medium">Amount</label><input type="number" name="amount" value={currentExpense.amount} onChange={handleExpenseChange} className={commonInputClasses} /></div>
+                                    <div><label className="form-label form-label--compact">Amount</label><input type="number" name="amount" value={currentExpense.amount} onChange={handleExpenseChange} className={commonInputClasses} /></div>
                                     <div className="md:col-span-3 budget-line-adjustment-options">
                                         {editingExpenseId !== null && (
-                                            <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                            <label className="form-check">
                                                 <input
                                                     type="checkbox"
                                                     checked={currentExpense.isCancelled}
@@ -1209,12 +1209,12 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                                         isRealignment: e.target.checked ? false : prev.isRealignment,
                                                         isSavings: e.target.checked ? false : prev.isSavings,
                                                     }))}
-                                                    className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                                                    className="form-checkbox"
                                                 />
                                                 Cancelled
                                             </label>
                                         )}
-                                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                        <label className="form-check">
                                             <input
                                                 type="checkbox"
                                                 checked={currentExpense.isRealignment}
@@ -1224,11 +1224,11 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                                     isCancelled: e.target.checked ? false : prev.isCancelled,
                                                     isSavings: e.target.checked ? false : prev.isSavings,
                                                 }))}
-                                                className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                                                className="form-checkbox"
                                             />
                                             Realignment
                                         </label>
-                                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                        <label className="form-check">
                                             <input
                                                 type="checkbox"
                                                 checked={currentExpense.isSavings}
@@ -1238,7 +1238,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                                     isCancelled: e.target.checked ? false : prev.isCancelled,
                                                     isRealignment: e.target.checked ? false : prev.isRealignment,
                                                 }))}
-                                                className="form-checkbox h-4 w-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500"
+                                                className="form-checkbox"
                                             />
                                             Savings
                                         </label>
@@ -1247,11 +1247,11 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                         )}
                                     </div>
                                 
-                                    <div className="md:col-span-3 flex gap-2">
+                                    <div className="form-field--full form-action-row">
                                         {editingExpenseId !== null && (
-                                            <button type="button" onClick={handleCancelEditExpense} className="flex-1 py-2 bg-gray-400 text-white rounded text-sm hover:bg-gray-500">Cancel</button>
+                                            <button type="button" onClick={handleCancelEditExpense} className="btn btn-secondary">Cancel</button>
                                         )}
-                                        <button type="button" onClick={handleAddExpense} className="flex-1 py-2 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700">
+                                        <button type="button" onClick={handleAddExpense} className="btn btn-primary">
                                             {editingExpenseId !== null ? 'Update Expense' : 'Add Expense'}
                                         </button>
                                     </div>

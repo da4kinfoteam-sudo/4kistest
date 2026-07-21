@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "audit:ui": "node scripts/ui-consistency-audit.mjs",
+    "audit:legacy-ui": "node scripts/legacy-ui-inventory.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

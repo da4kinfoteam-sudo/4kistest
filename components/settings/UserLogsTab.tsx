@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 import { fetchAll } from '../../hooks/useSupabaseTable';
 import { Subproject, Activity, IPO } from '../../constants';
+import { DataTablePagination, SortableTableHeader } from '../ui/enterprise';
 
 interface UserLog {
     id: number;
@@ -121,17 +122,7 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
         }
     };
 
-    const SortableHeader = ({ label, sortKey }: { label: string; sortKey: keyof UserLog }) => (
-        <th 
-            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-            onClick={() => requestSort(sortKey)}
-        >
-            <div className="flex items-center gap-1">
-                {label}
-                <span>{sortConfig.key === sortKey ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}</span>
-            </div>
-        </th>
-    );
+    const SortableHeader = ({ label, sortKey }: { label: string; sortKey: keyof UserLog }) => <SortableTableHeader label={label} columnKey={String(sortKey)} sortConfig={sortConfig.key === sortKey ? { key: String(sortKey), direction: sortConfig.direction === 'asc' ? 'ascending' : 'descending' } : null} onSort={() => requestSort(sortKey)} />;
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
@@ -141,23 +132,17 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
         if (!metadata || (!metadata.targets && !metadata.accomplishments)) return null;
 
         return (
-            <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 animate-fadeIn">
-                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3 uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+            <div className="audit-log-detail animate-fadeIn">
+                <h4 className="audit-log-detail__title"><span className="status-indicator__dot"></span>
                     Monetary Variations
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="audit-log-detail__grid">
                     {metadata.targets && (
                         <div>
-                            <p className="text-xs font-bold text-gray-400 mb-2 uppercase">Targets</p>
-                            <div className="space-y-2">
+                            <p className="audit-log-detail__label">Targets</p><div className="audit-log-detail__list">
                                 {Object.entries(metadata.targets).map(([key, val]: [string, any]) => (
-                                    <div key={key} className="flex flex-col text-xs">
-                                        <span className="font-semibold text-gray-600 dark:text-gray-400">{key}:</span>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-gray-400 line-through decoration-red-300/50">{formatCurrency(val.old)}</span>
-                                            <span className="text-gray-400">→</span>
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(val.new)}</span>
+                                    <div key={key} className="audit-log-detail__change">
+                                        <strong>{key}:</strong><div><del>{formatCurrency(val.old)}</del><span>→</span><ins>{formatCurrency(val.new)}</ins>
                                         </div>
                                     </div>
                                 ))}
@@ -166,15 +151,10 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
                     )}
                     {metadata.accomplishments && (
                         <div>
-                            <p className="text-xs font-bold text-gray-400 mb-2 uppercase">Accomplishments</p>
-                            <div className="space-y-2">
+                            <p className="audit-log-detail__label">Accomplishments</p><div className="audit-log-detail__list">
                                 {Object.entries(metadata.accomplishments).map(([key, val]: [string, any]) => (
-                                    <div key={key} className="flex flex-col text-xs">
-                                        <span className="font-semibold text-gray-600 dark:text-gray-400">{key}:</span>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-gray-400 line-through decoration-red-300/50">{formatCurrency(val.old)}</span>
-                                            <span className="text-gray-400">→</span>
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatCurrency(val.new)}</span>
+                                    <div key={key} className="audit-log-detail__change">
+                                        <strong>{key}:</strong><div><del>{formatCurrency(val.old)}</del><span>→</span><ins>{formatCurrency(val.new)}</ins>
                                         </div>
                                     </div>
                                 ))}
@@ -191,23 +171,23 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
     };
 
     return (
-        <div>
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">User Audit Logs</h3>
-                <div className="flex items-center gap-2">
+        <div className="user-logs form-stack">
+            <header className="section-heading user-logs__header">
+                <h3 className="section-heading__title">User Audit Logs</h3>
+                <div>
                     <input 
                         type="text" 
                         placeholder="Search logs..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-accent focus:border-accent"
+                        className="form-control data-table-search"
                     />
                 </div>
-            </div>
+            </header>
 
-            <div className="overflow-x-auto shadow-md rounded-lg">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-700">
+            <div className="data-table-card"><div className="data-table-scroll user-logs__table-scroll">
+                <table className="data-table user-logs__table">
+                    <thead>
                         <tr>
                             <SortableHeader label="Description" sortKey="description" />
                             <SortableHeader label="Username" sortKey="username" />
@@ -215,23 +195,24 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
                             <SortableHeader label="Timestamp" sortKey="created_at" />
                         </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tbody>
                         {loading ? (
-                            <tr><td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">Loading logs...</td></tr>
+                            <tr><td colSpan={4} className="data-table__empty-cell">Loading logs...</td></tr>
                         ) : paginatedLogs.length === 0 ? (
-                            <tr><td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No logs found.</td></tr>
+                            <tr><td colSpan={4} className="data-table__empty-cell">No logs found.</td></tr>
                         ) : (
                             paginatedLogs.map(log => {
                                 const hasMetadata = log.action_metadata && (log.action_metadata.targets || log.action_metadata.accomplishments);
                                 return (
                                     <React.Fragment key={log.id}>
-                                        <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                            <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                                                <div className="flex items-center gap-3">
+                                        <tr className={expandedLogId === log.id ? 'data-table__row--selected' : undefined}>
+                                            <td className="data-table__cell--primary"><div className="user-log-description">
                                                     {hasMetadata && (
                                                         <button 
                                                             onClick={() => toggleExpand(log.id)}
-                                                            className={`p-1 rounded-full transition-transform ${expandedLogId === log.id ? 'rotate-90 bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40' : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                                                            className={`table-toggle ${expandedLogId === log.id ? 'is-expanded' : ''}`}
+                                                            aria-label={`${expandedLogId === log.id ? 'Collapse' : 'Expand'} log details`}
+                                                            aria-expanded={expandedLogId === log.id}
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                                                         </button>
@@ -239,7 +220,7 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
                                                     {log.entity_type && log.entity_id ? (
                                                         <button 
                                                             onClick={() => handleLogClick(log)}
-                                                            className="text-emerald-600 hover:underline text-left font-medium"
+                                                            className="data-table-link"
                                                         >
                                                             {log.description}
                                                         </button>
@@ -248,13 +229,10 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{log.username}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{log.operating_unit}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDate(log.created_at)}</td>
+                                            <td className="data-table__cell--muted data-table__cell--nowrap">{log.username}</td><td className="data-table__cell--muted data-table__cell--nowrap">{log.operating_unit}</td><td className="data-table__cell--muted data-table__cell--nowrap">{formatDate(log.created_at)}</td>
                                         </tr>
                                         {expandedLogId === log.id && hasMetadata && (
-                                            <tr>
-                                                <td colSpan={4} className="px-6 py-0 pb-4 bg-gray-50/50 dark:bg-gray-900/20 shadow-inner">
+                                            <tr className="data-table__detail-row"><td colSpan={4} className="data-table__detail-cell">
                                                     {renderMetadata(log.action_metadata)}
                                                 </td>
                                             </tr>
@@ -264,27 +242,10 @@ const UserLogsTab: React.FC<UserLogsTabProps> = ({
                             })
                         )}
                     </tbody>
-                </table>
-            </div>
+                </table></div></div>
 
             {/* Pagination */}
-            <div className="py-4 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-700 dark:text-gray-300">Show</span>
-                    <select value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-1 pl-2 pr-8 focus:outline-none focus:ring-accent focus:border-accent sm:text-sm">
-                        {[10, 20, 50, 100].map(size => ( <option key={size} value={size}>{size}</option> ))}
-                    </select>
-                    <span className="text-gray-700 dark:text-gray-300">entries</span>
-                </div>
-                <div className="flex items-center gap-4 text-sm">
-                    <span className="text-gray-700 dark:text-gray-300">Showing {Math.min((currentPage - 1) * itemsPerPage + 1, processedLogs.length)} to {Math.min(currentPage * itemsPerPage, processedLogs.length)} of {processedLogs.length} entries</span>
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
-                        <span className="px-2 font-medium">{currentPage} / {totalPages}</span>
-                        <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
-                    </div>
-                </div>
-            </div>
+            <DataTablePagination aria-label="User logs pagination" currentPage={currentPage} totalPages={totalPages} totalItems={processedLogs.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={size => { setItemsPerPage(size); setCurrentPage(1); }} />
         </div>
     );
 };
