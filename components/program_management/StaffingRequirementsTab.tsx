@@ -12,8 +12,10 @@ import { resolveOperatingUnit, resolveTier } from '../mainfunctions/ImportExport
 import useLocalStorageState from '../../hooks/useLocalStorageState';
 import { Search, X, Check, Download, FileSpreadsheet, Plus, Upload } from 'lucide-react';
 import { createStaffingExpenseId } from '../../lib/staffingExpenseIdentity';
+import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../../lib/budgetLineAdjustments';
 import { useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
-import { ConfirmDialog, DataTablePagination, FilterableTableHeader } from '../ui/enterprise';
+import { ConfirmDialog, DataTablePagination, SortableTableHeader } from '../ui/enterprise';
+import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from '../ui/MajorDataTable';
 
 declare const XLSX: any;
 
@@ -40,6 +42,14 @@ const getHiringStatusBadge = (status: StaffingRequirement['hiringStatus']) => {
         default: return 'status-badge status-badge--neutral';
     }
 }
+
+const getStaffingBudget = (item: StaffingRequirement) => {
+    if (!item.expenses?.length) return Number(item.annualSalary) || 0;
+    return item.expenses.reduce(
+        (total, expense) => total + (isBudgetLineExcludedFromTargets(expense) ? 0 : getBudgetLineAmount(expense)),
+        0
+    );
+};
 
 export const parseStaffingRequirementRow = (row: any, commonData: any): StaffingRequirement => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -74,27 +84,9 @@ interface StaffingRequirementsTabProps {
     onSelect: (item: StaffingRequirement) => void;
 }
 
-interface StaffingRequirementColumnHeaderProps {
-    label: string;
-    columnKey: keyof StaffingRequirement;
-    sortConfig: { key: string; direction: 'ascending' | 'descending' } | null;
-    onSort: (key: any, direction: 'ascending' | 'descending') => void;
-    filters: string[];
-    onFilterChange: (values: string[]) => void;
-    uniqueValues: string[];
-    isNumeric?: boolean;
-}
-
-const StaffingRequirementColumnHeader: React.FC<StaffingRequirementColumnHeaderProps> = ({ columnKey, onSort, ...props }) => (
-    <FilterableTableHeader
-        {...props}
-        columnKey={String(columnKey)}
-        onSort={(key, direction) => onSort(key as keyof StaffingRequirement, direction)}
-    />
-);
-
 export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
     const { currentUser } = useAuth();
+    const tableStoragePrefix = `programManagement_staffing_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
@@ -113,7 +105,8 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
     };
 
     // Filters - Persistent
-    const [columnFilters, setColumnFilters] = useLocalStorageState<{ [key: string]: string[] }>('programManagement_staffing_columnFilters', {});
+    const [columnFilters, setColumnFilters] = useLocalStorageState<{ [key: string]: string[] }>(`${tableStoragePrefix}_columnFilters`, {});
+    const [isColumnFilterOpen, setIsColumnFilterOpen] = useState(false);
 
     useEffect(() => {
         const cleanedFilters = Object.fromEntries(
@@ -126,8 +119,8 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
     }, [columnFilters, setColumnFilters]);
 
     // Search and Column Filtering/Sorting
-    const [searchTerm, setSearchTerm] = useLocalStorageState('programManagement_staffing_searchTerm', '');
-    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: string; direction: 'ascending' | 'descending' }>('programManagement_staffing_sortConfig', { key: 'id', direction: 'descending' });
+    const [searchTerm, setSearchTerm] = useLocalStorageState(`${tableStoragePrefix}_searchTerm`, '');
+    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: string; direction: 'ascending' | 'descending' }>(`${tableStoragePrefix}_sortConfig`, { key: 'id', direction: 'descending' });
 
     const { 
         isSelectionMode, selectedIds, setSelectedIds, 
@@ -243,8 +236,8 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
 
         // Sorting
         return [...filtered].sort((a, b) => {
-            const aValue = a[sortConfig.key as keyof StaffingRequirement];
-            const bValue = b[sortConfig.key as keyof StaffingRequirement];
+            const aValue = sortConfig.key === 'budget' ? getStaffingBudget(a) : a[sortConfig.key as keyof StaffingRequirement];
+            const bValue = sortConfig.key === 'budget' ? getStaffingBudget(b) : b[sortConfig.key as keyof StaffingRequirement];
 
             if (aValue === bValue) return 0;
             
@@ -291,6 +284,15 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
 
         return values;
     }, [items]);
+
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        const visibleIds = new Set(filteredItems.map(item => item.id));
+        setSelectedIds(previous => {
+            const next = previous.filter(id => visibleIds.has(id));
+            return next.length === previous.length ? previous : next;
+        });
+    }, [filteredItems, isSelectionMode, setSelectedIds]);
 
     const { currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages, paginatedData } = usePagination(filteredItems, []);
 
@@ -943,274 +945,33 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
         );
     }
 
-    // List View
+    const requestSort = (key: string) => handleSort(key, sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending');
+    const tableFilterFields = [
+        { key: 'hiringStatus', label: 'Status', values: uniqueValues.hiringStatus || [] },
+        { key: 'personnelPosition', label: 'Position', values: uniqueValues.personnelPosition || [] },
+        { key: 'personnelType', label: 'Personnel Type', values: uniqueValues.personnelType || [] }
+    ];
+
+    // Compact list view
     return (
-        <div className="data-table-card animate-fadeIn">            {isDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm deletion"
-                    description="Delete this record? This action cannot be undone."
-                    confirmLabel="Delete record"
-                    onCancel={() => setIsDeleteModalOpen(false)}
-                    onConfirm={handleDelete}
-                />
-            )}            {isMultiDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm bulk deletion"
-                    description={`Delete ${selectedIds.length} selected record${selectedIds.length === 1 ? '' : 's'}? This action cannot be undone.`}
-                    confirmLabel="Delete selected"
-                    onCancel={() => setIsMultiDeleteModalOpen(false)}
-                    onConfirm={handleMultiDelete}
-                />
-            )}
-
-            <div className="data-table-toolbar">
-            <div className="data-toolbar-row">
-                <div className="data-toolbar-group">
-                    <div className="data-toolbar-searchbox">
-                        <span className="data-toolbar-searchbox__icon">
-                            <Search aria-hidden="true" />
-                        </span>
-                        <input 
-                            type="text" 
-                            placeholder="Search Staffing Requirements..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="data-table-search data-toolbar-searchbox__input"
-                        />
-                        {searchTerm && (
-                            <button 
-                                onClick={() => setSearchTerm('')}
-                                className="data-toolbar-searchbox__clear"
-                            >
-                                <X aria-hidden="true" />
-                            </button>
-                        )}
-                    </div>
-                </div>
-                <div className="data-toolbar-group data-toolbar-group--actions">
-                    {isSelectionMode && selectedIds.length > 0 && (
-                        <button 
-                            onClick={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} 
-                            className={`btn ${selectionIntent === 'delete' ? 'btn-danger' : 'btn-info'}`}
-                        >
-                            {selectionIntent === 'delete' ? `Delete Selected (${selectedIds.length})` : `Clone Selected (${selectedIds.length})`}
-                        </button>
-                    )}
-                    {canEdit && (
-                        <button 
-                            onClick={() => { setView('form'); }} 
-                            className="btn btn-primary btn-responsive"
-                            title="Add New"
-                        >
-                            <Plus className="btn-symbol" aria-hidden="true" />
-                            <span className="btn-text">Add New</span>
-                        </button>
-                    )}
-                    <button onClick={handleDownloadReport} className="btn btn-primary btn-responsive" title="Download Report">
-                        <Download className="btn-symbol" aria-hidden="true" />
-                        <span className="btn-text">Download Report</span>
-                    </button>
-                    {canEdit && (
-                        <>
-                            <button onClick={handleDownloadTemplate} className="btn btn-secondary btn-responsive" title="Download Template">
-                                <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">Template</span>
-                            </button>
-                            <label className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : ''}`} title={isUploading ? 'Uploading...' : 'Upload XLSX'}>
-                                <Upload className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload XLSX'}</span>
-                                <input type="file" className="file-input-hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} />
-                            </label>
-                            <button 
-                                onClick={() => handleToggleMode('clone')} 
-                                className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'clone' ? 'is-active-clone' : ''}`} 
-                                title="Toggle Clone Mode"
-                            >
-                                <DuplicateIcon />
-                            </button>
-                            <button 
-                                onClick={() => handleToggleMode('delete')} 
-                                className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'delete' ? 'is-active-danger' : ''}`} 
-                                title="Toggle Multi-Delete Mode"
-                            >
-                                <TrashIcon />
-                            </button>
-                        </>
-                    )}
-                </div>
-            </div>
-            </div>
-
-            <div className="data-table-scroll">
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <StaffingRequirementColumnHeader 
-                                label="UID" 
-                                columnKey="uid" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.uid || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('uid', val)} 
-                                uniqueValues={uniqueValues.uid} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="OU" 
-                                columnKey="operatingUnit" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.operatingUnit || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('operatingUnit', val)} 
-                                uniqueValues={uniqueValues.operatingUnit} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Status" 
-                                columnKey="hiringStatus" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.hiringStatus || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('hiringStatus', val)} 
-                                uniqueValues={uniqueValues.hiringStatus} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Position" 
-                                columnKey="personnelPosition" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.personnelPosition || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('personnelPosition', val)} 
-                                uniqueValues={uniqueValues.personnelPosition} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Type" 
-                                columnKey="personnelType" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.personnelType || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('personnelType', val)} 
-                                uniqueValues={uniqueValues.personnelType} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Annual Salary" 
-                                columnKey="annualSalary" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={[]} 
-                                onFilterChange={() => {}} 
-                                uniqueValues={[]} 
-                                isNumeric
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Fund Year" 
-                                columnKey="fundYear" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.fundYear || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('fundYear', val)} 
-                                uniqueValues={uniqueValues.fundYear} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Fund Type" 
-                                columnKey="fundType" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.fundType || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('fundType', val)} 
-                                uniqueValues={uniqueValues.fundType} 
-                            />
-                            <StaffingRequirementColumnHeader 
-                                label="Tier" 
-                                columnKey="tier" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort} 
-                                filters={columnFilters.tier || []} 
-                                onFilterChange={(val) => handleColumnFilterChange('tier', val)} 
-                                uniqueValues={uniqueValues.tier} 
-                            />
-                            <th className="data-table__head--status">Workflow Status</th>
-                            <th className="data-table__head--actions data-table__sticky-right">
-                                {isSelectionMode ? "Select" : "Actions"}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {paginatedData.map((item) => (
-                            <tr key={item.id} >
-                                <td className="data-table__cell--muted data-table__cell--nowrap data-table__cell--mono">{item.uid}</td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap">{item.operatingUnit}</td>
-                                <td className="data-table__cell--nowrap"><span className={getHiringStatusBadge(item.hiringStatus)}>{item.hiringStatus}</span></td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap">
-                                    {item.personnelPosition}
-                                    <div className="data-table__subline">SG-{item.salaryGrade}</div>
-                                </td>
-                                <td className="data-table__cell--muted data-table__cell--nowrap">{item.personnelType}</td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap data-table__cell--numeric">{formatCurrency(item.annualSalary)}</td>
-                                <td className="data-table__cell--muted data-table__cell--nowrap">{item.fundYear}</td>
-                                <td className="data-table__cell--muted data-table__cell--nowrap">{item.fundType}</td>
-                                <td className="data-table__cell--muted data-table__cell--nowrap">{item.tier}</td>
-                                <td className="data-table__cell--nowrap">
-                                    <div className="data-table-workflow">
-                                        {getWorkflowStatusBadge(item.workflow_status)}
-                                        {item.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                            <div className="data-table-workflow__actions">
-                                                <button 
-                                                    onClick={(e) => handleApprove(item.id, e)} 
-                                                    className="action-mini action-mini--approve"
-                                                    title="Approve"
-                                                >
-                                                    <Check className="btn-symbol" />
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => handleReject(item.id, e)} 
-                                                    className="action-mini action-mini--reject"
-                                                    title="Reject"
-                                                >
-                                                    <X className="btn-symbol" />
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </td>
-                                    <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
-                                        {isSelectionMode ? (
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedIds.includes(item.id)} 
-                                                onChange={(e) => { e.stopPropagation(); handleSelectRow(item.id); }} 
-                                                className="form-checkbox"
-                                            />
-                                        ) : (
-                                            <div className="data-table__actions">
-                                                {canEdit ? (
-                                                    <>
-                                                        <button onClick={() => onSelect(item)} className="table-action table-action--primary">Details</button>
-                                                        <button 
-                                                            onClick={() => { setItemToDelete(item); setIsDeleteModalOpen(true); }} 
-                                                            className="table-action table-action--danger"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <button onClick={() => onSelect(item)} className="table-action table-action--primary">View Details</button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>            <DataTablePagination
-                currentPage={currentPage}
-                itemsPerPage={itemsPerPage}
-                totalItems={filteredItems.length}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                onItemsPerPageChange={setItemsPerPage}
-                pageSizeOptions={[10, 20, 50, 100]}
-                aria-label="Program management pagination"
-            />
+        <div className="data-table-card major-table-card animate-fadeIn">
+            {isDeleteModalOpen && <ConfirmDialog title="Confirm deletion" description="Delete this record? This action cannot be undone." confirmLabel="Delete record" onCancel={() => setIsDeleteModalOpen(false)} onConfirm={handleDelete} />}
+            {isMultiDeleteModalOpen && <ConfirmDialog title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`} description="This action cannot be undone. The selected records will be permanently removed." confirmLabel="Delete" onCancel={() => setIsMultiDeleteModalOpen(false)} onConfirm={handleMultiDelete} />}
+            <ColumnFilterDialog open={isColumnFilterOpen} fields={tableFilterFields} filters={columnFilters} onApply={setColumnFilters} onClose={() => setIsColumnFilterOpen(false)} />
+            <MajorTableToolbar searchTerm={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Search staffing requirements..." activeFilterCount={Object.keys(columnFilters).length} onOpenFilters={() => setIsColumnFilterOpen(true)} actions={isSelectionMode ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} /> : <>
+                {canEdit && <button onClick={() => setView('form')} className="btn btn-primary"><Plus aria-hidden="true" /> Add New</button>}
+                <button onClick={handleDownloadReport} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
+                {canEdit && <><button onClick={handleDownloadTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button><label className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}<input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} /></label><button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple staffing requirements"><DuplicateIcon /> Clone</button><button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple staffing requirements"><TrashIcon /> Delete</button></>}
+            </>} />
+            <div className="data-table-scroll"><table className="data-table"><thead><tr>
+                {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all staffing requirements on this page" onChange={(event) => handleSelectAll(event, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(item => selectedIds.includes(item.id))} indeterminate={paginatedData.some(item => selectedIds.includes(item.id)) && !paginatedData.every(item => selectedIds.includes(item.id))} /></th>}
+                <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Status" columnKey="hiringStatus" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Position" columnKey="personnelPosition" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Annual Salary" columnKey="annualSalary" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Year" columnKey="fundYear" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Budget" columnKey="budget" sortConfig={sortConfig} onSort={requestSort} /><th>Workflow Status</th>
+            </tr></thead><tbody>
+                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>{isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} /></td>}<td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={getHiringStatusBadge(item.hiringStatus)}>{item.hiringStatus}</span></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.personnelPosition} /></td><td className="data-table__cell--numeric">{formatCurrency(item.annualSalary)}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td className="data-table__cell--numeric">{formatCurrency(getStaffingBudget(item))}</td><td>{getWorkflowStatusBadge(item.workflow_status)}</td></tr>)}
+                {paginatedData.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No staffing requirements match the current filters.</td></tr>}
+            </tbody></table></div>
+            <DataTablePagination currentPage={currentPage} itemsPerPage={itemsPerPage} totalItems={filteredItems.length} totalPages={totalPages} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
         </div>
     );
+
 };

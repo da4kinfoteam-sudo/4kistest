@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ChevronDown, ChevronsUpDown, ChevronUp, Filter, Inbox, Info, LoaderCircle } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronsUpDown, ChevronUp, Filter, Inbox, Info, LoaderCircle, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 type ElementProps<T extends HTMLElement = HTMLDivElement> = React.HTMLAttributes<T>;
@@ -327,25 +327,59 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
     const titleId = React.useId();
     const descriptionId = React.useId();
+    const dialogRef = React.useRef<HTMLElement>(null);
+    const cancelRef = React.useRef<HTMLButtonElement>(null);
+
+    React.useEffect(() => {
+        const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const focusFrame = window.requestAnimationFrame(() => cancelRef.current?.focus());
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onCancel();
+                return;
+            }
+            if (event.key !== 'Tab' || !dialogRef.current) return;
+            const focusable = Array.from(dialogRef.current.querySelectorAll('button:not([disabled])')) as HTMLButtonElement[];
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.cancelAnimationFrame(focusFrame);
+            document.removeEventListener('keydown', handleKeyDown);
+            returnFocus?.focus();
+        };
+    }, [onCancel]);
 
     return (
-        <div className="modal-backdrop" role="presentation" onClick={onCancel}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
             <section
+                ref={dialogRef}
                 className="modal-card confirm-dialog"
                 role="alertdialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
                 aria-describedby={descriptionId}
-                onClick={event => event.stopPropagation()}
+                onMouseDown={event => event.stopPropagation()}
             >
-                <header className="modal-card__header">
-                    <h3 id={titleId}>{title}</h3>
-                </header>
-                <div className="modal-card__body">
-                    <p id={descriptionId} className="confirm-dialog__description">{description}</p>
+                <div className="confirm-dialog__content">
+                    {tone === 'danger' && <span className="confirm-dialog__icon" aria-hidden="true"><Trash2 /></span>}
+                    <div>
+                        <h3 id={titleId}>{title}</h3>
+                        <p id={descriptionId} className="confirm-dialog__description">{description}</p>
+                    </div>
                 </div>
                 <footer className="modal-card__footer confirm-dialog__actions">
-                    <button type="button" className="btn btn-secondary" onClick={onCancel}>{cancelLabel}</button>
+                    <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel}>{cancelLabel}</button>
                     <button type="button" className={cn('btn', tone === 'danger' ? 'btn-danger' : 'btn-primary')} onClick={onConfirm}>{confirmLabel}</button>
                 </footer>
             </section>

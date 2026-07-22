@@ -13,7 +13,8 @@ import { resolveOperatingUnit, resolveTier } from '../mainfunctions/ImportExport
 import useLocalStorageState from '../../hooks/useLocalStorageState';
 import { Search, X, Check, Download, FileSpreadsheet, Plus, Upload } from 'lucide-react';
 import { useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
-import { ConfirmDialog, DataTablePagination, FilterableTableHeader } from '../ui/enterprise';
+import { ConfirmDialog, DataTablePagination, SortableTableHeader } from '../ui/enterprise';
+import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from '../ui/MajorDataTable';
 
 declare const XLSX: any;
 
@@ -35,25 +36,6 @@ const DuplicateIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
     </svg>
-);
-
-interface OfficeRequirementColumnHeaderProps {
-    label: string;
-    columnKey: keyof OfficeRequirement;
-    sortConfig: { key: string; direction: 'ascending' | 'descending' } | null;
-    onSort: (key: any, direction: 'ascending' | 'descending') => void;
-    filters: string[];
-    onFilterChange: (values: string[]) => void;
-    uniqueValues: string[];
-    isNumeric?: boolean;
-}
-
-const OfficeRequirementColumnHeader: React.FC<OfficeRequirementColumnHeaderProps> = ({ columnKey, onSort, ...props }) => (
-    <FilterableTableHeader
-        {...props}
-        columnKey={String(columnKey)}
-        onSort={(key, direction) => onSort(key as keyof OfficeRequirement, direction)}
-    />
 );
 
 const getStatusBadge = (status: OfficeRequirement['status']) => {
@@ -79,6 +61,8 @@ export const parseOfficeRequirementRow = (row: any, commonData: any): OfficeRequ
     };
 };
 
+const getOfficeBudget = (item: OfficeRequirement) => (Number(item.numberOfUnits) || 0) * (Number(item.pricePerUnit) || 0);
+
 interface OfficeRequirementsTabProps {
     items: OfficeRequirement[];
     setItems: React.Dispatch<React.SetStateAction<OfficeRequirement[]>>;
@@ -89,6 +73,7 @@ interface OfficeRequirementsTabProps {
 export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
     const { locale } = useAuth(); // Assume it exists or just use default
     const { currentUser } = useAuth();
+    const tableStoragePrefix = `programManagement_office_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
@@ -102,9 +87,10 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
     const [selectionIntent, setSelectionIntent] = useState<'delete' | 'clone'>('delete');
 
     // Search and Column Filtering/Sorting
-    const [searchTerm, setSearchTerm] = useLocalStorageState('programManagement_office_searchTerm', '');
-    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: string; direction: 'ascending' | 'descending' }>('programManagement_office_sortConfig', { key: 'id', direction: 'descending' });
-    const [columnFilters, setColumnFilters] = useLocalStorageState<{ [key: string]: string[] }>('programManagement_office_columnFilters', {});
+    const [searchTerm, setSearchTerm] = useLocalStorageState(`${tableStoragePrefix}_searchTerm`, '');
+    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: string; direction: 'ascending' | 'descending' }>(`${tableStoragePrefix}_sortConfig`, { key: 'id', direction: 'descending' });
+    const [columnFilters, setColumnFilters] = useLocalStorageState<{ [key: string]: string[] }>(`${tableStoragePrefix}_columnFilters`, {});
+    const [isColumnFilterOpen, setIsColumnFilterOpen] = useState(false);
 
     useEffect(() => {
         const cleanedFilters = Object.fromEntries(
@@ -225,8 +211,8 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
 
             return true;
         }).sort((a, b) => {
-            const aValue = a[sortConfig.key as keyof OfficeRequirement];
-            const bValue = b[sortConfig.key as keyof OfficeRequirement];
+            const aValue = sortConfig.key === 'budget' ? getOfficeBudget(a) : a[sortConfig.key as keyof OfficeRequirement];
+            const bValue = sortConfig.key === 'budget' ? getOfficeBudget(b) : b[sortConfig.key as keyof OfficeRequirement];
 
             if (aValue === bValue) return 0;
             if (aValue === undefined || aValue === null) return 1;
@@ -240,6 +226,15 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
     const handleSort = (key: any, direction: 'ascending' | 'descending') => {
         setSortConfig({ key, direction });
     };
+
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        const visibleIds = new Set(filteredItems.map(item => item.id));
+        setSelectedIds(previous => {
+            const next = previous.filter(id => visibleIds.has(id));
+            return next.length === previous.length ? previous : next;
+        });
+    }, [filteredItems, isSelectionMode, setSelectedIds]);
 
     const { currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages, paginatedData } = usePagination(filteredItems, []);
 
@@ -427,6 +422,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
             hasModuleAccess: canEdit,
         }).allowed);
         const deletableIds = deletableItems.map(i => i.id);
+        const skippedCount = itemsToDelete.length - deletableItems.length;
         
         if (deletableIds.length === 0) {
             alert("None of the selected items can be deleted based on their current status.");
@@ -459,6 +455,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
         } else {
             setItems(prev => prev.filter(i => !deletableIds.includes(i.id)));
         }
+        if (skippedCount) alert(`${skippedCount} selected office requirement${skippedCount === 1 ? ' was' : 's were'} skipped by DCF editing policy.`);
         setIsMultiDeleteModalOpen(false);
         setSelectedIds([]);
     };
@@ -896,293 +893,46 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
         );
     }
 
-    // List View
+    const requestSort = (key: string) => handleSort(key, sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending');
+    const tableFilterFields = [
+        { key: 'status', label: 'Status', values: uniqueValues.status || [] },
+        { key: 'equipment', label: 'Equipment', values: uniqueValues.equipment || [] },
+        { key: 'specs', label: 'Specifications', values: uniqueValues.specs || [] },
+        { key: 'numberOfUnits', label: 'Number of Units', values: uniqueValues.numberOfUnits || [] }
+    ];
+
+    // Compact list view
     return (
-        <div className="data-table-card animate-fadeIn">            {isDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm deletion"
-                    description="Delete this record? This action cannot be undone."
-                    confirmLabel="Delete record"
-                    onCancel={() => setIsDeleteModalOpen(false)}
-                    onConfirm={handleDelete}
-                />
-            )}            {isMultiDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm bulk deletion"
-                    description={`Delete ${selectedIds.length} selected record${selectedIds.length === 1 ? '' : 's'}? This action cannot be undone.`}
-                    confirmLabel="Delete selected"
-                    onCancel={() => setIsMultiDeleteModalOpen(false)}
-                    onConfirm={handleMultiDelete}
-                />
-            )}
-
-            <div className="data-table-toolbar">
-            <div className="data-toolbar-row">
-                <div className="data-toolbar-group">
-                    <div className="data-toolbar-searchbox">
-                        <span className="data-toolbar-searchbox__icon">
-                            <Search aria-hidden="true" />
-                        </span>
-                        <input 
-                            type="text" 
-                            placeholder="Search Office Requirements..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="data-table-search data-toolbar-searchbox__input"
-                        />
-                        {searchTerm && (
-                            <button 
-                                onClick={() => setSearchTerm('')}
-                                className="data-toolbar-searchbox__clear"
-                            >
-                                <X aria-hidden="true" />
-                            </button>
-                        )}
-                    </div>
-                </div>
-                <div className="data-toolbar-group data-toolbar-group--actions">
-                    {isSelectionMode && selectedIds.length > 0 && (
-                        <button 
-                            onClick={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} 
-                            className={`btn ${selectionIntent === 'delete' ? 'btn-danger' : 'btn-info'}`}
-                        >
-                            {selectionIntent === 'delete' ? `Delete Selected (${selectedIds.length})` : `Clone Selected (${selectedIds.length})`}
-                        </button>
-                    )}
-                    {canEdit && (
-                        <button 
-                            onClick={() => { setView('form'); }} 
-                            className="btn btn-primary btn-responsive"
-                            title="Add New"
-                        >
-                            <Plus className="btn-symbol" aria-hidden="true" />
-                            <span className="btn-text">Add New</span>
-                        </button>
-                    )}
-                    <button onClick={handleDownloadReport} className="btn btn-primary btn-responsive" title="Download Report">
-                        <Download className="btn-symbol" aria-hidden="true" />
-                        <span className="btn-text">Download Report</span>
-                    </button>
-                    {canEdit && (
-                        <>
-                            <button onClick={handleDownloadTemplate} className="btn btn-secondary btn-responsive" title="Download Template">
-                                <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">Template</span>
-                            </button>
-                            <label className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : ''}`} title={isUploading ? 'Uploading...' : 'Upload XLSX'}>
-                                <Upload className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload XLSX'}</span>
-                                <input type="file" className="file-input-hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} />
-                            </label>
-                            <button 
-                                onClick={() => handleToggleMode('clone')} 
-                                className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'clone' ? 'is-active-clone' : ''}`} 
-                                title="Toggle Clone Mode"
-                            >
-                                <DuplicateIcon />
-                            </button>
-                            <button 
-                                onClick={() => handleToggleMode('delete')} 
-                                className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'delete' ? 'is-active-danger' : ''}`} 
-                                title="Toggle Multi-Delete Mode"
-                            >
-                                <TrashIcon />
-                            </button>
-                        </>
-                    )}
-                </div>
-            </div>
-            </div>
-
-            <div className="data-table-scroll">
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <OfficeRequirementColumnHeader 
-                                label="UID" 
-                                columnKey="uid" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['uid'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, uid: vals }))}
-                                uniqueValues={uniqueValues['uid'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="OU" 
-                                columnKey="operatingUnit" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['operatingUnit'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, operatingUnit: vals }))}
-                                uniqueValues={uniqueValues['operatingUnit'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Status" 
-                                columnKey="status" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['status'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, status: vals }))}
-                                uniqueValues={uniqueValues['status'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Equipment" 
-                                columnKey="equipment" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['equipment'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, equipment: vals }))}
-                                uniqueValues={uniqueValues['equipment'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Specs/Purpose" 
-                                columnKey="specs" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['specs'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, specs: vals }))}
-                                uniqueValues={uniqueValues['specs'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Units" 
-                                columnKey="numberOfUnits" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['numberOfUnits'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, numberOfUnits: vals }))}
-                                uniqueValues={uniqueValues['numberOfUnits'] || []}
-                                isNumeric
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Total Amount" 
-                                columnKey="pricePerUnit" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={[]}
-                                onFilterChange={() => {}}
-                                uniqueValues={[]}
-                                isNumeric
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Fund Year" 
-                                columnKey="fundYear" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['fundYear'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, fundYear: vals }))}
-                                uniqueValues={uniqueValues['fundYear'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Fund Type" 
-                                columnKey="fundType" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['fundType'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, fundType: vals }))}
-                                uniqueValues={uniqueValues['fundType'] || []}
-                            />
-                            <OfficeRequirementColumnHeader 
-                                label="Tier" 
-                                columnKey="tier" 
-                                sortConfig={sortConfig} 
-                                onSort={handleSort}
-                                filters={columnFilters['tier'] || []}
-                                onFilterChange={(vals) => setColumnFilters(prev => ({ ...prev, tier: vals }))}
-                                uniqueValues={uniqueValues['tier'] || []}
-                            />
-                            <th className="data-table__head--status">Workflow Status</th>
-                            <th className="data-table__head--actions data-table__sticky-right">{isSelectionMode ? "Select" : "Actions"}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {paginatedData.map((item) => {
-                            const canDeleteThis = getDeleteDecision({
-                                moduleKey: 'office_requirements',
-                                item,
-                                hasModuleAccess: canEdit,
-                            }).allowed;
-                            
-                            return (
-                                <tr key={item.id} >
-                                    <td className="data-table__cell--muted data-table__cell--nowrap data-table__cell--mono">{item.uid}</td>
-                                    <td className="data-table__cell--primary data-table__cell--nowrap">{item.operatingUnit}</td>
-                                    <td className="data-table__cell--nowrap"><span className={getStatusBadge(item.status)}>{item.status}</span></td>
-                                    <td className="data-table__cell--primary data-table__cell--nowrap">
-                                        {item.equipment}
-                                    </td>
-                                    <td className="data-table__cell--muted"><div className="data-table__cell--truncate" title={item.specs}>{item.specs}</div><div className="data-table__subline data-table__cell--truncate">{item.purpose}</div></td>
-                                    <td className="data-table__cell--muted data-table__cell--nowrap data-table__cell--numeric">{item.numberOfUnits}</td>
-                                    <td className="data-table__cell--primary data-table__cell--nowrap data-table__cell--numeric">{formatCurrency(item.numberOfUnits * item.pricePerUnit)}</td>
-                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.fundYear}</td>
-                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.fundType}</td>
-                                    <td className="data-table__cell--muted data-table__cell--nowrap">{item.tier}</td>
-                                    <td className="data-table__cell--nowrap">
-                                        <div className="data-table-workflow">
-                                            {getWorkflowStatusBadge(item.workflow_status)}
-                                            {item.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                                <div className="data-table-workflow__actions">
-                                                    <button 
-                                                        onClick={(e) => handleApprove(item.id, e)} 
-                                                        className="action-mini action-mini--approve"
-                                                        title="Approve"
-                                                    >
-                                                        <Check className="btn-symbol" />
-                                                    </button>
-                                                    <button 
-                                                        onClick={(e) => handleReject(item.id, e)} 
-                                                        className="action-mini action-mini--reject"
-                                                        title="Reject"
-                                                    >
-                                                        <X className="btn-symbol" />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
-                                        {isSelectionMode ? (
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedIds.includes(item.id)} 
-                                                onChange={(e) => { e.stopPropagation(); handleSelectRow(item.id); }} 
-                                                disabled={selectionIntent === 'delete' && !canDeleteThis}
-                                                className="form-checkbox"
-                                            />
-                                        ) : (
-                                            <div className="data-table__actions">
-                                                {canEdit ? (
-                                                    <>
-                                                        <button onClick={() => onSelect(item)} className="table-action table-action--primary">Details</button>
-                                                        {canDeleteThis && (
-                                                            <button 
-                                                                onClick={() => { setItemToDelete(item); setIsDeleteModalOpen(true); }} 
-                                                                className="table-action table-action--danger"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <button onClick={() => onSelect(item)} className="table-action table-action--primary">View Details</button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>            <DataTablePagination
-                currentPage={currentPage}
-                itemsPerPage={itemsPerPage}
-                totalItems={filteredItems.length}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                onItemsPerPageChange={setItemsPerPage}
-                pageSizeOptions={[10, 20, 50, 100]}
-                aria-label="Program management pagination"
-            />
+        <div className="data-table-card major-table-card animate-fadeIn">
+            {isDeleteModalOpen && <ConfirmDialog title="Confirm deletion" description="Delete this record? This action cannot be undone." confirmLabel="Delete record" onCancel={() => setIsDeleteModalOpen(false)} onConfirm={handleDelete} />}
+            {isMultiDeleteModalOpen && <ConfirmDialog title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`} description="This action cannot be undone. The selected records will be permanently removed." confirmLabel="Delete" onCancel={() => setIsMultiDeleteModalOpen(false)} onConfirm={handleMultiDelete} />}
+            <ColumnFilterDialog open={isColumnFilterOpen} fields={tableFilterFields} filters={columnFilters} onApply={setColumnFilters} onClose={() => setIsColumnFilterOpen(false)} />
+            <MajorTableToolbar searchTerm={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Search office requirements..." activeFilterCount={Object.keys(columnFilters).length} onOpenFilters={() => setIsColumnFilterOpen(true)} actions={isSelectionMode ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} /> : <>
+                {canEdit && <button onClick={() => setView('form')} className="btn btn-primary"><Plus aria-hidden="true" /> Add New</button>}
+                <button onClick={handleDownloadReport} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
+                {canEdit && <><button onClick={handleDownloadTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button><label className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}<input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} /></label><button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple office requirements"><DuplicateIcon /> Clone</button><button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple office requirements"><TrashIcon /> Delete</button></>}
+            </>} />
+            <div className="data-table-scroll"><table className="data-table"><thead><tr>
+                {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all office requirements on this page" onChange={(event) => handleSelectAll(event, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(item => selectedIds.includes(item.id))} indeterminate={paginatedData.some(item => selectedIds.includes(item.id)) && !paginatedData.every(item => selectedIds.includes(item.id))} /></th>}
+                <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="Status" columnKey="status" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="Equipment" columnKey="equipment" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="No. of Units" columnKey="numberOfUnits" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="Fund Year" columnKey="fundYear" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={requestSort} />
+                <SortableTableHeader label="Budget" columnKey="budget" sortConfig={sortConfig} onSort={requestSort} />
+                <th>Workflow Status</th>
+            </tr></thead><tbody>
+                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>
+                    {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} disabled={selectionIntent === 'delete' && !getDeleteDecision({ moduleKey: 'office_requirements', item, hasModuleAccess: canEdit }).allowed} /></td>}
+                    <td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={getStatusBadge(item.status)}>{item.status}</span></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.equipment} /></td><td className="data-table__cell--numeric">{item.numberOfUnits}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td className="data-table__cell--numeric">{formatCurrency(getOfficeBudget(item))}</td><td>{getWorkflowStatusBadge(item.workflow_status)}</td>
+                </tr>)}
+                {paginatedData.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No office requirements match the current filters.</td></tr>}
+            </tbody></table></div>
+            <DataTablePagination currentPage={currentPage} itemsPerPage={itemsPerPage} totalItems={filteredItems.length} totalPages={totalPages} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
         </div>
     );
+
 };

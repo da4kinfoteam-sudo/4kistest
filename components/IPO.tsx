@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchAll } from '../hooks/useSupabaseTable';
 import useLocalStorageState from '../hooks/useLocalStorageState';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader as CanonicalSortableTableHeader } from './ui/enterprise';
+import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -66,8 +67,9 @@ const registeringBodyOptions = ['SEC', 'DOLE', 'CDA'];
 
 const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onSelectIpo, onSelectSubproject, particularTypes, commodityCategories, externalFilters, onClearExternalFilters, gidaAreas, elcacAreas }) => {
     const { currentUser } = useAuth();
+    const tableStoragePrefix = `ipos_${currentUser?.id || 'anonymous'}`;
     const { canEdit } = useUserAccess('IPO Management');
-    const isAdmin = currentUser?.role === 'Administrator';
+    const isAdmin = currentUser?.role === 'Administrator' || currentUser?.role === 'Super Admin';
     const { logAction } = useLogAction();
     const [formData, setFormData] = useState(defaultFormData);
     const [baseRegion, setBaseRegion] = useState(''); // Track base region from dropdown
@@ -109,9 +111,9 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
     const [isMultiDeleteModalOpen, setIsMultiDeleteModalOpen] = useState(false);
 
     // Persistent Filters using useLocalStorageState
-    const [searchTerm, setSearchTerm] = useLocalStorageState('ipos_searchTerm', '');
-    const [regionFilter, setRegionFilter] = useLocalStorageState('ipos_regionFilter', 'All');
-    const [flagFilter, setFlagFilter] = useLocalStorageState('ipos_flagFilter', { 
+    const [searchTerm, setSearchTerm] = useLocalStorageState(`${tableStoragePrefix}_searchTerm`, '');
+    const [regionFilter, setRegionFilter] = useLocalStorageState(`${tableStoragePrefix}_regionFilter`, 'All');
+    const [flagFilter, setFlagFilter] = useLocalStorageState(`${tableStoragePrefix}_flagFilter`, {
         womenLed: false, 
         withinGida: false, 
         withinElcac: false, 
@@ -120,6 +122,8 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         withTrainings: false
     });
     const [areFlagFiltersOpen, setAreFlagFiltersOpen] = useState(false);
+    const [isColumnFilterOpen, setIsColumnFilterOpen] = useState(false);
+    const [ipoColumnFilters, setIpoColumnFilters] = useLocalStorageState<Record<string, string[]>>(`${tableStoragePrefix}_columnFilters`, {});
 
     type SortKeys = keyof IPO | 'totalInvested';
     const [sortConfig, setSortConfig] = useState<{ key: SortKeys; direction: 'ascending' | 'descending' } | null>({ key: 'registrationDate', direction: 'descending' });
@@ -268,6 +272,9 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         if (regionFilter !== 'All') {
             filteredIpos = filteredIpos.filter(ipo => ipo.region === regionFilter);
         }
+        if ((ipoColumnFilters.region || []).length > 0) {
+            filteredIpos = filteredIpos.filter(ipo => ipoColumnFilters.region.includes(ipo.region));
+        }
         
         if (flagFilter.womenLed) {
             filteredIpos = filteredIpos.filter(ipo => ipo.isWomenLed);
@@ -294,6 +301,15 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                 (t.participatingIpos || []).forEach(p => iposWithTr.add(p));
             });
             filteredIpos = filteredIpos.filter(ipo => iposWithTr.has(ipo.name));
+        }
+
+        const commodityFilters = ipoColumnFilters.commodities || [];
+        if (commodityFilters.length > 0) {
+            filteredIpos = filteredIpos.filter(ipo => (ipo.commodities || []).some(commodity => commodityFilters.includes(commodity.particular)));
+        }
+        const levelFilters = ipoColumnFilters.levelOfDevelopment || [];
+        if (levelFilters.length > 0) {
+            filteredIpos = filteredIpos.filter(ipo => levelFilters.includes(String(latestLevels[ipo.id] || ipo.levelOfDevelopment || '')));
         }
 
         if (searchTerm) {
@@ -335,12 +351,21 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         }
 
         return filteredIpos;
-    }, [ipos, searchTerm, regionFilter, sortConfig, flagFilter, calculateTotalInvestment, subprojects, activities]);
+    }, [ipos, searchTerm, regionFilter, sortConfig, flagFilter, ipoColumnFilters, latestLevels, calculateTotalInvestment, subprojects, activities]);
+
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        const visibleIds = new Set(processedIpos.map(item => item.id));
+        setSelectedIds(previous => {
+            const next = previous.filter(id => visibleIds.has(id));
+            return next.length === previous.length ? previous : next;
+        });
+    }, [isSelectionMode, processedIpos]);
     
     // Use Shared Pagination Hook
     const { 
         currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages, paginatedData: paginatedIpos 
-    } = usePagination(processedIpos, [searchTerm, regionFilter, flagFilter, sortConfig]);
+    } = usePagination(processedIpos, [searchTerm, regionFilter, flagFilter, ipoColumnFilters, sortConfig]);
 
     const requestSort = (key: SortKeys) => {
         let direction: 'ascending' | 'descending' = 'ascending';
@@ -805,292 +830,105 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         }
     };
 
+    const ipoFilterFields = [
+        { key: 'region', label: 'Location', values: Array.from(new Set(ipos.map(ipo => ipo.region).filter(Boolean))).sort() },
+        { key: 'flags', label: 'Flags', values: ['Women-Led', 'GIDA', 'ELCAC', 'SCAD', 'With Subprojects', 'With Trainings'] },
+        { key: 'commodities', label: 'Commodities', values: Array.from(new Set(ipos.flatMap(ipo => (ipo.commodities || []).map(commodity => commodity.particular)).filter(Boolean))).sort() },
+        { key: 'levelOfDevelopment', label: 'Level of Development', values: ['1', '2', '3', '4', '5'] }
+    ];
+    const selectedFlagNames = [
+        flagFilter.womenLed && 'Women-Led',
+        flagFilter.withinGida && 'GIDA',
+        flagFilter.withinElcac && 'ELCAC',
+        flagFilter.withScad && 'SCAD',
+        flagFilter.withSubprojects && 'With Subprojects',
+        flagFilter.withTrainings && 'With Trainings'
+    ].filter(Boolean) as string[];
+    const dialogFilters = {
+        ...ipoColumnFilters,
+        ...(regionFilter !== 'All' && !(ipoColumnFilters.region || []).length ? { region: [regionFilter] } : {}),
+        ...(selectedFlagNames.length ? { flags: selectedFlagNames } : {})
+    };
+    const applyIpoFilters = (filters: Record<string, string[]>) => {
+        const flags = filters.flags || [];
+        setFlagFilter({
+            womenLed: flags.includes('Women-Led'),
+            withinGida: flags.includes('GIDA'),
+            withinElcac: flags.includes('ELCAC'),
+            withScad: flags.includes('SCAD'),
+            withSubprojects: flags.includes('With Subprojects'),
+            withTrainings: flags.includes('With Trainings')
+        });
+        setRegionFilter('All');
+        const { flags: _flags, ...persistentFilters } = filters;
+        setIpoColumnFilters(persistentFilters);
+    };
+    const activeIpoFilterCount = Object.keys(dialogFilters).filter(key => dialogFilters[key]?.length).length;
+
     const renderListView = () => (
         <div className="data-list-page">
+            <ColumnFilterDialog open={isColumnFilterOpen} fields={ipoFilterFields} filters={dialogFilters} onApply={applyIpoFilters} onClose={() => setIsColumnFilterOpen(false)} />
             <div className="data-list-header">
-                 <h2 className="data-list-title">IPO Management</h2>
-                 {canEdit && (
-                     <button
-                        onClick={handleAddNewClick}
-                        className="btn btn-primary btn-responsive"
-                        title="Add New IPO"
-                    >
-                        <Plus className="btn-symbol" aria-hidden="true" />
-                        <span className="btn-text">Add New IPO</span>
-                     </button>
-                 )}
+                <h2 className="data-list-title">IPO Management</h2>
+                {canEdit && <button onClick={handleAddNewClick} className="btn btn-primary"><Plus aria-hidden="true" /> Add New IPO</button>}
             </div>
-            <div className="data-table-card">
-                 <div className="data-table-toolbar">
-                    <div className="data-toolbar-row">
-                        <div className="data-toolbar-group">
-                            <input
-                                type="text"
-                                placeholder="Search by name, contact, location or commodity..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className={`data-table-search data-table-search--list ${commonInputClasses}`}
-                            />
-                            <div className="data-toolbar-group data-toolbar-filter">
-                                <label className="data-toolbar-label">Region:</label>
-                                <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className={`data-table-select data-table-select--compact ${commonInputClasses}`}>
-                                    <option value="All">All Regions</option>
-                                    {philippineRegions.map(r => <option key={r} value={r}>{r}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <div className="data-toolbar-group data-toolbar-group--actions">
-                            {isAdmin && isSelectionMode && selectedIds.length > 0 && (
-                                <button onClick={() => setIsMultiDeleteModalOpen(true)} className="btn btn-danger">
-                                    Delete Selected ({selectedIds.length})
-                                </button>
-                            )}
-                            <button onClick={() => downloadIposReport(processedIpos)} className="btn btn-primary btn-responsive" title="Download Report">
-                                <Download className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">Download Report</span>
-                            </button>
-                            {canEdit && (
-                                <>
-                                    <button onClick={downloadIposTemplate} className="btn btn-secondary btn-responsive" title="Download Template">
-                                        <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
-                                        <span className="btn-text">Template</span>
-                                    </button>
-                                    <label htmlFor="ipo-upload" className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : ''}`} title={isUploading ? 'Uploading...' : 'Upload'}>
-                                        <Upload className="btn-symbol" aria-hidden="true" />
-                                        <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload'}</span>
-                                    </label>
-                                    <input id="ipo-upload" type="file" className="file-input-hidden" onChange={(e) => handleIposUpload(e, ipos, setIpos, logAction, setIsUploading, gidaAreas, elcacAreas)} accept=".xlsx, .xls" disabled={isUploading} />
-                                    {isAdmin && (
-                                        <button
-                                            onClick={handleToggleSelectionMode}
-                                            className={`btn btn-secondary btn-icon ${isSelectionMode ? 'is-active-danger' : ''}`}
-                                            title="Toggle Multi-Delete Mode"
-                                        >
-                                            <TrashIcon />
-                                        </button>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    </div>
-
-                    <button
-                        type="button"
-                        className={`filter-checkbar-toggle ${areFlagFiltersOpen ? 'is-open' : ''}`}
-                        onClick={() => setAreFlagFiltersOpen(prev => !prev)}
-                        aria-expanded={areFlagFiltersOpen}
-                    >
-                        <span>
-                            <SlidersHorizontal className="filter-checkbar-toggle__icon" aria-hidden="true" />
-                            Filters
-                            {activeFlagFilterCount > 0 && <span className="filter-checkbar-toggle__count">{activeFlagFilterCount}</span>}
-                        </span>
-                        <ChevronDown className="filter-checkbar-toggle__chevron" aria-hidden="true" />
-                    </button>
-                     
-                    <div className={`filter-checkbar ${areFlagFiltersOpen ? 'is-open' : ''}`}>
-                        <label className="filter-check">
-                            <input type="checkbox" name="womenLed" checked={flagFilter.womenLed} onChange={handleFlagFilterChange} className="form-checkbox" />
-                            <span>Women-Led</span>
-                        </label>
-                        <label className="filter-check">
-                            <input type="checkbox" name="withinGida" checked={flagFilter.withinGida} onChange={handleFlagFilterChange} className="form-checkbox" />
-                            <span>Within GIDA</span>
-                        </label>
-                        <label className="filter-check">
-                            <input type="checkbox" name="withinElcac" checked={flagFilter.withinElcac} onChange={handleFlagFilterChange} className="form-checkbox" />
-                            <span>Within ELCAC</span>
-                        </label>
-                        <label className="filter-check">
-                            <input type="checkbox" name="withScad" checked={flagFilter.withScad} onChange={handleFlagFilterChange} className="form-checkbox" />
-                            <span>With SCAD</span>
-                        </label>
-                         <label className="filter-check">
-                            <input type="checkbox" name="withSubprojects" checked={flagFilter.withSubprojects} onChange={handleFlagFilterChange} className="form-checkbox" />
-                            <span>With Subprojects</span>
-                        </label>
-                        <label className="filter-check">
-                            <input type="checkbox" name="withTrainings" checked={flagFilter.withTrainings} onChange={handleFlagFilterChange} className="form-checkbox" />
-                            <span>With Trainings</span>
-                        </label>
-                    </div>
-                 </div>
-
+            <div className="data-table-card major-table-card">
+                <MajorTableToolbar
+                    searchTerm={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search IPOs..."
+                    activeFilterCount={activeIpoFilterCount}
+                    onOpenFilters={() => setIsColumnFilterOpen(true)}
+                    actions={isSelectionMode
+                        ? <BulkSelectionBar intent="delete" count={selectedIds.length} onConfirm={() => setIsMultiDeleteModalOpen(true)} onClear={() => setSelectedIds([])} onCancel={handleToggleSelectionMode} />
+                        : <>
+                        <button onClick={() => downloadIposReport(processedIpos)} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
+                        {canEdit && <>
+                            <button onClick={downloadIposTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
+                            <label htmlFor="ipo-upload-major" className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
+                            <input id="ipo-upload-major" type="file" className="hidden" onChange={(event) => handleIposUpload(event, ipos, setIpos, logAction, setIsUploading, gidaAreas, elcacAreas)} accept=".xlsx,.xls" disabled={isUploading} />
+                            {isAdmin && <button onClick={handleToggleSelectionMode} className="btn btn-secondary" aria-label="Delete multiple IPOs"><TrashIcon /> Delete</button>}
+                        </>}
+                    </>}
+                />
                 <div className="data-table-scroll">
                     <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th className="data-table__cell--selection data-table__sticky-left"><span className="visually-hidden">Expand row</span></th>
-                                <SortableHeader sortKey="name" label="IPO Name" className="data-table__head--name" />
-                                <SortableHeader sortKey="location" label="Location" />
-                                <SortableHeader sortKey="contactPerson" label="Contact" />
-                                <SortableHeader sortKey="registrationDate" label="Registered" />
-                                <th>Flags</th>
-                                <th>Commodities</th>
-                                <SortableHeader sortKey="levelOfDevelopment" label="Level" />
-                                <th>Workflow Status</th>
-                                {isAdmin && (
-                                    <th className="data-table__head--actions data-table__sticky-right">
-                                        {isSelectionMode ? (
-                                            <label className="data-table__select-all">
-                                                <span>Select all</span>
-                                                <input 
-                                                    type="checkbox" 
-                                                    onChange={handleSelectAll} 
-                                                    checked={paginatedIpos.length > 0 && paginatedIpos.every(i => selectedIds.includes(i.id))}
-                                                    className="form-checkbox"
-                                                />
-                                            </label>
-                                        ) : "Actions"}
-                                    </th>
-                                )}
-                            </tr>
-                        </thead>
+                        <thead><tr>
+                            {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all IPOs on this page" onChange={handleSelectAll} checked={paginatedIpos.length > 0 && paginatedIpos.every(ipo => selectedIds.includes(ipo.id))} indeterminate={paginatedIpos.some(ipo => selectedIds.includes(ipo.id)) && !paginatedIpos.every(ipo => selectedIds.includes(ipo.id))} /></th>}
+                            <CanonicalSortableTableHeader label="IPO ID" columnKey="id" sortConfig={sortConfig} onSort={requestSort} />
+                            <CanonicalSortableTableHeader label="IPO Name" columnKey="name" sortConfig={sortConfig} onSort={requestSort} />
+                            <CanonicalSortableTableHeader label="Location" columnKey="location" sortConfig={sortConfig} onSort={requestSort} />
+                            <th>Flags</th><th>Commodities</th>
+                            <CanonicalSortableTableHeader label="Level of Development" columnKey="levelOfDevelopment" sortConfig={sortConfig} onSort={requestSort} />
+                        </tr></thead>
                         <tbody>
-                            {paginatedIpos.map((ipo) => {
-                                const relatedSubprojects = (subprojects || []).filter(sp => sp.indigenousPeopleOrganization === ipo.name);
-                                const completedSubprojects = relatedSubprojects.filter(sp => sp.status === 'Completed');
-                                const totalInvestment = calculateTotalInvestment(ipo.name);
-                                const totalAllocation = calculateTotalAllocation(ipo.name);
-                                const totalLandArea = (ipo.commodities || []).reduce((sum, c) => sum + (Number(c.value) || 0), 0);
-                                const trainingCount = linkedTrainings.filter(t => (t.participatingIpos || []).includes(ipo.name) && t.status === 'Completed').length;
-
-                                return (
-                                <React.Fragment key={ipo.id}>
-                                    <tr onClick={() => handleToggleRow(ipo.id)} className="data-table__row--interactive">
-                                        <td className="data-table__cell--selection data-table__sticky-left">
-                                            <button
-                                                type="button"
-                                                className="table-toggle"
-                                                aria-label={`${expandedRowId === ipo.id ? 'Collapse' : 'Expand'} ${ipo.name}`}
-                                                aria-expanded={expandedRowId === ipo.id}
-                                                onClick={(event) => { event.stopPropagation(); handleToggleRow(ipo.id); }}
-                                            >
-                                                <ChevronDown className={expandedRowId === ipo.id ? 'is-open' : undefined} aria-hidden="true" />
-                                            </button>
-                                        </td>
-                                        <td className="data-table__cell--primary data-table__cell--wrap">
-                                            <button onClick={(e) => { e.stopPropagation(); onSelectIpo(ipo); }} className="table-link">
-                                                {ipo.name}
-                                            </button>
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">
-                                            {ipo.location.split(',').slice(1).join(',').trim() || ipo.location}
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">
-                                            <div>{ipo.contactPerson}</div>
-                                            <div className="data-table__subline">{ipo.contactNumber}</div>
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{formatDate(ipo.registrationDate)}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">
-                                            <div className="data-table-tags">
-                                                {ipo.isWomenLed && <span className="status-badge status-badge--pink" title="Women-Led">WL</span>}
-                                                {ipo.isWithinGida && <span className="status-badge status-badge--purple" title="GIDA">GIDA</span>}
-                                                {ipo.isWithinElcac && <span className="status-badge status-badge--orange" title="ELCAC">ELCAC</span>}
-                                                {ipo.isWithScad && <span className="status-badge status-badge--cyan" title="SCAD">SCAD</span>}
-                                            </div>
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--wrap data-table__cell--wide">
-                                            {ipo.commodities.map(c => c.particular).join(', ')}
-                                        </td>
-                                        <td className="data-table__cell--nowrap"><span className="data-table-level">{latestLevels[ipo.id] || ipo.levelOfDevelopment || '-'}</span></td>
-                                        <td className="data-table__cell--nowrap">
-                                            <div className="data-table-workflow">
-                                                {getWorkflowStatusBadge(ipo.workflow_status)}
-                                                {ipo.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                                    <div className="data-table-workflow__actions">
-                                                        <button 
-                                                            onClick={(e) => handleApprove(ipo.id, e)} 
-                                                            className="action-mini action-mini--approve"
-                                                            title="Approve"
-                                                        >
-                                                            <Check aria-hidden="true" />
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => handleReject(ipo.id, e)} 
-                                                            className="action-mini action-mini--reject"
-                                                            title="Reject"
-                                                        >
-                                                            <X aria-hidden="true" />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        {isAdmin && (
-                                            <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
-                                                <div className="data-table__actions">
-                                                    {isSelectionMode ? (
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={selectedIds.includes(ipo.id)} 
-                                                            onChange={(e) => { e.stopPropagation(); handleSelectRow(ipo.id); }} 
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            className="form-checkbox"
-                                                            aria-label={`Select ${ipo.name}`}
-                                                        />
-                                                    ) : (
-                                                        <button onClick={(e) => handleDeleteClick(ipo, e)} className="table-action table-action--danger">Delete</button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        )}
-                                    </tr>
-                                    {expandedRowId === ipo.id && (
-                                        <tr className="data-table-detail-row">
-                                            <td colSpan={isAdmin ? 10 : 9} className="data-table-detail-cell">
-                                                <div className="data-table-detail-grid data-table-detail-grid--three">
-                                                    <section className="data-table-detail-section">
-                                                        <h4 className="data-table-detail-title">IPO Details</h4>
-                                                        <div className="data-table-detail-stack">
-                                                            <p><strong>ICC:</strong> {ipo.indigenousCulturalCommunity}</p>
-                                                            <p><strong>AD No:</strong> {ipo.ancestralDomainNo || 'N/A'}</p>
-                                                            <p><strong>Reg. Body:</strong> {ipo.registeringBody}</p>
-                                                        </div>
-                                                    </section>
-                                                    <section className="data-table-detail-section">
-                                                        <h4 className="data-table-detail-title">Engagement Summary</h4>
-                                                        <div className="data-table-detail-stack">
-                                                            <p><strong>Total Investment:</strong> {formatCurrency(totalInvestment)}</p>
-                                                            <p><strong>Total Allocation:</strong> {formatCurrency(totalAllocation)}</p>
-                                                            <p><strong>Total Land Area:</strong> {totalLandArea.toLocaleString()} ha</p>
-                                                            <p><strong>Subprojects (Completed):</strong> {completedSubprojects.length}</p>
-                                                            <p><strong>Trainings Attended (Completed):</strong> {trainingCount}</p>
-                                                        </div>
-                                                    </section>
-                                                    <section className="data-table-detail-section">
-                                                        <h4 className="data-table-detail-title">Subprojects</h4>
-                                                        {relatedSubprojects.length > 0 ? (
-                                                            <ul className="data-table-detail-list">
-                                                                {relatedSubprojects.map(sp => (
-                                                                    <li key={sp.id} className="data-table-detail-list-item">
-                                                                        <span className="data-table__cell--truncate" title={sp.name}>{sp.name}</span>
-                                                                        <span className={getProjectStatusBadgeClass(sp.status)}>{sp.status}</span>
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        ) : <p className="data-table-detail-empty">No subprojects linked.</p>}
-                                                    </section>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
-                            )})}
+                            {paginatedIpos.map(ipo => {
+                                const flags = [ipo.isWomenLed && 'Women-Led', ipo.isWithinGida && 'GIDA', ipo.isWithinElcac && 'ELCAC', ipo.isWithScad && 'SCAD'].filter(Boolean) as string[];
+                                const commodities = (ipo.commodities || []).map(commodity => commodity.particular).filter(Boolean);
+                                const flagPreview = flags.length ? `${flags[0]}${flags.length > 1 ? ` +${flags.length - 1}` : ''}` : '—';
+                                const commodityPreview = commodities.length ? `${commodities[0]}${commodities.length > 1 ? ` +${commodities.length - 1}` : ''}` : '—';
+                                return <tr
+                                    key={ipo.id}
+                                    className={isSelectionMode ? (selectedIds.includes(ipo.id) ? 'data-table__row--selected data-table__row--selected-danger' : undefined) : 'data-table__row--interactive'}
+                                    tabIndex={isSelectionMode ? undefined : 0}
+                                    aria-label={isSelectionMode ? undefined : `View details for ${ipo.name}`}
+                                    onClick={isSelectionMode ? undefined : () => onSelectIpo(ipo)}
+                                    onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectIpo(ipo); } }}
+                                >
+                                    {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${ipo.name}`} checked={selectedIds.includes(ipo.id)} onChange={() => handleSelectRow(ipo.id)} /></td>}
+                                    <td className="data-table__cell--mono">{ipo.id}</td>
+                                    <td className="data-table__cell--primary"><TruncatedTableCell value={ipo.name} /></td>
+                                    <td><TruncatedTableCell value={ipo.location} /></td>
+                                    <td><TruncatedTableCell className="status-badge status-badge--compact status-badge--info" value={flagPreview} fullText={flags.join(', ') || 'No flags'} /></td>
+                                    <td><TruncatedTableCell value={commodityPreview} fullText={commodities.join(', ') || 'No commodities'} /></td>
+                                    <td><span className="data-table-level">{latestLevels[ipo.id] || ipo.levelOfDevelopment || '—'}</span></td>
+                                </tr>;
+                            })}
+                            {paginatedIpos.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 7 : 6}>No IPOs match the current filters.</td></tr>}
                         </tbody>
                     </table>
                 </div>
-                <DataTablePagination
-                    currentPage={currentPage}
-                    itemsPerPage={itemsPerPage}
-                    totalItems={processedIpos.length}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                    onItemsPerPageChange={setItemsPerPage}
-                    pageSizeOptions={[10, 20, 50, 100]}
-                    aria-label="IPO pagination"
-                />
+                <DataTablePagination currentPage={currentPage} totalPages={totalPages} totalItems={processedIpos.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
         </div>
     );
@@ -1337,9 +1175,9 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             
             {isMultiDeleteModalOpen && (
                 <ConfirmDialog
-                    title="Confirm bulk deletion"
-                    description={`Delete ${selectedIds.length} selected IPO${selectedIds.length === 1 ? '' : 's'}? This action cannot be undone.`}
-                    confirmLabel="Delete selected"
+                    title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`}
+                    description="This action cannot be undone. The selected records will be permanently removed."
+                    confirmLabel="Delete"
                     onCancel={() => setIsMultiDeleteModalOpen(false)}
                     onConfirm={confirmMultiDelete}
                 />
