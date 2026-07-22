@@ -10,9 +10,11 @@ import { downloadSubprojectsReport, downloadSubprojectsTemplate, handleSubprojec
 import useLocalStorageState from '../hooks/useLocalStorageState';
 import { supabase } from '../supabaseClient';
 import type { DataScope } from '../lib/scopedDataFetch';
-import { DcfScopeFilterPanel, DcfScopeFilterToggle, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
+import { DcfScopeFilterPanel, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
 import { useDcfPolicyGuard } from '../hooks/useDcfPolicyGuard';
-import { ConfirmDialog, DataTablePagination, FilterableTableHeader } from './ui/enterprise';
+import { ConfirmDialog, DataTablePagination, SortableTableHeader } from './ui/enterprise';
+import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
+import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../lib/budgetLineAdjustments';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -46,7 +48,10 @@ const DuplicateIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const calculateTotalBudget = (details: SubprojectDetail[]) => {
-    return details.reduce((total, item) => total + (item.pricePerUnit * item.numberOfUnits), 0);
+    return details.reduce(
+        (total, item) => total + (isBudgetLineExcludedFromTargets(item) ? 0 : getBudgetLineAmount(item)),
+        0
+    );
 };
 
 const commonInputClasses = "form-control";
@@ -58,6 +63,7 @@ const Subprojects: React.FC<SubprojectsProps> = ({
     onDataScopeChange
 }) => {
     const { currentUser } = useAuth();
+    const tableStoragePrefix = `subprojects_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Subprojects');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
@@ -76,23 +82,24 @@ const Subprojects: React.FC<SubprojectsProps> = ({
     const [isUploading, setIsUploading] = useState(false);
 
     // Filters - Persistent State
-    const [savedSearchTerm, setSavedSearchTerm] = useLocalStorageState('subprojects_searchTerm', '');
+    const [savedSearchTerm, setSavedSearchTerm] = useLocalStorageState(`${tableStoragePrefix}_searchTerm`, '');
     const [searchTerm, setSearchTerm] = useState(savedSearchTerm);
     
     // Column Filters
-    const [savedColumnFilters, setSavedColumnFilters] = useLocalStorageState<Record<string, string[]>>('subprojects_columnFilters', {});
+    const [savedColumnFilters, setSavedColumnFilters] = useLocalStorageState<Record<string, string[]>>(`${tableStoragePrefix}_columnFilters`, {});
     const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>(savedColumnFilters);
+    const [isColumnFilterOpen, setIsColumnFilterOpen] = useState(false);
 
     // Sorting - Persistent State
     type SortKeys = keyof Subproject | 'totalBudget' | 'actualObligated' | 'actualDisbursed' | 'completionRate' | 'commodityTarget';
-    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: SortKeys; direction: 'ascending' | 'descending' } | null>('subprojects_sortConfig', { key: 'startDate', direction: 'descending' });
+    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: SortKeys; direction: 'ascending' | 'descending' } | null>(`${tableStoragePrefix}_sortConfig`, { key: 'startDate', direction: 'descending' });
     
-    const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
     const dcfFilters = useDcfScopeFilters({
         storageKey: 'subprojects_dcf_scope',
         moduleName: 'Subprojects',
         onDataScopeChange
     });
+    const applyExternalScope = dcfFilters.applyScope;
 
     useEffect(() => {
         const cleanedFilters = Object.fromEntries(
@@ -109,9 +116,8 @@ const Subprojects: React.FC<SubprojectsProps> = ({
         if (externalFilters) {
             const newFilters: Record<string, string[]> = {};
             
-            if (externalFilters.year) {
-                newFilters['fundingYear'] = [externalFilters.year];
-            }
+            const scopeUpdates: Parameters<typeof applyExternalScope>[0] = {};
+            if (externalFilters.year) scopeUpdates.selectedYear = externalFilters.year;
             if (externalFilters.region) {
                 // Improved logic: Filter OUs where the mapped region name includes the filter text
                 // This handles "Region 3" vs "Region III" loose matching
@@ -122,9 +128,7 @@ const Subprojects: React.FC<SubprojectsProps> = ({
                     return mappedRegion.toLowerCase().includes(filterRegionLower);
                 });
 
-                if (targetOUs.length > 0) {
-                    newFilters['operatingUnit'] = targetOUs;
-                }
+                if (targetOUs.length > 0) scopeUpdates.selectedOu = targetOUs[0];
             }
             if (externalFilters.status) {
                 newFilters['status'] = [externalFilters.status];
@@ -137,13 +141,14 @@ const Subprojects: React.FC<SubprojectsProps> = ({
             if (Object.keys(newFilters).length > 0) {
                 setColumnFilters(prev => ({ ...prev, ...newFilters }));
             }
+            if (Object.keys(scopeUpdates).length > 0) applyExternalScope(scopeUpdates);
 
             // Clear the external filters so they don't re-apply on remount
             if (onClearExternalFilters) {
                 onClearExternalFilters();
             }
         }
-    }, [externalFilters, onClearExternalFilters]);
+    }, [applyExternalScope, externalFilters, onClearExternalFilters]);
 
     const initiallyFilteredSubprojects = useMemo(() => {
         let filtered = subprojects.filter(s => matchesDcfScope(s as any, dcfFilters.value, 'fundingYear'));
@@ -255,13 +260,26 @@ const Subprojects: React.FC<SubprojectsProps> = ({
         return filtered;
     }, [initiallyFilteredSubprojects, columnFilters, sortConfig]);
 
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        const visibleIds = new Set(processedSubprojects.map(item => item.id));
+        setSelectedIds(previous => {
+            const next = previous.filter(id => visibleIds.has(id));
+            return next.length === previous.length ? previous : next;
+        });
+    }, [isSelectionMode, processedSubprojects, setSelectedIds]);
+
     // Use Shared Pagination Hook
     const { 
         currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages, paginatedData: paginatedSubprojects 
     } = usePagination(processedSubprojects, [searchTerm, columnFilters, sortConfig]);
 
-    const handleSort = (key: SortKeys, direction: 'ascending' | 'descending') => {
-        setSortConfig({ key, direction });
+    const handleSort = (key: string) => {
+        const typedKey = key as SortKeys;
+        setSortConfig(previous => ({
+            key: typedKey,
+            direction: previous?.key === typedKey && previous.direction === 'ascending' ? 'descending' : 'ascending'
+        }));
     };
 
     const handleColumnFilterChange = (columnKey: string, values: string[]) => {
@@ -294,21 +312,6 @@ const Subprojects: React.FC<SubprojectsProps> = ({
         setColumnFilters({});
         setSavedColumnFilters({});
     }
-
-    const getScopeColumnFilter = (key: 'fundingYear' | 'operatingUnit' | 'fundType' | 'tier') => {
-        const value = key === 'fundingYear'
-            ? dcfFilters.selectedYear
-            : key === 'operatingUnit'
-                ? dcfFilters.selectedOu
-                : key === 'fundType'
-                    ? dcfFilters.selectedFundType
-                    : dcfFilters.selectedTier;
-        return value === 'All' ? [] : [value];
-    };
-
-    const handleToggleRow = (id: number) => {
-        setExpandedRowId(prev => (prev === id ? null : id));
-    };
 
     const canDeleteSubprojectByPolicy = (subproject: Subproject) => getDeleteDecision({
         moduleKey: 'subprojects',
@@ -569,302 +572,94 @@ const Subprojects: React.FC<SubprojectsProps> = ({
         }
     };
 
+    const columnFilterFields = [
+        { key: 'name', label: 'Subproject Name', values: uniqueValues.name },
+        { key: 'indigenousPeopleOrganization', label: 'IPO', values: uniqueValues.indigenousPeopleOrganization },
+        { key: 'status', label: 'Status', values: uniqueValues.status }
+    ];
+
     return (
         <div className="data-list-page">
-            {isDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm deletion"
-                    description={<>Are you sure you want to delete “{subprojectToDelete?.name}”? This action cannot be undone.</>}
-                    confirmLabel="Delete"
-                    onCancel={() => setIsDeleteModalOpen(false)}
-                    onConfirm={confirmDelete}
-                />
-            )}
-
-            {isMultiDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm bulk deletion"
-                    description={<>Are you sure you want to delete the <strong>{selectedIds.length}</strong> selected subprojects? This action cannot be undone.</>}
-                    confirmLabel="Delete all selected"
-                    onCancel={() => setIsMultiDeleteModalOpen(false)}
-                    onConfirm={confirmMultiDelete}
-                />
-            )}
+            {isDeleteModalOpen && <ConfirmDialog title="Confirm deletion" description={<>Are you sure you want to delete “{subprojectToDelete?.name}”? This action cannot be undone.</>} confirmLabel="Delete" onCancel={() => setIsDeleteModalOpen(false)} onConfirm={confirmDelete} />}
+            {isMultiDeleteModalOpen && <ConfirmDialog title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`} description="This action cannot be undone. The selected records will be permanently removed." confirmLabel="Delete" onCancel={() => setIsMultiDeleteModalOpen(false)} onConfirm={confirmMultiDelete} />}
+            <ColumnFilterDialog open={isColumnFilterOpen} fields={columnFilterFields} filters={columnFilters} onApply={(filters) => { setColumnFilters(filters); setSavedColumnFilters(filters); }} onClose={() => setIsColumnFilterOpen(false)} />
 
             <div className="data-list-header">
                 <h2 className="data-list-title">Subprojects Management</h2>
-                <div className="data-list-actions">
-                    <DcfScopeFilterToggle idPrefix="subprojects-dcf" filters={dcfFilters} />
-                    {canEdit && (
-                        <button onClick={onCreateSubproject} className="btn btn-primary btn-responsive" title="Add New Subproject">
-                            <Plus className="btn-symbol" aria-hidden="true" />
-                            <span className="btn-text">Add New Subproject</span>
-                        </button>
-                    )}
-                </div>
+                {canEdit && <button onClick={onCreateSubproject} className="btn btn-primary"><Plus aria-hidden="true" /> Add New Subproject</button>}
             </div>
             <DcfScopeFilterPanel idPrefix="subprojects-dcf" filters={dcfFilters} />
-            <div className="data-table-card">
-                <div className="data-table-toolbar">
-                    <div className="data-toolbar-row">
-                    <div className="data-toolbar-group">
-                        <input
-                            type="text"
-                            placeholder="Search Subproject..."
-                            value={searchTerm}
-                            onChange={(e) => {
-                                setSearchTerm(e.target.value);
-                                setSavedSearchTerm(e.target.value);
-                            }}
-                            className={`data-table-search w-full md:w-64 ${commonInputClasses} mt-0`}
-                        />
-                        {Object.keys(columnFilters).length > 0 && (
-                            <button onClick={clearColumnFilters} className="data-table-reset">
-                                Reset Filters
-                            </button>
-                        )}
-                    </div>
-                    <div className="data-toolbar-group data-toolbar-group--actions">
-                        {isSelectionMode && selectedIds.length > 0 && (
-                            <button 
-                                onClick={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} 
-                                className={`btn ${selectionIntent === 'delete' ? 'btn-danger' : 'btn-info'}`}
-                            >
-                                {selectionIntent === 'delete' ? `Delete Selected (${selectedIds.length})` : `Clone Selected (${selectedIds.length})`}
-                            </button>
-                        )}
-                        <button onClick={() => downloadSubprojectsReport(processedSubprojects)} className="btn btn-primary btn-responsive" title="Download Report">
-                            <Download className="btn-symbol" aria-hidden="true" />
-                            <span className="btn-text">Download Report</span>
-                        </button>
-                        {canEdit && (
-                            <>
-                                <button onClick={downloadSubprojectsTemplate} className="btn btn-secondary btn-responsive" title="Download Template">
-                                    <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
-                                    <span className="btn-text">Template</span>
-                                </button>
-                                <label htmlFor="subproject-upload" className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : 'cursor-pointer'}`} title={isUploading ? 'Uploading...' : 'Upload'}>
-                                    <Upload className="btn-symbol" aria-hidden="true" />
-                                    <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload'}</span>
-                                </label>
-                                <input id="subproject-upload" type="file" className="hidden" onChange={(e) => handleSubprojectsUpload(e, subprojects, setSubprojects, ipos, logAction, setIsUploading, uacsCodes, currentUser)} accept=".xlsx, .xls" disabled={isUploading} />
-                                <button 
-                                    onClick={() => handleToggleMode('clone')} 
-                                    className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'clone' ? 'is-active-clone' : ''}`} 
-                                    title="Toggle Clone Mode"
-                                >
-                                    <DuplicateIcon />
-                                </button>
-                                <button
-                                    onClick={() => handleToggleMode('delete')}
-                                    className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'delete' ? 'is-active-danger' : ''}`}
-                                    title="Toggle Multi-Delete Mode"
-                                >
-                                    <TrashIcon />
-                                </button>
-                            </>
-                        )}
-                    </div>
-                    </div>
-                </div>
+
+            <div className="data-table-card major-table-card">
+                <MajorTableToolbar
+                    searchTerm={searchTerm}
+                    onSearchChange={(value) => { setSearchTerm(value); setSavedSearchTerm(value); }}
+                    searchPlaceholder="Search subprojects..."
+                    activeFilterCount={Object.keys(columnFilters).length}
+                    onOpenFilters={() => setIsColumnFilterOpen(true)}
+                    actions={isSelectionMode
+                        ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} />
+                        : <>
+                        <button onClick={() => downloadSubprojectsReport(processedSubprojects)} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
+                        {canEdit && <>
+                            <button onClick={downloadSubprojectsTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
+                            <label htmlFor="subproject-upload" className={`btn btn-secondary ${isUploading ? 'is-disabled' : 'cursor-pointer'}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
+                            <input id="subproject-upload" type="file" className="hidden" onChange={(e) => handleSubprojectsUpload(e, subprojects, setSubprojects, ipos, logAction, setIsUploading, uacsCodes, currentUser)} accept=".xlsx, .xls" disabled={isUploading} />
+                            <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple subprojects"><DuplicateIcon /> Clone</button>
+                            <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple subprojects"><TrashIcon /> Delete</button>
+                        </>}
+                    </>}
+                />
 
                 <div className="data-table-scroll">
                     <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th scope="col" className="data-table__sticky-left" aria-label="Expand row"></th>
-                                <FilterableTableHeader label="Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['name'] || []} onFilterChange={(v) => handleColumnFilterChange('name', v)} uniqueValues={uniqueValues.name} />
-                                <FilterableTableHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={handleSort} filters={getScopeColumnFilter('operatingUnit')} onFilterChange={(v) => handleColumnFilterChange('operatingUnit', v)} uniqueValues={uniqueValues.operatingUnit} />
-                                <FilterableTableHeader label="IPO" columnKey="indigenousPeopleOrganization" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['indigenousPeopleOrganization'] || []} onFilterChange={(v) => handleColumnFilterChange('indigenousPeopleOrganization', v)} uniqueValues={uniqueValues.indigenousPeopleOrganization} />
-                                <FilterableTableHeader label="Fund Year" columnKey="fundingYear" sortConfig={sortConfig} onSort={handleSort} filters={getScopeColumnFilter('fundingYear')} onFilterChange={(v) => handleColumnFilterChange('fundingYear', v)} uniqueValues={uniqueValues.fundingYear} />
-                                <FilterableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={handleSort} filters={getScopeColumnFilter('fundType')} onFilterChange={(v) => handleColumnFilterChange('fundType', v)} uniqueValues={uniqueValues.fundType} />
-                                <FilterableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={handleSort} filters={getScopeColumnFilter('tier')} onFilterChange={(v) => handleColumnFilterChange('tier', v)} uniqueValues={uniqueValues.tier} />
-                                <FilterableTableHeader label="Project Status" columnKey="status" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['status'] || []} onFilterChange={(v) => handleColumnFilterChange('status', v)} uniqueValues={uniqueValues.status} />
-                                <FilterableTableHeader label="Commodity target" columnKey="commodityTarget" sortConfig={sortConfig} onSort={handleSort} filters={[]} onFilterChange={() => {}} uniqueValues={[]} isNumeric={true} />
-                                <FilterableTableHeader label="Budget" columnKey="totalBudget" sortConfig={sortConfig} onSort={handleSort} filters={[]} onFilterChange={() => {}} uniqueValues={[]} isNumeric={true} />
-                                <FilterableTableHeader label="Completion rate" columnKey="completionRate" sortConfig={sortConfig} onSort={handleSort} filters={[]} onFilterChange={() => {}} uniqueValues={[]} isNumeric={true} />
-                                <th scope="col">Workflow Status</th>
-                                <th scope="col" className="data-table__head--actions data-table__sticky-right">
-                                    {isSelectionMode ? (
-                                        <div className="data-table__select-all">
-                                            <span>Select all</span>
-                                            <input type="checkbox" onChange={(e) => handleSelectAll(e, paginatedSubprojects)} checked={paginatedSubprojects.length > 0 && paginatedSubprojects.every(s => selectedIds.includes(s.id))} className="form-checkbox" />
-                                        </div>
-                                    ) : ("Actions")}
-                                </th>
-                            </tr>
-                        </thead>
+                        <thead><tr>
+                            {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all subprojects on this page" onChange={(e) => handleSelectAll(e, paginatedSubprojects)} checked={paginatedSubprojects.length > 0 && paginatedSubprojects.every(item => selectedIds.includes(item.id))} indeterminate={paginatedSubprojects.some(item => selectedIds.includes(item.id)) && !paginatedSubprojects.every(item => selectedIds.includes(item.id))} /></th>}
+                            <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Subproject Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Operating Unit" columnKey="operatingUnit" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="IPO" columnKey="indigenousPeopleOrganization" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Fund Year" columnKey="fundingYear" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Commodity Target" columnKey="commodityTarget" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Budget" columnKey="totalBudget" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Status" columnKey="status" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Completion Rate" columnKey="completionRate" sortConfig={sortConfig} onSort={handleSort} />
+                            <th>Workflow Status</th>
+                        </tr></thead>
                         <tbody>
-                            {paginatedSubprojects.map((s) => {
+                            {paginatedSubprojects.map(s => {
                                 const details = s.details || [];
                                 const budget = calculateTotalBudget(details);
-                                const actualObligated = details.reduce((sum, d) => sum + (d.actualObligationAmount || 0), 0);
-                                const actualDisbursed = details.reduce((sum, d) => sum + (d.actualDisbursementAmount || 0), 0);
-                                const totalItems = details.length;
-                                const completedItems = details.filter(d => d.actualDeliveryDate).length;
-                                const completionRate = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-                                const commodities = s.subprojectCommodities && s.subprojectCommodities.length > 0 ? s.subprojectCommodities.map(c => `${c.name} (${c.area} ${c.typeName === 'Livestock' ? 'heads' : 'ha'})`).join(', ') : 'N/A';
-
-                                return (
-                                <React.Fragment key={s.id}>
-                                    <tr onClick={() => handleToggleRow(s.id)} className="data-table__row--interactive">
-                                        <td className="data-table__sticky-left data-table__cell--soft"><svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform duration-200 ${expandedRowId === s.id ? 'transform rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></td>
-                                        <td className="data-table__cell--primary data-table__cell--wrap">
-                                            <button onClick={(e) => {e.stopPropagation(); onSelectSubproject(s);}} className="table-link">
-                                                {s.name || 'Unnamed Subproject'}
-                                            </button>
-                                            <span className="data-table__subline">{s.uid || 'No UID'}</span>
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{s.operatingUnit || 'N/A'}</td>
-                                        <td className="data-table__cell--muted data-table__cell--wrap">{s.indigenousPeopleOrganization || 'N/A'}</td>
-                                         <td className="data-table__cell--muted data-table__cell--nowrap">{s.fundingYear || 'N/A'}</td>
-                                         <td className="data-table__cell--muted data-table__cell--nowrap">{s.fundType || 'N/A'}</td>
-                                         <td className="data-table__cell--muted data-table__cell--nowrap">{s.tier || 'N/A'}</td>
-                                         <td className="data-table__cell--nowrap"><span className={getStatusBadge(s.status)}>{s.status || 'Unknown'}</span></td>
-                                        <td className="data-table__cell--muted data-table__cell--wrap">{commodities}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{formatCurrency(budget)}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">
-                                            <div className="data-table-progress-inline">
-                                                <span className="data-table-progress__value">{completionRate}%</span>
-                                                <div className="data-table-progress data-table-progress--compact">
-                                                    <div className={`data-table-progress__bar ${completionRate === 100 ? 'data-table-progress__bar--complete' : ''}`} style={{ width: `${completionRate}%` }}></div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="data-table__cell--nowrap">
-                                            <div className="flex flex-col gap-1 items-start">
-                                                {getWorkflowStatusBadge(s.workflow_status)}
-                                                {s.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                                    <div className="flex gap-1 mt-1">
-                                                        <button 
-                                                            onClick={(e) => handleApprove(s.id, e)} 
-                                                            className="action-mini action-mini--approve"
-                                                            title="Approve"
-                                                        >
-                                                            <Check className="h-3 w-3" />
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => handleReject(s.id, e)} 
-                                                            className="action-mini action-mini--reject"
-                                                            title="Reject"
-                                                        >
-                                                            <X className="h-3 w-3" />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
-                                            {canEdit ? (
-                                                <div className="data-table__actions">
-                                                    {isSelectionMode && (
-                                                        <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={(e) => { e.stopPropagation(); handleSelectRow(s.id); }} onClick={(e) => e.stopPropagation()} className="form-checkbox" />
-                                                    )}
-                                                    <button onClick={(e) => { e.stopPropagation(); onSelectSubproject(s); }} className="table-action table-action--primary">Details</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(s); }} className="table-action table-action--danger">Delete</button>
-                                                </div>
-                                            ) : (
-                                                <button onClick={(e) => { e.stopPropagation(); onSelectSubproject(s); }} className="table-action table-action--primary">View Details</button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                    {expandedRowId === s.id && (
-                                        <tr className="data-table__detail-row">
-                                            <td colSpan={11} className="data-table__detail-cell">
-                                                <div className="data-table-detail-grid data-table-detail-grid--three">
-                                                    <div className="data-table-detail-stack">
-                                                        <section className="data-table-detail-section">
-                                                            <h4 className="data-table-detail-title">Project Details</h4>
-                                                            <div className="data-table-detail-text data-table-detail-stack">
-                                                                <p><strong>Location:</strong> <span>{s.location || 'N/A'}</span></p>
-                                                                <p><strong>Package:</strong> <span>{s.packageType || 'N/A'}</span></p>
-                                                                <p><strong>Status:</strong> <span className={getStatusBadge(s.status)}>{s.status || 'Unknown'}</span></p>
-                                                                <p><strong>Encoded by:</strong> <span>{s.encodedBy || 'N/A'}</span></p>
-                                                            </div>
-                                                        </section>
-                                                        <section className="data-table-detail-panel data-table-detail-panel--accent">
-                                                            <h4 className="data-table-detail-title">Timeline</h4>
-                                                            <div className="data-table-detail-text data-table-detail-stack">
-                                                                <p><strong>Start Date:</strong> {formatDate(s.startDate)}</p>
-                                                                <p><strong>Target Completion:</strong> {formatDate(s.estimatedCompletionDate)}</p>
-                                                                <p><strong>Actual Completion:</strong> {formatDate(s.actualCompletionDate)}</p>
-                                                            </div>
-                                                        </section>
-                                                        {s.remarks && (
-                                                            <section className="data-table-detail-section">
-                                                                <h4 className="data-table-detail-title">Remarks</h4>
-                                                                <p className="data-table-detail-empty">{s.remarks}</p>
-                                                            </section>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    <section className="data-table-detail-panel">
-                                                        <h4 className="data-table-detail-title">Budget & Particulars</h4>
-                                                        {details.length > 0 ? (
-                                                            <ul className="data-table-detail-list">
-                                                                {details.map(detail => (
-                                                                    <li key={detail.id} className="data-table-detail-list__item">
-                                                                        <div>
-                                                                            <strong>{detail.particulars || 'Unnamed Item'}</strong>
-                                                                            <span className="data-table-detail-caption">{detail.uacsCode || 'No UACS'} | {detail.numberOfUnits || 0} {detail.unitOfMeasure || 'units'}</span>
-                                                                            <span className="data-table-detail-caption">Obl: {formatMonthYear(detail.obligationMonth)} | Disb: {formatMonthYear(detail.disbursementMonth)}</span>
-                                                                        </div>
-                                                                        <strong>{formatCurrency((detail.pricePerUnit || 0) * (detail.numberOfUnits || 0))}</strong>
-                                                                    </li>
-                                                                ))}
-                                                                <li className="data-table-detail-list__total"><span>Total</span><span>{formatCurrency(calculateTotalBudget(details))}</span></li>
-                                                            </ul>
-                                                        ) : ( <p className="data-table-detail-empty">No budget items listed.</p> )}
-                                                        
-                                                        <div className="data-table-detail-meta">
-                                                            <p><strong>Funding Year:</strong> <span>{s.fundingYear ?? 'N/A'}</span></p>
-                                                            <p><strong>Fund Type:</strong> <span>{s.fundType ?? 'N/A'}</span></p>
-                                                            <p><strong>Tier:</strong> <span>{s.tier ?? 'N/A'}</span></p>
-                                                        </div>
-                                                    </section>
-
-                                                    <section className="data-table-detail-panel">
-                                                        <h4 className="data-table-detail-title">Accomplishment Brief</h4>
-                                                        <div className="data-table-detail-stack">
-                                                            <div className="data-table-detail-metric">
-                                                                <span>Physical Completion</span>
-                                                                <strong>{completionRate}%</strong>
-                                                            </div>
-                                                            <div className="data-table-progress">
-                                                                <div className={`data-table-progress__bar ${completionRate === 100 ? 'data-table-progress__bar--complete' : ''}`} style={{ width: `${completionRate}%` }}></div>
-                                                            </div>
-                                                            <div className="data-table-detail-divider">
-                                                                <div className="data-table-detail-metric"><span>Actual Obligated</span><strong>{formatCurrency(actualObligated)}</strong></div>
-                                                                <div className="data-table-detail-metric"><span>Actual Disbursed</span><strong>{formatCurrency(actualDisbursed)}</strong></div>
-                                                            </div>
-                                                            {s.subprojectCommodities && s.subprojectCommodities.length > 0 && (
-                                                                <div className="data-table-detail-divider">
-                                                                    <p className="data-table-detail-title">Impact</p>
-                                                                    {s.subprojectCommodities.map((c, i) => (
-                                                                        <div key={i} className="data-table-detail-metric"><span>{c.name || 'Unknown'}</span><strong>{c.actualYield ? c.actualYield : '-'} {c.typeName === 'Livestock' ? 'heads' : 'yield'} (Actual)</strong></div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </section>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
-                            );})}
+                                const completionRate = details.length ? Math.round((details.filter(detail => detail.actualDeliveryDate).length / details.length) * 100) : 0;
+                                const commodities = s.subprojectCommodities?.map(commodity => `${commodity.name} (${commodity.area} ${commodity.typeName === 'Livestock' ? 'heads' : 'ha'})`).join(', ') || 'N/A';
+                                return <tr
+                                    key={s.id}
+                                    className={isSelectionMode ? (selectedIds.includes(s.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'}
+                                    tabIndex={isSelectionMode ? undefined : 0}
+                                    aria-label={isSelectionMode ? undefined : `View details for ${s.name || s.uid}`}
+                                    onClick={isSelectionMode ? undefined : () => onSelectSubproject(s)}
+                                    onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectSubproject(s); } }}
+                                >
+                                    {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${s.name || s.uid}`} checked={selectedIds.includes(s.id)} onChange={() => handleSelectRow(s.id)} /></td>}
+                                    <td className="data-table__cell--mono"><TruncatedTableCell value={s.uid || 'No code'} /></td>
+                                    <td className="data-table__cell--primary"><TruncatedTableCell value={s.name || 'Unnamed Subproject'} /></td>
+                                    <td><TruncatedTableCell value={s.operatingUnit} /></td>
+                                    <td><TruncatedTableCell value={s.indigenousPeopleOrganization} /></td>
+                                    <td>{s.fundingYear || '—'}</td><td>{s.fundType || '—'}</td><td>{s.tier || '—'}</td>
+                                    <td><TruncatedTableCell value={commodities} /></td>
+                                    <td className="data-table__cell--numeric">{formatCurrency(budget)}</td>
+                                    <td><span className={getStatusBadge(s.status)}>{s.status || 'Unknown'}</span></td>
+                                    <td>{completionRate}%</td>
+                                    <td><div className="data-table__actions">{getWorkflowStatusBadge(s.workflow_status)}{s.workflow_status === 'PENDING' && canApprove(currentUser?.role) && <><button onClick={(e) => handleApprove(s.id, e)} className="action-mini action-mini--approve" aria-label={`Approve ${s.name}`}><Check aria-hidden="true" /></button><button onClick={(e) => handleReject(s.id, e)} className="action-mini action-mini--reject" aria-label={`Reject ${s.name}`}><X aria-hidden="true" /></button></>}</div></td>
+                                </tr>;
+                            })}
+                            {paginatedSubprojects.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 13 : 12}>No subprojects match the current filters.</td></tr>}
                         </tbody>
                     </table>
                 </div>
-                 
-                <DataTablePagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    totalItems={processedSubprojects.length}
-                    itemsPerPage={itemsPerPage}
-                    onPageChange={setCurrentPage}
-                    onItemsPerPageChange={setItemsPerPage}
-                />
+                <DataTablePagination currentPage={currentPage} totalPages={totalPages} totalItems={processedSubprojects.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
         </div>
     );

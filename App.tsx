@@ -46,6 +46,7 @@ import { DataScope, getDataScopeKey, loadScopedAppData } from './lib/scopedDataF
 import { clearUserCache, getScopeCacheMeta, readScopedCache, writeScopedCache } from './lib/localScopedCache';
 import { normalizeStaffingExpenses } from './lib/staffingExpenseIdentity';
 import { emptyIpoLinkedDcfRecords, fetchIpoLinkedDcfRecords, IpoLinkedDcfRecords } from './lib/ipoLinkedDcfRecords';
+import { fetchWorkflowEntityById, fetchWorkflowIpos } from './lib/workflowLookups';
 import { 
     initialUacsCodes, initialParticularTypes, Subproject, IPO, Activity, User,
     OfficeRequirement, StaffingRequirement, OtherProgramExpense, SystemSettings, defaultSystemSettings,
@@ -199,6 +200,8 @@ const AppContent: React.FC = () => {
     const scopedTableOptions = { autoFetch: false };
     const [subprojects, setSubprojects, subprojectsSync] = useSupabaseTable<Subproject>('subprojects', sampleSubprojects, scopedTableOptions);
     const [ipos, setIpos, iposSync] = useSupabaseTable<IPO>('ipos', sampleIPOs, scopedTableOptions);
+    const [activityWorkflowIpos, setActivityWorkflowIpos] = useState<IPO[]>([]);
+    const [subprojectWorkflowIpos, setSubprojectWorkflowIpos] = useState<IPO[]>([]);
     const [activities, setActivities, activitiesSync] = useSupabaseTable<Activity>('activities', sampleActivities, scopedTableOptions);
     const [marketingPartners, setMarketingPartners, marketingPartnersSync] = useSupabaseTable<MarketingPartner>('marketing_partners', sampleMarketingPartners, scopedTableOptions);
     
@@ -206,6 +209,37 @@ const AppContent: React.FC = () => {
     const [officeReqs, setOfficeReqs, officeReqsSync] = useSupabaseTable<OfficeRequirement>('office_requirements', sampleOfficeRequirements, scopedTableOptions);
     const [staffingReqs, setStaffingReqs, staffingReqsSync] = useSupabaseTable<StaffingRequirement>('staffing_requirements', sampleStaffingRequirements, scopedTableOptions);
     const [otherProgramExpenses, setOtherProgramExpenses, otherProgramExpensesSync] = useSupabaseTable<OtherProgramExpense>('other_program_expenses', sampleOtherProgramExpenses, scopedTableOptions);
+
+    useEffect(() => {
+        if (!isAuthReady || !currentUser) return;
+        let cancelled = false;
+        const loadWorkflowLookups = async () => {
+            try {
+                const [activityIpos, subprojectIpos] = await Promise.all([
+                    fetchWorkflowIpos({
+                        canViewAllOperatingUnits: getVisibilityScope('Activities') === 'All',
+                        operatingUnit: currentUser.operatingUnit
+                    }),
+                    fetchWorkflowIpos({
+                        canViewAllOperatingUnits: getVisibilityScope('Subprojects') === 'All',
+                        operatingUnit: currentUser.operatingUnit
+                    })
+                ]);
+                if (!cancelled) {
+                    setActivityWorkflowIpos(activityIpos);
+                    setSubprojectWorkflowIpos(subprojectIpos);
+                }
+            } catch (error) {
+                console.error('Failed to load permission-scoped workflow IPO lookups:', error);
+                if (!cancelled) {
+                    setActivityWorkflowIpos([]);
+                    setSubprojectWorkflowIpos([]);
+                }
+            }
+        };
+        void loadWorkflowLookups();
+        return () => { cancelled = true; };
+    }, [currentUser, getVisibilityScope, isAuthReady]);
 
     // Financial Records - loaded at startup and refreshed manually
     const [allFinancialObligations, setAllFinancialObligations, financialObligationsSync] = useSupabaseTable<any>('financial_obligations', [], scopedTableOptions);
@@ -541,6 +575,8 @@ const AppContent: React.FC = () => {
     const [selectedOfficeReq, setSelectedOfficeReq] = useState<OfficeRequirement | null>(null);
     const [selectedStaffingReq, setSelectedStaffingReq] = useState<StaffingRequirement | null>(null);
     const [selectedOtherExpense, setSelectedOtherExpense] = useState<OtherProgramExpense | null>(null);
+    const [isDirectRouteLookupLoading, setIsDirectRouteLookupLoading] = useState(false);
+    const directRouteLookupKeyRef = useRef<string | null>(null);
     const [selectedMarketingPartner, setSelectedMarketingPartner] = useState<MarketingPartner | null>(null);
     const [selectedMarketingLinkageKey, setSelectedMarketingLinkageKey] = useState<string | number | null>(null);
     const [selectedLodYear, setSelectedLodYear] = useState<number | null>(null);
@@ -551,6 +587,38 @@ const AppContent: React.FC = () => {
         error: string | null;
     } | null>(null);
     const ipoLinkedDcfCacheRef = useRef<Map<string, IpoLinkedDcfRecords>>(new Map());
+
+    useEffect(() => {
+        const id = getRouteId(routeParams);
+        if (id === null || !currentUser) return;
+        const target = (() => {
+            switch (routePath) {
+                case '/subproject-detail': return { table: 'subprojects' as const, module: 'Subprojects', items: subprojects, select: setSelectedSubproject };
+                case '/activity-detail': return { table: 'activities' as const, module: 'Activities', items: activities, select: setSelectedActivity };
+                case '/program-management/office-detail': return { table: 'office_requirements' as const, module: 'Program Management', items: officeReqs, select: setSelectedOfficeReq };
+                case '/program-management/staffing-detail': return { table: 'staffing_requirements' as const, module: 'Program Management', items: staffingReqs, select: setSelectedStaffingReq };
+                case '/program-management/other-expense-detail': return { table: 'other_program_expenses' as const, module: 'Program Management', items: otherProgramExpenses, select: setSelectedOtherExpense };
+                default: return null;
+            }
+        })();
+        if (!target || !hasAccess(target.module, 'view') || target.items.some(item => item.id === id)) return;
+        const lookupKey = `${target.table}:${id}:${currentUser.id}`;
+        if (directRouteLookupKeyRef.current === lookupKey) return;
+        directRouteLookupKeyRef.current = lookupKey;
+        let cancelled = false;
+        setIsDirectRouteLookupLoading(true);
+        void fetchWorkflowEntityById<any>(target.table, id, {
+            canViewAllOperatingUnits: getVisibilityScope(target.module) === 'All',
+            operatingUnit: currentUser.operatingUnit
+        }).then(record => {
+            if (!cancelled && record) (target.select as React.Dispatch<React.SetStateAction<any>>)(record);
+        }).catch(error => {
+            console.error(`Failed to resolve ${target.table} route ${id}:`, error);
+        }).finally(() => {
+            if (!cancelled) setIsDirectRouteLookupLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [activities, currentUser, getVisibilityScope, hasAccess, officeReqs, otherProgramExpenses, routeParams, routePath, staffingReqs, subprojects]);
     
     // Activity Edit Mode State
     const [activityEditMode, setActivityEditMode] = useState<'create' | 'details' | 'expenses' | 'accomplishment'>('create');
@@ -1010,7 +1078,7 @@ const AppContent: React.FC = () => {
             case '/':
                 return <Dashboard 
                             subprojects={visibleSubprojects} 
-                            ipos={ipos} 
+                            ipos={ipos}
                             activities={visibleActivities}
                             systemSettings={systemSettings}
                             officeReqs={visibleOfficeReqs}
@@ -1127,7 +1195,7 @@ const AppContent: React.FC = () => {
                 return <ActivityEdit 
                             mode={activityEditMode}
                             activity={selectedActivity || undefined}
-                            ipos={ipos}
+                            ipos={activityWorkflowIpos}
                             onBack={handleBack}
                             onUpdateActivity={(updated) => {
                                 if (activityEditMode === 'create') {
@@ -1166,8 +1234,11 @@ const AppContent: React.FC = () => {
                 }
                 return <SubprojectEdit 
                             subproject={selectedSubproject || undefined}
-                            ipos={ipos}
-                            setIpos={setIpos}
+                            ipos={subprojectWorkflowIpos}
+                            setIpos={(action) => {
+                                setIpos(action);
+                                setSubprojectWorkflowIpos(action);
+                            }}
                             onBack={handleBack}
                             onUpdateSubproject={(updated) => {
                                 if (selectedSubproject) {
@@ -1272,7 +1343,7 @@ const AppContent: React.FC = () => {
                     : selectedOfficeReq;
                 if (!latestOffice) {
                     if (routeId === null) return <div>Select an item</div>;
-                    if (isRouteDataLoading) return <LoadingState label="Loading office requirement..." />;
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading office requirement..." />;
                     return (
                         <DetailRouteFallback
                             title="Office requirement not found"
@@ -1300,7 +1371,7 @@ const AppContent: React.FC = () => {
                     : selectedStaffingReq;
                 if (!latestStaff) {
                     if (routeId === null) return <div>Select an item</div>;
-                    if (isRouteDataLoading) return <LoadingState label="Loading staffing requirement..." />;
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading staffing requirement..." />;
                     return (
                         <DetailRouteFallback
                             title="Staffing requirement not found"
@@ -1328,7 +1399,7 @@ const AppContent: React.FC = () => {
                     : selectedOtherExpense;
                 if (!latestOther) {
                     if (routeId === null) return <div>Select an item</div>;
-                    if (isRouteDataLoading) return <LoadingState label="Loading other program expense..." />;
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading other program expense..." />;
                     return (
                         <DetailRouteFallback
                             title="Program expense not found"
@@ -1350,7 +1421,7 @@ const AppContent: React.FC = () => {
             }
             case '/ipo':
                 return <IPOs 
-                            ipos={ipos} 
+                            ipos={ipos}
                             setIpos={setIpos} 
                             subprojects={subprojects} 
                             activities={activities}
@@ -1419,7 +1490,7 @@ const AppContent: React.FC = () => {
                     : selectedSubproject;
                 if (!latestSp) {
                     if (routeId === null) return <div>Select a subproject</div>;
-                    if (isRouteDataLoading) return <LoadingState label="Loading subproject..." />;
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading subproject..." />;
                     return (
                         <DetailRouteFallback
                             title="Subproject not found"
@@ -1431,7 +1502,7 @@ const AppContent: React.FC = () => {
                 }
                 return <SubprojectDetail 
                             subproject={latestSp} 
-                            ipos={ipos}
+                            ipos={subprojectWorkflowIpos}
                             onBack={handleBack} 
                             previousPageName={getPageName(previousPage)}
                             onUpdateSubproject={(updated) => {
@@ -1503,7 +1574,7 @@ const AppContent: React.FC = () => {
                     : selectedActivity;
                 if (!latestAct) {
                     if (routeId === null) return <div>Select an activity</div>;
-                    if (isRouteDataLoading) return <LoadingState label="Loading activity..." />;
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading activity..." />;
                     return (
                         <DetailRouteFallback
                             title="Activity not found"
@@ -1515,7 +1586,7 @@ const AppContent: React.FC = () => {
                 }
                 return <ActivityDetail
                             activity={latestAct}
-                            ipos={ipos}
+                            ipos={activityWorkflowIpos}
                             onBack={handleBack} 
                             previousPageName={getPageName(previousPage)}
                             onUpdateActivity={(updated) => {

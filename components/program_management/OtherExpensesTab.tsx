@@ -11,26 +11,8 @@ import { resolveOperatingUnit, resolveTier } from '../mainfunctions/ImportExport
 import useLocalStorageState from '../../hooks/useLocalStorageState'; // Import for persistent state
 import { Search, X, Check, ChevronDown, Download, FileSpreadsheet, Plus, Upload } from 'lucide-react';
 import { useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
-import { ConfirmDialog, DataTablePagination, FilterableTableHeader } from '../ui/enterprise';
-
-interface OtherExpenseColumnHeaderProps {
-    label: string;
-    columnKey: keyof OtherProgramExpense;
-    sortConfig: { key: string; direction: 'ascending' | 'descending' } | null;
-    onSort: (key: any, direction: 'ascending' | 'descending') => void;
-    filters: string[];
-    onFilterChange: (values: string[]) => void;
-    uniqueValues: string[];
-    isNumeric?: boolean;
-}
-
-const OtherExpenseColumnHeader: React.FC<OtherExpenseColumnHeaderProps> = ({ columnKey, onSort, ...props }) => (
-    <FilterableTableHeader
-        {...props}
-        columnKey={String(columnKey)}
-        onSort={(key, direction) => onSort(key as keyof OtherProgramExpense, direction)}
-    />
-);
+import { ConfirmDialog, DataTablePagination, SortableTableHeader } from '../ui/enterprise';
+import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from '../ui/MajorDataTable';
 
 declare const XLSX: any;
 
@@ -88,6 +70,7 @@ interface OtherExpensesTabProps {
 
 export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
     const { currentUser } = useAuth();
+    const tableStoragePrefix = `programManagement_other_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
@@ -106,9 +89,10 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
     const [selectionIntent, setSelectionIntent] = useState<'delete' | 'clone'>('delete');
 
     // Search and Column Filtering/Sorting
-    const [searchTerm, setSearchTerm] = useLocalStorageState('programManagement_other_searchTerm', '');
-    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: string; direction: 'ascending' | 'descending' }>('programManagement_other_sortConfig', { key: 'id', direction: 'descending' });
-    const [columnFilters, setColumnFilters] = useLocalStorageState<{ [key: string]: string[] }>('programManagement_other_columnFilters', {});
+    const [searchTerm, setSearchTerm] = useLocalStorageState(`${tableStoragePrefix}_searchTerm`, '');
+    const [sortConfig, setSortConfig] = useLocalStorageState<{ key: string; direction: 'ascending' | 'descending' }>(`${tableStoragePrefix}_sortConfig`, { key: 'id', direction: 'descending' });
+    const [columnFilters, setColumnFilters] = useLocalStorageState<{ [key: string]: string[] }>(`${tableStoragePrefix}_columnFilters`, {});
+    const [isColumnFilterOpen, setIsColumnFilterOpen] = useState(false);
 
     useEffect(() => {
         const cleanedFilters = Object.fromEntries(
@@ -276,6 +260,15 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
     const handleColumnFilterChange = (column: string, values: string[]) => {
         setColumnFilters(prev => ({ ...prev, [column]: values }));
     };
+
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        const visibleIds = new Set(filteredItems.map(item => item.id));
+        setSelectedIds(previous => {
+            const next = previous.filter(id => visibleIds.has(id));
+            return next.length === previous.length ? previous : next;
+        });
+    }, [filteredItems, isSelectionMode, setSelectedIds]);
 
     const { currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages, paginatedData } = usePagination(filteredItems, []);
 
@@ -876,207 +869,33 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
         );
     }
 
-    // List View
+    const requestSort = (key: string) => handleSort(key as keyof OtherProgramExpense, sortConfig.key === key && sortConfig.direction === 'ascending' ? 'descending' : 'ascending');
+    const tableFilterFields = [
+        { key: 'status', label: 'Status', values: uniqueValues.status || [] },
+        { key: 'uacsCode', label: 'UACS Code', values: uniqueValues.uacsCode || [] },
+        { key: 'particulars', label: 'Particulars', values: uniqueValues.particulars || [] }
+    ];
+
+    // Compact list view
     return (
-        <div className="data-table-card">            {isDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm deletion"
-                    description="Delete this record? This action cannot be undone."
-                    confirmLabel="Delete record"
-                    onCancel={() => setIsDeleteModalOpen(false)}
-                    onConfirm={handleDelete}
-                />
-            )}            {isMultiDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm bulk deletion"
-                    description={`Delete ${selectedIds.length} selected record${selectedIds.length === 1 ? '' : 's'}? This action cannot be undone.`}
-                    confirmLabel="Delete selected"
-                    onCancel={() => setIsMultiDeleteModalOpen(false)}
-                    onConfirm={handleMultiDelete}
-                />
-            )}
-
-            <div className="data-table-toolbar">
-            <div className="data-toolbar-row">
-                <div className="data-toolbar-group">
-                    <div className="data-toolbar-searchbox">
-                        <span className="data-toolbar-searchbox__icon">
-                            <Search aria-hidden="true" />
-                        </span>
-                        <input 
-                            type="text" 
-                            placeholder="Search Other Expenses..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="data-table-search data-toolbar-searchbox__input"
-                        />
-                        {searchTerm && (
-                            <button 
-                                onClick={() => setSearchTerm('')}
-                                className="data-toolbar-searchbox__clear"
-                            >
-                                <X aria-hidden="true" />
-                            </button>
-                        )}
-                    </div>
-                </div>
-                <div className="data-toolbar-group data-toolbar-group--actions">
-                    {isSelectionMode && selectedIds.length > 0 && (
-                        <button 
-                            onClick={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} 
-                            className={`btn ${selectionIntent === 'delete' ? 'btn-danger' : 'btn-info'}`}
-                        >
-                            {selectionIntent === 'delete' ? `Delete Selected (${selectedIds.length})` : `Clone Selected (${selectedIds.length})`}
-                        </button>
-                    )}
-                    {canEdit && (
-                        <button 
-                            onClick={() => { setEditingItem(null); setView('form'); }} 
-                            className="btn btn-primary btn-responsive"
-                            title="Add New"
-                        >
-                            <Plus className="btn-symbol" aria-hidden="true" />
-                            <span className="btn-text">Add New</span>
-                        </button>
-                    )}
-                    <button onClick={handleDownloadReport} className="btn btn-primary btn-responsive" title="Download Report">
-                        <Download className="btn-symbol" aria-hidden="true" />
-                        <span className="btn-text">Download Report</span>
-                    </button>
-                    {canEdit && (
-                        <>
-                            <button onClick={handleDownloadTemplate} className="btn btn-secondary btn-responsive" title="Download Template">
-                                <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">Template</span>
-                            </button>
-                            <label className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : ''}`} title={isUploading ? 'Uploading...' : 'Upload XLSX'}>
-                                <Upload className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload XLSX'}</span>
-                                <input type="file" className="file-input-hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} />
-                            </label>
-                            <button 
-                                onClick={() => handleToggleMode('clone')} 
-                                className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'clone' ? 'is-active-clone' : ''}`} 
-                                title="Toggle Clone Mode"
-                            >
-                                <DuplicateIcon />
-                            </button>
-                            <button 
-                                onClick={() => handleToggleMode('delete')} 
-                                className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'delete' ? 'is-active-danger' : ''}`} 
-                                title="Toggle Multi-Delete Mode"
-                            >
-                                <TrashIcon />
-                            </button>
-                        </>
-                    )}
-                </div>
-            </div>
-            </div>
-
-            <div className="data-table-scroll">
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <OtherExpenseColumnHeader label="UID" columnKey="uid" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['uid'] || []} onFilterChange={(v) => handleColumnFilterChange('uid', v)} uniqueValues={uniqueValues['uid']} />
-                            <OtherExpenseColumnHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['operatingUnit'] || []} onFilterChange={(v) => handleColumnFilterChange('operatingUnit', v)} uniqueValues={uniqueValues['operatingUnit']} />
-                            <OtherExpenseColumnHeader label="Status" columnKey="status" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['status'] || []} onFilterChange={(v) => handleColumnFilterChange('status', v)} uniqueValues={uniqueValues['status']} />
-                            <OtherExpenseColumnHeader label="UACS Code" columnKey="uacsCode" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['uacsCode'] || []} onFilterChange={(v) => handleColumnFilterChange('uacsCode', v)} uniqueValues={uniqueValues['uacsCode']} />
-                            <OtherExpenseColumnHeader label="Particulars" columnKey="particulars" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['particulars'] || []} onFilterChange={(v) => handleColumnFilterChange('particulars', v)} uniqueValues={uniqueValues['particulars']} />
-                            <OtherExpenseColumnHeader label="Amount" columnKey="amount" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['amount'] || []} onFilterChange={(v) => handleColumnFilterChange('amount', v)} uniqueValues={[]} isNumeric />
-                            <OtherExpenseColumnHeader label="Fund Year" columnKey="fundYear" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['fundYear'] || []} onFilterChange={(v) => handleColumnFilterChange('fundYear', v)} uniqueValues={uniqueValues['fundYear']} />
-                            <OtherExpenseColumnHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['fundType'] || []} onFilterChange={(v) => handleColumnFilterChange('fundType', v)} uniqueValues={uniqueValues['fundType']} />
-                            <OtherExpenseColumnHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={handleSort} filters={columnFilters['tier'] || []} onFilterChange={(v) => handleColumnFilterChange('tier', v)} uniqueValues={uniqueValues['tier']} />
-                            <th className="data-table__head--status">Workflow Status</th>
-                            <th className="data-table__head--actions data-table__sticky-right">{isSelectionMode ? "Select" : "Actions"}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {paginatedData.map((item) => (
-                            <tr key={item.id} >
-                                <td className="data-table__cell--muted data-table__cell--nowrap data-table__cell--mono">{item.uid}</td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap">{item.operatingUnit}</td>
-                                <td className="data-table__cell--nowrap">
-                                    <span className={`status-badge ${
-                                        item.status === 'Completed' ? 'status-badge--completed' :
-                                        item.status === 'Ongoing' ? 'status-badge--ongoing' :
-                                        item.status === 'Cancelled' ? 'status-badge--cancelled' :
-                                        'status-badge--proposed'
-                                    }`}>
-                                        {item.status}
-                                    </span>
-                                </td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap data-table__cell--mono">
-                                    {item.uacsCode}
-                                </td>
-                                <td className="data-table__cell--primary"><div className="data-table__cell--truncate" title={item.particulars}>{item.particulars}</div></td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap data-table__cell--numeric">{formatCurrency(item.amount)}</td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap">{item.fundYear}</td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap">{item.fundType}</td>
-                                <td className="data-table__cell--primary data-table__cell--nowrap">{item.tier}</td>
-                                <td className="data-table__cell--nowrap">
-                                    <div className="data-table-workflow">
-                                        {getWorkflowStatusBadge(item.workflow_status)}
-                                        {item.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                            <div className="data-table-workflow__actions">
-                                                <button 
-                                                    onClick={(e) => handleApprove(item.id, e)} 
-                                                    className="action-mini action-mini--approve"
-                                                    title="Approve"
-                                                >
-                                                    <Check className="btn-symbol" />
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => handleReject(item.id, e)} 
-                                                    className="action-mini action-mini--reject"
-                                                    title="Reject"
-                                                >
-                                                    <X className="btn-symbol" />
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
-                                    {isSelectionMode ? (
-                                        <input 
-                                            type="checkbox" 
-                                            checked={selectedIds.includes(item.id)} 
-                                            onChange={(e) => { e.stopPropagation(); handleSelectRow(item.id); }} 
-                                            className="form-checkbox"
-                                        />
-                                    ) : (
-                                        <div className="data-table__actions">
-                                            {canEdit ? (
-                                                <>
-                                                    <button onClick={() => onSelect(item)} className="table-action table-action--primary">Details</button>
-                                                    <button 
-                                                        onClick={() => { setItemToDelete(item); setIsDeleteModalOpen(true); }} 
-                                                        className="table-action table-action--danger"
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <button onClick={() => onSelect(item)} className="table-action table-action--primary">View Details</button>
-                                            )}
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>            <DataTablePagination
-                currentPage={currentPage}
-                itemsPerPage={itemsPerPage}
-                totalItems={filteredItems.length}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                onItemsPerPageChange={setItemsPerPage}
-                pageSizeOptions={[10, 20, 50, 100]}
-                aria-label="Program management pagination"
-            />
+        <div className="data-table-card major-table-card animate-fadeIn">
+            {isDeleteModalOpen && <ConfirmDialog title="Confirm deletion" description="Delete this record? This action cannot be undone." confirmLabel="Delete record" onCancel={() => setIsDeleteModalOpen(false)} onConfirm={handleDelete} />}
+            {isMultiDeleteModalOpen && <ConfirmDialog title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`} description="This action cannot be undone. The selected records will be permanently removed." confirmLabel="Delete" onCancel={() => setIsMultiDeleteModalOpen(false)} onConfirm={handleMultiDelete} />}
+            <ColumnFilterDialog open={isColumnFilterOpen} fields={tableFilterFields} filters={columnFilters} onApply={setColumnFilters} onClose={() => setIsColumnFilterOpen(false)} />
+            <MajorTableToolbar searchTerm={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Search other expenses..." activeFilterCount={Object.keys(columnFilters).length} onOpenFilters={() => setIsColumnFilterOpen(true)} actions={isSelectionMode ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} /> : <>
+                {canEdit && <button onClick={() => { setEditingItem(null); setView('form'); }} className="btn btn-primary"><Plus aria-hidden="true" /> Add New</button>}
+                <button onClick={handleDownloadReport} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
+                {canEdit && <><button onClick={handleDownloadTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button><label className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}<input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} /></label><button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple expenses"><DuplicateIcon /> Clone</button><button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple expenses"><TrashIcon /> Delete</button></>}
+            </>} />
+            <div className="data-table-scroll"><table className="data-table"><thead><tr>
+                {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all expenses on this page" onChange={(event) => handleSelectAll(event, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(item => selectedIds.includes(item.id))} indeterminate={paginatedData.some(item => selectedIds.includes(item.id)) && !paginatedData.every(item => selectedIds.includes(item.id))} /></th>}
+                <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Status" columnKey="status" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="UACS Code" columnKey="uacsCode" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Particulars" columnKey="particulars" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Amount" columnKey="amount" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Year" columnKey="fundYear" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={requestSort} /><th>Workflow Status</th>
+            </tr></thead><tbody>
+                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>{isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} /></td>}<td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={`status-badge ${item.status === 'Completed' ? 'status-badge--completed' : item.status === 'Ongoing' ? 'status-badge--ongoing' : item.status === 'Cancelled' ? 'status-badge--cancelled' : 'status-badge--proposed'}`}>{item.status}</span></td><td className="data-table__cell--mono"><TruncatedTableCell value={item.uacsCode} /></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.particulars} /></td><td className="data-table__cell--numeric">{formatCurrency(item.amount)}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td>{getWorkflowStatusBadge(item.workflow_status)}</td></tr>)}
+                {paginatedData.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No other expenses match the current filters.</td></tr>}
+            </tbody></table></div>
+            <DataTablePagination currentPage={currentPage} itemsPerPage={itemsPerPage} totalItems={filteredItems.length} totalPages={totalPages} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
         </div>
     );
+
 };

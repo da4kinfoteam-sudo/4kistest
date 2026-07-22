@@ -8,7 +8,7 @@ import { StaffingRequirementsTab } from './program_management/StaffingRequiremen
 import { OtherExpensesTab } from './program_management/OtherExpensesTab';
 import useLocalStorageState from '../hooks/useLocalStorageState';
 import type { DataScope } from '../lib/scopedDataFetch';
-import { DcfScopeFilterPanel, DcfScopeFilterToggle, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
+import { DcfScopeFilterPanel, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
 
 interface ProgramManagementProps {
     officeReqs: OfficeRequirement[];
@@ -70,7 +70,6 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({
         <div className="data-list-page">
             <div className="data-list-header">
                 <h2 className="data-list-title">Program Management</h2>
-                <DcfScopeFilterToggle idPrefix="program-management-dcf" filters={dcfFilters} />
             </div>
             <DcfScopeFilterPanel idPrefix="program-management-dcf" filters={dcfFilters} />
 

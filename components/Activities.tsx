@@ -13,11 +13,18 @@ import { fetchAll } from '../hooks/useSupabaseTable';
 import useLocalStorageState from '../hooks/useLocalStorageState';
 import { useDcfPolicyGuard } from '../hooks/useDcfPolicyGuard';
 import type { DataScope } from '../lib/scopedDataFetch';
-import { DcfScopeFilterPanel, DcfScopeFilterToggle, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
-import { ConfirmDialog, DataTablePagination, FilterableTableHeader } from './ui/enterprise';
+import { DcfScopeFilterPanel, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
+import { ConfirmDialog, DataTablePagination, SortableTableHeader } from './ui/enterprise';
+import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
+import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../lib/budgetLineAdjustments';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
+
+const calculateActivityBudget = (activity: Activity) => (activity.expenses || []).reduce(
+    (total, expense) => total + (isBudgetLineExcludedFromTargets(expense) ? 0 : getBudgetLineAmount(expense)),
+    0
+);
 
 interface ActivitiesProps {
     ipos: IPO[];
@@ -66,6 +73,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
     onDataScopeChange
 }) => {
     const { currentUser } = useAuth();
+    const tableStoragePrefix = `activities_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { addIpoHistory } = useIpoHistory();
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
@@ -78,23 +86,23 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
     // Shared Hooks
     const { canEdit, canViewAll } = useUserAccess('Activities');
     const {
-        isSelectionMode, selectedIds, isMultiDeleteModalOpen, setIsMultiDeleteModalOpen, toggleSelectionMode,
+        isSelectionMode, selectedIds, setSelectedIds, isMultiDeleteModalOpen, setIsMultiDeleteModalOpen, toggleSelectionMode,
         handleSelectAll, handleSelectRow, resetSelection
     } = useSelection<Activity>();
 
     // Global Filters (Only Search retained in UI)
-    const [savedSearchTerm, setSavedSearchTerm] = useLocalStorageState('activities_searchTerm', '');
+    const [savedSearchTerm, setSavedSearchTerm] = useLocalStorageState(`${tableStoragePrefix}_searchTerm`, '');
     const [searchTerm, setSearchTerm] = useState(savedSearchTerm);
 
     // Column Filters (New) - Stores an array of selected values for each column key
-    const [savedColumnFilters, setSavedColumnFilters] = useLocalStorageState<Record<string, string[]>>('activities_columnFilters', {});
+    const [savedColumnFilters, setSavedColumnFilters] = useLocalStorageState<Record<string, string[]>>(`${tableStoragePrefix}_columnFilters`, {});
     const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>(savedColumnFilters);
+    const [isColumnFilterOpen, setIsColumnFilterOpen] = useState(false);
 
     // Sorting
     type SortKeys = keyof Activity | 'totalParticipants' | 'budget';
     const [sortConfig, setSortConfig] = useState<{ key: SortKeys; direction: 'ascending' | 'descending' } | null>({ key: 'date', direction: 'descending' });
 
-    const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
     const dcfFilters = useDcfScopeFilters({
         storageKey: forcedType === 'Training'
             ? 'trainings_dcf_scope'
@@ -104,6 +112,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         moduleName: 'Activities',
         onDataScopeChange
     });
+    const applyExternalScope = dcfFilters.applyScope;
 
     useEffect(() => {
         const cleanedFilters = Object.fromEntries(
@@ -120,9 +129,8 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         if (externalFilters) {
             const newFilters: Record<string, string[]> = {};
 
-            if (externalFilters.year) {
-                newFilters['fundingYear'] = [externalFilters.year];
-            }
+            const scopeUpdates: Parameters<typeof applyExternalScope>[0] = {};
+            if (externalFilters.year) scopeUpdates.selectedYear = externalFilters.year;
             if (externalFilters.region) {
                 // Improved logic: Filter OUs where the mapped region name includes the filter text
                 // This handles "Region 3" vs "Region III" loose matching
@@ -133,9 +141,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                     return mappedRegion.toLowerCase().includes(filterRegionLower);
                 });
 
-                if (targetOUs.length > 0) {
-                    newFilters['operatingUnit'] = targetOUs;
-                }
+                if (targetOUs.length > 0) scopeUpdates.selectedOu = targetOUs[0];
             }
             if (externalFilters.status) {
                 newFilters['status'] = [externalFilters.status];
@@ -147,13 +153,14 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
             if (Object.keys(newFilters).length > 0) {
                 setColumnFilters(prev => ({ ...prev, ...newFilters }));
             }
+            if (Object.keys(scopeUpdates).length > 0) applyExternalScope(scopeUpdates);
 
             // Clear the external filters so they don't re-apply on remount or navigation
             if (onClearExternalFilters) {
                 onClearExternalFilters();
             }
         }
-    }, [externalFilters, onClearExternalFilters]);
+    }, [applyExternalScope, externalFilters, onClearExternalFilters]);
 
     // 1. Initial Filtering (Search + Permissions + ForcedType)
     const initiallyFilteredActivities = useMemo(() => {
@@ -225,8 +232,8 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                     aValue = a.participantsMale + a.participantsFemale;
                     bValue = b.participantsMale + b.participantsFemale;
                 } else if (sortConfig.key === 'budget') {
-                    aValue = a.expenses.reduce((sum, e) => sum + e.amount, 0);
-                    bValue = b.expenses.reduce((sum, e) => sum + e.amount, 0);
+                    aValue = calculateActivityBudget(a);
+                    bValue = calculateActivityBudget(b);
                 } else {
                     aValue = a[sortConfig.key as keyof Activity] || '';
                     bValue = b[sortConfig.key as keyof Activity] || '';
@@ -240,14 +247,27 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         return filtered;
     }, [initiallyFilteredActivities, columnFilters, sortConfig]);
 
+    useEffect(() => {
+        if (!isSelectionMode) return;
+        const visibleIds = new Set(processedActivities.map(item => item.id));
+        setSelectedIds(previous => {
+            const next = previous.filter(id => visibleIds.has(id));
+            return next.length === previous.length ? previous : next;
+        });
+    }, [isSelectionMode, processedActivities, setSelectedIds]);
+
     // Use Shared Pagination Hook
     const {
         currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalPages, paginatedData: paginatedActivities
     } = usePagination(processedActivities, [searchTerm, forcedType, sortConfig, columnFilters]);
 
     // Sorting Handler
-    const handleSort = (key: SortKeys, direction: 'ascending' | 'descending') => {
-        setSortConfig({ key, direction });
+    const handleSort = (key: string) => {
+        const typedKey = key as SortKeys;
+        setSortConfig(previous => ({
+            key: typedKey,
+            direction: previous?.key === typedKey && previous.direction === 'ascending' ? 'descending' : 'ascending'
+        }));
     };
 
     // Filter Change Handler
@@ -282,21 +302,6 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         setColumnFilters({});
         setSavedColumnFilters({});
     }
-
-    const getScopeColumnFilter = (key: 'fundingYear' | 'operatingUnit' | 'fundType' | 'tier') => {
-        const value = key === 'fundingYear'
-            ? dcfFilters.selectedYear
-            : key === 'operatingUnit'
-                ? dcfFilters.selectedOu
-                : key === 'fundType'
-                    ? dcfFilters.selectedFundType
-                    : dcfFilters.selectedTier;
-        return value === 'All' ? [] : [value];
-    };
-
-    const handleToggleRow = (activityId: number) => {
-        setExpandedRowId(prevId => (prevId === activityId ? null : activityId));
-    };
 
     const canDeleteActivityByPolicy = (activity: Activity) => getDeleteDecision({
         moduleKey: 'activities',
@@ -535,367 +540,95 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         }
     };
 
-    return (
-        <div className="data-list-page">
-            {isDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm deletion"
-                    description="Are you sure you want to delete this activity?"
-                    confirmLabel="Delete"
-                    onCancel={() => setIsDeleteModalOpen(false)}
-                    onConfirm={confirmDelete}
-                />
-            )}
+    const columnFilterFields = [
+        { key: 'name', label: 'Activity Name', values: uniqueValues.name },
+        { key: 'component', label: 'Component', values: uniqueValues.component },
+        { key: 'status', label: 'Status', values: uniqueValues.status },
+        { key: 'date', label: 'Date', values: uniqueValues.date }
+    ];
 
-            {isMultiDeleteModalOpen && (
-                <ConfirmDialog
-                    title="Confirm bulk deletion"
-                    description={<>Are you sure you want to delete the <strong>{selectedIds.length}</strong> selected activities? This action cannot be undone.</>}
-                    confirmLabel="Delete all selected"
-                    onCancel={() => setIsMultiDeleteModalOpen(false)}
-                    onConfirm={confirmMultiDelete}
-                />
-            )}
+    const activityPageTitle = forcedType === 'Training' ? 'Trainings Management' : forcedType === 'Activity' ? 'Activities Management' : 'Activities Management';
+    const currency = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+
+    return (
+        <div className="data-list-page activities-major-table-page">
+            {isDeleteModalOpen && <ConfirmDialog title="Confirm deletion" description="Are you sure you want to delete this activity?" confirmLabel="Delete" onCancel={() => setIsDeleteModalOpen(false)} onConfirm={confirmDelete} />}
+            {isMultiDeleteModalOpen && <ConfirmDialog title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`} description="This action cannot be undone. The selected records will be permanently removed." confirmLabel="Delete" onCancel={() => setIsMultiDeleteModalOpen(false)} onConfirm={confirmMultiDelete} />}
+            <ColumnFilterDialog open={isColumnFilterOpen} fields={columnFilterFields} filters={columnFilters} onApply={(filters) => { setColumnFilters(filters); setSavedColumnFilters(filters); }} onClose={() => setIsColumnFilterOpen(false)} />
 
             <div className="data-list-header">
-                <h2 className="data-list-title">Activities Management</h2>
-                <div className="data-list-actions">
-                    <DcfScopeFilterToggle idPrefix="activities-dcf" filters={dcfFilters} />
-                    {canEdit && (
-                        <button onClick={onCreateActivity} className="btn btn-primary btn-responsive" title="Add New Activity">
-                            <Plus className="btn-symbol" aria-hidden="true" />
-                            <span className="btn-text">Add New Activity</span>
-                        </button>
-                    )}
-                </div>
+                <h2 className="data-list-title">{activityPageTitle}</h2>
+                {canEdit && <button onClick={onCreateActivity} className="btn btn-primary"><Plus aria-hidden="true" /> Add New Activity</button>}
             </div>
             <DcfScopeFilterPanel idPrefix="activities-dcf" filters={dcfFilters} />
-            <div className="data-table-card">
-                 <div className="data-table-toolbar">
-                    <div className="data-toolbar-row">
-                        <div className="data-toolbar-group">
-                            <input
-                                type="text"
-                                placeholder="Search Activity..."
-                                value={searchTerm}
-                                onChange={(e) => {
-                                    setSearchTerm(e.target.value);
-                                    setSavedSearchTerm(e.target.value);
-                                }}
-                                className={`data-table-search w-full md:w-64 ${commonInputClasses} mt-0`}
-                            />
-
-                            {Object.keys(columnFilters).length > 0 && (
-                                <button onClick={clearColumnFilters} className="data-table-reset">
-                                    Reset Filters
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="data-toolbar-group data-toolbar-group--actions">
-                            {isSelectionMode && selectedIds.length > 0 && (
-                                <button
-                                    onClick={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()}
-                                    className={`btn ${selectionIntent === 'delete' ? 'btn-danger' : 'btn-info'}`}
-                                >
-                                    {selectionIntent === 'delete' ? `Delete Selected (${selectedIds.length})` : `Clone Selected (${selectedIds.length})`}
-                                </button>
-                            )}
-                            <button onClick={() => downloadActivitiesReport(processedActivities)} className="btn btn-primary btn-responsive" title="Download Report">
-                                <Download className="btn-symbol" aria-hidden="true" />
-                                <span className="btn-text">Download Report</span>
-                            </button>
-                            {canEdit && (
-                                <>
-                                    <button onClick={downloadActivitiesTemplate} className="btn btn-secondary btn-responsive" title="Download Template">
-                                        <FileSpreadsheet className="btn-symbol" aria-hidden="true" />
-                                        <span className="btn-text">Template</span>
-                                    </button>
-                                    <label htmlFor="activity-upload" className={`btn btn-primary btn-responsive ${isUploading ? 'is-disabled' : 'cursor-pointer'}`} title={isUploading ? 'Uploading...' : 'Upload'}>
-                                        <Upload className="btn-symbol" aria-hidden="true" />
-                                        <span className="btn-text">{isUploading ? 'Uploading...' : 'Upload'}</span>
-                                    </label>
-                                    <input id="activity-upload" type="file" className="hidden" onChange={(e) => handleActivitiesUpload(e, activities, setActivities, ipos, logAction, setIsUploading, uacsCodes, currentUser)} accept=".xlsx, .xls" disabled={isUploading} />
-                                    <button
-                                        onClick={() => handleToggleMode('clone')}
-                                        className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'clone' ? 'is-active-clone' : ''}`}
-                                        title="Toggle Clone Mode"
-                                    >
-                                        <DuplicateIcon />
-                                    </button>
-                                    <button
-                                        onClick={() => handleToggleMode('delete')}
-                                        className={`btn btn-secondary btn-icon ${isSelectionMode && selectionIntent === 'delete' ? 'is-active-danger' : ''}`}
-                                        title="Toggle Multi-Delete Mode"
-                                    >
-                                        <TrashIcon />
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                     </div>
-                 </div>
-
+            <div className="data-table-card major-table-card">
+                <MajorTableToolbar
+                    searchTerm={searchTerm}
+                    onSearchChange={(value) => { setSearchTerm(value); setSavedSearchTerm(value); }}
+                    searchPlaceholder="Search activities..."
+                    activeFilterCount={Object.keys(columnFilters).length}
+                    onOpenFilters={() => setIsColumnFilterOpen(true)}
+                    actions={isSelectionMode
+                        ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} />
+                        : <>
+                        <button onClick={() => downloadActivitiesReport(processedActivities)} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
+                        {canEdit && <>
+                            <button onClick={downloadActivitiesTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
+                            <label htmlFor="activity-upload-major" className={`btn btn-secondary ${isUploading ? 'is-disabled' : 'cursor-pointer'}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
+                            <input id="activity-upload-major" type="file" className="hidden" onChange={(event) => handleActivitiesUpload(event, activities, setActivities, ipos, logAction, setIsUploading, uacsCodes, currentUser)} accept=".xlsx,.xls" disabled={isUploading} />
+                            <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple activities"><DuplicateIcon /> Clone</button>
+                            <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple activities"><TrashIcon /> Delete</button>
+                        </>}
+                    </>}
+                />
                 <div className="data-table-scroll">
                     <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th scope="col" className="data-table__sticky-left" aria-label="Expand row"></th>
-                                <FilterableTableHeader
-                                    label="Name"
-                                    columnKey="name"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={columnFilters['name'] || []}
-                                    onFilterChange={(v) => handleColumnFilterChange('name', v)}
-                                    uniqueValues={uniqueValues.name}
-                                />
-                                <FilterableTableHeader
-                                    label="OU"
-                                    columnKey="operatingUnit"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={getScopeColumnFilter('operatingUnit')}
-                                    onFilterChange={(v) => handleColumnFilterChange('operatingUnit', v)}
-                                    uniqueValues={uniqueValues.operatingUnit}
-                                />
-                                <FilterableTableHeader
-                                    label="Component"
-                                    columnKey="component"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={columnFilters['component'] || []}
-                                    onFilterChange={(v) => handleColumnFilterChange('component', v)}
-                                    uniqueValues={uniqueValues.component}
-                                />
-                                <FilterableTableHeader
-                                    label="Fund Year"
-                                    columnKey="fundingYear"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={getScopeColumnFilter('fundingYear')}
-                                    onFilterChange={(v) => handleColumnFilterChange('fundingYear', v)}
-                                    uniqueValues={uniqueValues.fundingYear}
-                                />
-                                <FilterableTableHeader
-                                    label="Fund Type"
-                                    columnKey="fundType"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={getScopeColumnFilter('fundType')}
-                                    onFilterChange={(v) => handleColumnFilterChange('fundType', v)}
-                                    uniqueValues={uniqueValues.fundType}
-                                />
-                                <FilterableTableHeader
-                                    label="Tier"
-                                    columnKey="tier"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={getScopeColumnFilter('tier')}
-                                    onFilterChange={(v) => handleColumnFilterChange('tier', v)}
-                                    uniqueValues={uniqueValues.tier}
-                                />
-                                <FilterableTableHeader
-                                    label="Project Status"
-                                    columnKey="status"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={columnFilters['status'] || []}
-                                    onFilterChange={(v) => handleColumnFilterChange('status', v)}
-                                    uniqueValues={uniqueValues.status}
-                                />
-                                <FilterableTableHeader
-                                    label="Date"
-                                    columnKey="date"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={columnFilters['date'] || []}
-                                    onFilterChange={(v) => handleColumnFilterChange('date', v)}
-                                    uniqueValues={uniqueValues.date}
-                                />
-                                <FilterableTableHeader
-                                    label="Description"
-                                    columnKey="description"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={columnFilters['description'] || []}
-                                    onFilterChange={(v) => handleColumnFilterChange('description', v)}
-                                    uniqueValues={uniqueValues.description}
-                                />
-                                <FilterableTableHeader
-                                    label="Budget"
-                                    columnKey="budget"
-                                    sortConfig={sortConfig}
-                                    onSort={handleSort}
-                                    filters={[]}
-                                    onFilterChange={() => {}}
-                                    uniqueValues={[]}
-                                    isNumeric={true}
-                                />
-                                <th scope="col">Workflow Status</th>
-                                <th scope="col" className="data-table__head--actions data-table__sticky-right">
-                                    {isSelectionMode ? (
-                                        <div className="data-table__select-all">
-                                            <span>Select all</span>
-                                            <input
-                                                type="checkbox"
-                                                onChange={(e) => handleSelectAll(e, paginatedActivities)}
-                                                checked={paginatedActivities.length > 0 && paginatedActivities.every(a => selectedIds.includes(a.id))}
-                                                className="form-checkbox"
-                                            />
-                                        </div>
-                                    ) : (
-                                        "Actions"
-                                    )}
-                                </th>
-                            </tr>
-                        </thead>
+                        <thead><tr>
+                            {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all activities on this page" onChange={(event) => handleSelectAll(event, paginatedActivities)} checked={paginatedActivities.length > 0 && paginatedActivities.every(item => selectedIds.includes(item.id))} indeterminate={paginatedActivities.some(item => selectedIds.includes(item.id)) && !paginatedActivities.every(item => selectedIds.includes(item.id))} /></th>}
+                            <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Activity Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Operating Unit" columnKey="operatingUnit" sortConfig={sortConfig} onSort={handleSort} />
+                            <th>IPO</th>
+                            <SortableTableHeader label="Fund Year" columnKey="fundingYear" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Budget" columnKey="budget" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Status" columnKey="status" sortConfig={sortConfig} onSort={handleSort} />
+                            <th>Workflow Status</th>
+                        </tr></thead>
                         <tbody>
-                            {paginatedActivities.map((activity) => {
-                                const totalActivityBudget = activity.expenses.reduce((sum, e) => sum + e.amount, 0);
-                                const totalParticipants = activity.participantsMale + activity.participantsFemale;
-
-                                return (
-                                <React.Fragment key={activity.id}>
-                                    <tr onClick={() => handleToggleRow(activity.id)} className="data-table__row--interactive">
-                                        <td className="data-table__sticky-left data-table__cell--soft"><svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform duration-200 ${expandedRowId === activity.id ? 'transform rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></td>
-                                        <td className="data-table__cell--primary data-table__cell--wrap">
-                                            <button onClick={(e) => { e.stopPropagation(); onSelectActivity(activity); }} className="table-link">
-                                                {activity.name}
-                                            </button>
-                                            {activity.uid && <span className="data-table__subline">{activity.uid}</span>}
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.operatingUnit}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.component}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.fundingYear || 'N/A'}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.fundType || 'N/A'}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{activity.tier || 'N/A'}</td>
-                                        <td className="data-table__cell--nowrap"><span className={getStatusBadge(activity.status)}>{activity.status}</span></td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">
-                                            {new Date(activity.date).toLocaleDateString()}
-                                            {activity.endDate && activity.endDate !== activity.date ? ` - ${new Date(activity.endDate).toLocaleDateString()}` : ''}
-                                        </td>
-                                        <td className="data-table__cell--muted data-table__cell--truncate" title={activity.description}>{activity.description}</td>
-                                        <td className="data-table__cell--muted data-table__cell--nowrap">{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalActivityBudget)}</td>
-                                        <td className="data-table__cell--nowrap">
-                                            <div className="flex flex-col gap-1 items-start">
-                                                {getWorkflowStatusBadge(activity.workflow_status)}
-                                                {activity.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                                    <div className="flex gap-1 mt-1">
-                                                        <button
-                                                            onClick={(e) => handleApprove(activity.id, e)}
-                                                            className="action-mini action-mini--approve"
-                                                            title="Approve"
-                                                        >
-                                                            <Check className="h-3 w-3" />
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => handleReject(activity.id, e)}
-                                                            className="action-mini action-mini--reject"
-                                                            title="Reject"
-                                                        >
-                                                            <X className="h-3 w-3" />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="data-table__cell--actions data-table__cell--nowrap data-table__sticky-right">
-                                            {canEdit ? (
-                                                <div className="data-table__actions">
-                                                    {isSelectionMode && (
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={selectedIds.includes(activity.id)}
-                                                            onChange={(e) => { e.stopPropagation(); handleSelectRow(activity.id); }}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            className="form-checkbox"
-                                                        />
-                                                    )}
-                                                    <button onClick={(e) => { e.stopPropagation(); onSelectActivity(activity); }} className="table-action table-action--primary">Profile</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(activity); }} className="table-action table-action--danger">Delete</button>
-                                                </div>
-                                            ) : (
-                                                <button onClick={(e) => { e.stopPropagation(); onSelectActivity(activity); }} className="table-action table-action--primary">View Profile</button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                     {expandedRowId === activity.id && (
-                                        <tr className="data-table__detail-row">
-                                            <td colSpan={12} className="data-table__detail-cell">
-                                                <div className="data-table-detail-grid">
-                                                    <div className="data-table-detail-stack">
-                                                        <section className="data-table-detail-section">
-                                                            <h4 className="data-table-detail-title">Details</h4>
-                                                            <p className="data-table-detail-text"><strong>Type:</strong> <span className={`status-badge ${activity.type === 'Training' ? 'status-badge--completed' : 'status-badge--info'}`}>{activity.type}</span></p>
-                                                            <p className="data-table-detail-text"><strong>Component:</strong> {activity.component}</p>
-                                                            {activity.description && (
-                                                                <div className="data-table-detail-section">
-                                                                    <p className="data-table-detail-text"><strong>Description:</strong></p>
-                                                                    <p className="data-table-detail-empty">{activity.description}</p>
-                                                                </div>
-                                                            )}
-                                                            {activity.type === 'Training' && activity.facilitator && <p className="data-table-detail-text">Facilitator: {activity.facilitator}</p>}
-                                                            <p className="data-table-detail-text">Encoded by: {activity.encodedBy}</p>
-                                                        </section>
-                                                        <section className="data-table-detail-section">
-                                                            <h4 className="data-table-detail-title">Target Participants</h4>
-                                                            <div className="data-table-detail-text">
-                                                                <p>Male: {activity.participantsMale}</p>
-                                                                <p>Female: {activity.participantsFemale}</p>
-                                                                <p><strong>Total: {totalParticipants}</strong></p>
-                                                            </div>
-                                                        </section>
-                                                        {activity.participatingIpos.length > 0 && (
-                                                            <section className="data-table-detail-section">
-                                                                <h4 className="data-table-detail-title">Participating IPOs</h4>
-                                                                <div className="data-table-detail-pills">
-                                                                    {activity.participatingIpos.map(ipoName => {
-                                                                        const ipo = ipos.find(i => i.name === ipoName);
-                                                                        return (
-                                                                            <button key={ipoName} onClick={(e) => { e.stopPropagation(); if (ipo) onSelectIpo(ipo); }} className="data-table-detail-pill" disabled={!ipo} title={ipo ? `View details for ${ipoName}` : `${ipoName} (details not found)`}>
-                                                                                {ipoName}
-                                                                            </button>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </section>
-                                                        )}
-                                                    </div>
-                                                    <section className="data-table-detail-panel">
-                                                        <h4 className="data-table-detail-title">Budget & Funding</h4>
-                                                         {activity.expenses.length > 0 ? (
-                                                             <ul className="data-table-detail-list">
-                                                                {activity.expenses.map(exp => (
-                                                                    <li key={exp.id} className="data-table-detail-list__item"><span>{exp.expenseParticular} ({exp.uacsCode})</span><strong>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(exp.amount)}</strong></li>
-                                                                ))}
-                                                                <li className="data-table-detail-list__total"><span>Total</span><span>{new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalActivityBudget)}</span></li>
-                                                            </ul>
-                                                        ) : (<p className="data-table-detail-empty">No budget items listed.</p>)}
-                                                        <div className="data-table-detail-meta">
-                                                             <p><strong>Funding Year:</strong> {activity.fundingYear ?? 'N/A'} </p>
-                                                            <p><strong>Fund Type:</strong> {activity.fundType ?? 'N/A'}</p>
-                                                            <p><strong>Tier:</strong> {activity.tier ?? 'N/A'}</p>
-                                                        </div>
-                                                    </section>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
-                            )})}
+                            {paginatedActivities.map(activity => {
+                                const totalBudget = calculateActivityBudget(activity);
+                                const participatingIpos = activity.participatingIpos || [];
+                                const ipoPreview = participatingIpos.length > 0
+                                    ? `${participatingIpos[0]}${participatingIpos.length > 1 ? ` +${participatingIpos.length - 1}` : ''}`
+                                    : '—';
+                                return <tr
+                                    key={activity.id}
+                                    className={isSelectionMode ? (selectedIds.includes(activity.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'}
+                                    tabIndex={isSelectionMode ? undefined : 0}
+                                    aria-label={isSelectionMode ? undefined : `View details for ${activity.name}`}
+                                    onClick={isSelectionMode ? undefined : () => onSelectActivity(activity)}
+                                    onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectActivity(activity); } }}
+                                >
+                                    {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${activity.name}`} checked={selectedIds.includes(activity.id)} onChange={() => handleSelectRow(activity.id)} /></td>}
+                                    <td className="data-table__cell--mono"><TruncatedTableCell value={activity.uid || 'No code'} /></td>
+                                    <td className="data-table__cell--primary"><TruncatedTableCell value={activity.name} /></td>
+                                    <td><TruncatedTableCell value={activity.operatingUnit} /></td>
+                                    <td><TruncatedTableCell value={ipoPreview} fullText={participatingIpos.join(', ') || 'No participating IPO'} /></td>
+                                    <td>{activity.fundingYear || '—'}</td><td>{activity.fundType || '—'}</td><td>{activity.tier || '—'}</td>
+                                    <td className="data-table__cell--numeric">{currency.format(totalBudget)}</td>
+                                    <td><span className={getStatusBadge(activity.status)}>{activity.status || 'Unknown'}</span></td>
+                                    <td><div className="data-table__actions">{getWorkflowStatusBadge(activity.workflow_status)}{activity.workflow_status === 'PENDING' && canApprove(currentUser?.role) && <><button onClick={(event) => handleApprove(activity.id, event)} className="action-mini action-mini--approve" aria-label={`Approve ${activity.name}`}><Check aria-hidden="true" /></button><button onClick={(event) => handleReject(activity.id, event)} className="action-mini action-mini--reject" aria-label={`Reject ${activity.name}`}><X aria-hidden="true" /></button></>}</div></td>
+                                </tr>;
+                            })}
+                            {paginatedActivities.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No activities match the current filters.</td></tr>}
                         </tbody>
                     </table>
                 </div>
-                <DataTablePagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    totalItems={processedActivities.length}
-                    itemsPerPage={itemsPerPage}
-                    onPageChange={setCurrentPage}
-                    onItemsPerPageChange={setItemsPerPage}
-                />
+                <DataTablePagination currentPage={currentPage} totalPages={totalPages} totalItems={processedActivities.length} itemsPerPage={itemsPerPage} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />
             </div>
         </div>
     );
+
 };

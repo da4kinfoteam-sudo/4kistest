@@ -22,6 +22,7 @@ import {
     SectionHeading,
     StatusIndicator,
 } from './ui/enterprise';
+import useLocalStorageState from '../hooks/useLocalStorageState';
 
 // Since Leaflet is loaded from a script tag, we need to declare it for TypeScript
 declare const L: any;
@@ -111,7 +112,11 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ ipos, subprojects, trainings })
 
     useEffect(() => {
         if (mapContainerRef.current && !mapRef.current) {
-            mapRef.current = L.map(mapContainerRef.current).setView([12.8797, 121.7740], 6); 
+            mapRef.current = L.map(mapContainerRef.current, {
+                zoomAnimation: false,
+                fadeAnimation: false,
+                markerZoomAnimation: false
+            }).setView([12.8797, 121.7740], 6);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }).addTo(mapRef.current);
@@ -119,6 +124,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ ipos, subprojects, trainings })
         
         return () => {
             if (mapRef.current) {
+                mapRef.current.stop();
+                mapRef.current.off();
                 mapRef.current.remove();
                 mapRef.current = null;
             }
@@ -209,7 +216,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ ipos, subprojects, trainings })
 
             if (markersRef.current.length > 0) {
                 const group = new L.featureGroup(markersRef.current);
-                mapRef.current.fitBounds(group.getBounds().pad(0.2));
+                mapRef.current.fitBounds(group.getBounds().pad(0.2), { animate: false });
             } else {
                  mapRef.current.setView([12.8797, 121.7740], 6); 
             }
@@ -399,14 +406,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     const defaultYear = new Date().getFullYear().toString();
     const defaultOu = isLockedToOwnOu ? (currentUser?.operatingUnit || 'All') : 'All';
 
-    const [selectedYear, setSelectedYear] = useState<string>(defaultYear);
-    const [selectedOu, setSelectedOu] = useState<string>(defaultOu);
-    const [selectedTier, setSelectedTier] = useState<string>('Tier 1');
-    const [selectedFundType, setSelectedFundType] = useState<string>('Current');
-    const [draftYear, setDraftYear] = useState<string>(defaultYear);
-    const [draftOu, setDraftOu] = useState<string>(defaultOu);
-    const [draftTier, setDraftTier] = useState<string>('Tier 1');
-    const [draftFundType, setDraftFundType] = useState<string>('Current');
+    const scopeStoragePrefix = `homepage_scope_${currentUser?.id || 'anonymous'}`;
+    const [selectedYear, setSelectedYear] = useLocalStorageState<string>(`${scopeStoragePrefix}_year`, defaultYear);
+    const [selectedOu, setSelectedOu] = useLocalStorageState<string>(`${scopeStoragePrefix}_ou`, defaultOu);
+    const [selectedTier, setSelectedTier] = useLocalStorageState<string>(`${scopeStoragePrefix}_tier`, 'Tier 1');
+    const [selectedFundType, setSelectedFundType] = useLocalStorageState<string>(`${scopeStoragePrefix}_fundType`, 'Current');
+    const [draftYear, setDraftYear] = useState<string>(selectedYear);
+    const [draftOu, setDraftOu] = useState<string>(selectedOu);
+    const [draftTier, setDraftTier] = useState<string>(selectedTier);
+    const [draftFundType, setDraftFundType] = useState<string>(selectedFundType);
     const [totalBudgetView, setTotalBudgetView] = useState<'Obligated' | 'Disbursed'>('Obligated');
 
     useEffect(() => {
@@ -894,29 +902,16 @@ const Dashboard: React.FC<DashboardProps> = ({
                 )}
             >
                      <div className="dashboard-filter">
-                        <label htmlFor="ou-filter">OU</label>
+                        <label htmlFor="ou-filter">Operating Unit</label>
                         <select 
                             id="ou-filter"
                             value={draftOu}
                             onChange={(e) => setDraftOu(e.target.value)}
                             disabled={isLockedToOwnOu}
                         >
-                            <option value="All">All OUs</option>
+                            <option value="All">All Operating Units</option>
                             {operatingUnits.map(ou => (
                                 <option key={ou} value={ou}>{ou}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="dashboard-filter">
-                        <label htmlFor="tier-filter">Tier</label>
-                        <select 
-                            id="tier-filter"
-                            value={draftTier}
-                            onChange={(e) => setDraftTier(e.target.value)}
-                        >
-                            <option value="All">All Tiers</option>
-                            {tiers.map(tier => (
-                                <option key={tier} value={tier}>{tier}</option>
                             ))}
                         </select>
                     </div>
@@ -934,13 +929,26 @@ const Dashboard: React.FC<DashboardProps> = ({
                         </select>
                     </div>
                     <div className="dashboard-filter">
+                        <label htmlFor="tier-filter">Tier</label>
+                        <select
+                            id="tier-filter"
+                            value={draftTier}
+                            onChange={(e) => setDraftTier(e.target.value)}
+                        >
+                            <option value="All">All Tiers</option>
+                            {tiers.map(tier => (
+                                <option key={tier} value={tier}>{tier}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="dashboard-filter">
                         <label htmlFor="year-filter">Fund Year</label>
                         <select 
                             id="year-filter"
                             value={draftYear}
                             onChange={(e) => setDraftYear(e.target.value)}
                         >
-                            <option value="All">All Years</option>
+                            <option value="All">All Fund Years</option>
                             {availableYears.map(year => (
                                 <option key={year} value={year}>{year}</option>
                             ))}
