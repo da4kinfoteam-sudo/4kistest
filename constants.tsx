@@ -71,20 +71,6 @@ export interface BaseEntity {
     deleted_at?: string; // For soft deletes
 }
 
-export interface NavLink {
-    name: string;
-    href: string;
-    type?: string;
-}
-
-export interface NavItem {
-    name: string;
-    href?: string;
-    children?: NavItem[];
-    hiddenFor?: string[]; // Roles that CANNOT view this
-    icon?: React.ReactNode;
-}
-
 export type UserRole = 'Super Admin' | 'Administrator' | 'Guest' | 'Focal - User' | 'RFO - User' | 'User' | 'Management';
 export type VisibilityScope = 'All OUs' | 'Own OU';
 export type WorkflowStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -954,61 +940,6 @@ export const otherActivityComponents: ActivityComponentType[] = [
     'Production and Livelihood',
     'Marketing and Enterprise',
     'Program Management'
-];
-
-export const navigationLinks: NavLink[] = [
-    { name: 'Homepage', href: '/' },
-    { name: 'separator1', href: '#', type: 'separator' },
-    { name: 'Dashboard', href: '/dashboards' },
-    { name: 'Reports', href: '/reports' },
-    { name: 'separator2', href: '#', type: 'separator' },
-    { name: 'Subprojects', href: '/subprojects' },
-    { name: 'Activities', href: '/activities' },
-    { name: 'Program Management', href: '/program-management' },
-    { name: 'separator3', href: '#', type: 'separator' },
-    { name: 'Indigenous Peoples Organization', href: '/ipo' },
-    { name: 'References', href: '/references' },
-];
-
-export const navigationStructure: NavItem[] = [
-    { name: 'Homepage', href: '/', icon: <HomeIcon /> },
-    {
-        name: 'Reports',
-        children: [
-            { name: 'Dashboard', href: '/dashboards' },
-            { name: 'Reports', href: '/reports' }
-        ],
-        icon: <ActivitiesIcon />
-    },
-    {
-        name: 'Data Collection Forms',
-        children: [
-            { name: 'Subprojects', href: '/subprojects' },
-            { name: 'Activities', href: '/activities' },
-            { name: 'Program Management', href: '/program-management' }
-        ],
-        icon: <ProjectsIcon />
-    },
-    {
-        name: 'Accomplishment Forms',
-        children: [
-            { name: 'Financial', href: '/accomplishment/financial' },
-            { name: 'Physical', href: '/accomplishment/physical' }
-        ],
-        // hiddenFor: ['Management'], // Removed limitation for Management
-        icon: <AccomplishmentIcon />
-    },
-    { name: 'Indigenous Peoples Organization', href: '/ipo', icon: <IpoIcon /> },
-    {
-        name: 'Resources',
-        children: [
-            { name: 'Marketing Database', href: '/marketing-database' },
-            { name: 'Level of Development', href: '/level-of-development' },
-            { name: 'Commodity Mapping', href: '/commodity-mapping' },
-            { name: 'References', href: '/references', hiddenFor: ['Management'] }
-        ],
-        icon: <ManagementIcon />
-    }
 ];
 
 // Initial Data (Empty as per new instruction, but structure required)

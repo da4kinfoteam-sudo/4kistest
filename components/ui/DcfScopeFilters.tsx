@@ -15,6 +15,7 @@ interface UseDcfScopeFiltersOptions {
     storageKey: string;
     moduleName: string;
     onDataScopeChange?: (scope: Partial<DataScope>) => void;
+    initialApplied?: Partial<DcfScopeFilterValue>;
 }
 
 const sameScope = (left: DcfScopeFilterValue, right: DcfScopeFilterValue) =>
@@ -23,7 +24,7 @@ const sameScope = (left: DcfScopeFilterValue, right: DcfScopeFilterValue) =>
     && left.selectedTier === right.selectedTier
     && left.selectedFundType === right.selectedFundType;
 
-export const useDcfScopeFilters = ({ storageKey, moduleName, onDataScopeChange }: UseDcfScopeFiltersOptions) => {
+export const useDcfScopeFilters = ({ storageKey, moduleName, onDataScopeChange, initialApplied }: UseDcfScopeFiltersOptions) => {
     const { currentUser, getVisibilityScope } = useAuth();
     const defaultYear = new Date().getFullYear().toString();
     const canViewAll = getVisibilityScope(moduleName) === 'All';
@@ -35,7 +36,12 @@ export const useDcfScopeFilters = ({ storageKey, moduleName, onDataScopeChange }
         selectedFundType: 'Current'
     }), [defaultOu, defaultYear]);
     const userStorageKey = `${storageKey}_${currentUser?.id || 'anonymous'}_applied`;
-    const [storedApplied, setStoredApplied] = useLocalStorageState<DcfScopeFilterValue>(userStorageKey, defaults);
+    const initialValue = useMemo<DcfScopeFilterValue>(() => ({
+        ...defaults,
+        ...initialApplied,
+        selectedOu: canViewAll ? (initialApplied?.selectedOu || defaults.selectedOu) : defaultOu
+    }), [canViewAll, defaultOu, defaults, initialApplied]);
+    const [storedApplied, setStoredApplied] = useLocalStorageState<DcfScopeFilterValue>(userStorageKey, initialValue);
     const applied = useMemo<DcfScopeFilterValue>(() => ({
         selectedYear: storedApplied?.selectedYear || defaults.selectedYear,
         selectedOu: canViewAll ? (storedApplied?.selectedOu || 'All') : defaultOu,

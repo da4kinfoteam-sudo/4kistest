@@ -1,5 +1,5 @@
 // Author: 4K 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Subproject, IPO, Training, OtherActivity, ouToRegionMap, OfficeRequirement, StaffingRequirement, OtherProgramExpense, MarketingPartner } from '../constants';
 import PhysicalDashboard from './dashboards/PhysicalDashboard';
 import FinancialDashboard from './dashboards/FinancialDashboard';
@@ -12,12 +12,12 @@ import AgriculturalInterventionsDashboard from './dashboards/AgriculturalInterve
 import CommodityDashboard from './dashboards/CommodityDashboard';
 import AwardsRankingsDashboard from './dashboards/AwardsRankingsDashboard';
 import { ModalItem } from './dashboards/DashboardComponents';
-import { useAuth } from '../contexts/AuthContext';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { DataScope } from '../lib/scopedDataFetch';
+import type { DashboardPageKey } from '../lib/appNavigation';
 import { DcfScopeFilterPanel, useDcfScopeFilters } from './ui/DcfScopeFilters';
 
 export interface DashboardsPageProps {
+    activePage: DashboardPageKey;
     subprojects: Subproject[];
     ipos: IPO[];
     trainings: Training[];
@@ -36,14 +36,9 @@ export interface DashboardsPageProps {
     onDataScopeChange?: (scope: Partial<DataScope>) => void;
 }
 
-type DashboardTab = 'Physical' | 'Financial' | 'GAD' | 'Commodities' | 'IPO Level of Development' | 'Nutrition' | 'Farm Productivity and Income' | 'SCAD' | 'Agricultural Interventions' | 'Awards and Rankings';
-
 const DashboardsPage: React.FC<DashboardsPageProps> = (props) => {
-    const { currentUser } = useAuth();
-    const canViewAwards = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
     const { onDataScopeChange } = props;
-
-    const [activeTab, setActiveTab] = useState<DashboardTab>('Physical');
+    const activeTab = props.activePage;
     const [modalData, setModalData] = useState<{ title: string; items: ModalItem[] } | null>(null);
     const dcfFilters = useDcfScopeFilters({
         storageKey: 'dashboards_dcf_scope',
@@ -56,21 +51,6 @@ const DashboardsPage: React.FC<DashboardsPageProps> = (props) => {
         selectedTier,
         selectedFundType
     } = dcfFilters.value;
-    const dashboardTabsRef = useRef<HTMLElement | null>(null);
-
-    const scrollDashboardTabs = (direction: 'left' | 'right') => {
-        dashboardTabsRef.current?.scrollBy({
-            left: direction === 'left' ? -280 : 280,
-            behavior: 'smooth',
-        });
-    };
-
-    useEffect(() => {
-        if (!canViewAwards && activeTab === 'Awards and Rankings') {
-            setActiveTab('Physical');
-        }
-    }, [activeTab, canViewAwards]);
-
     const filteredData = useMemo(() => {
         // Deep sanitization helper: ensures array exists and filters out null/undefined items inside it
         const sanitizeDetails = (items: any[] | undefined) => (items || []).filter(i => i);
@@ -204,19 +184,6 @@ const DashboardsPage: React.FC<DashboardsPageProps> = (props) => {
         };
     }, [props.subprojects, props.ipos, props.trainings, props.otherActivities, props.officeReqs, props.staffingReqs, props.otherProgramExpenses, selectedYear, selectedTier, selectedFundType]);
 
-    const TabButton: React.FC<{ tabName: DashboardTab; label: string }> = ({ tabName, label }) => {
-        const isActive = activeTab === tabName;
-        return (
-            <button
-                type="button"
-                onClick={() => setActiveTab(tabName)}
-                className={`data-tab ${isActive ? 'is-active' : ''}`}
-            >
-                {label}
-            </button>
-        );
-    };
-
     return (
         <div className="data-list-page dashboards-page">
             <div className="data-list-header">
@@ -224,41 +191,6 @@ const DashboardsPage: React.FC<DashboardsPageProps> = (props) => {
             </div>
             <DcfScopeFilterPanel idPrefix="dashboard-dcf" filters={dcfFilters} />
 
-            {/* Tabs Section */}
-            <div className="report-tabs-card dashboard-tabs-card">
-                <div className="dashboard-tabs-scroll-shell">
-                    <button
-                        type="button"
-                        className="dashboard-tabs-arrow dashboard-tabs-arrow--left"
-                        onClick={() => scrollDashboardTabs('left')}
-                        aria-label="Scroll dashboard tabs left"
-                    >
-                        <ChevronLeft aria-hidden="true" />
-                    </button>
-                    <nav ref={dashboardTabsRef} className="data-tabs dashboard-tabs-scroll" aria-label="Dashboard tabs">
-                        <TabButton tabName="Physical" label="Physical" />
-                        <TabButton tabName="Financial" label="Financial" />
-                        <TabButton tabName="SCAD" label="SCAD" />
-                        <TabButton tabName="Agricultural Interventions" label="Agricultural Interventions" />
-                        <TabButton tabName="Farm Productivity and Income" label="Farm Productivity and Income" />
-                        <TabButton tabName="Commodities" label="Commodities" />
-                        <TabButton tabName="IPO Level of Development" label="IPO Level of Development" />
-                        <TabButton tabName="GAD" label="GAD" />
-                        <TabButton tabName="Nutrition" label="Nutrition" />
-                        {canViewAwards && <TabButton tabName="Awards and Rankings" label="Awards and Rankings" />}
-                    </nav>
-                    <button
-                        type="button"
-                        className="dashboard-tabs-arrow dashboard-tabs-arrow--right"
-                        onClick={() => scrollDashboardTabs('right')}
-                        aria-label="Scroll dashboard tabs right"
-                    >
-                        <ChevronRight aria-hidden="true" />
-                    </button>
-                </div>
-            </div>
-
-            {/* Tab Content */}
             <div className="dashboard-tab-content">
                 {activeTab === 'Physical' && (
                     <PhysicalDashboard 

@@ -47,6 +47,16 @@ import { clearUserCache, getScopeCacheMeta, readScopedCache, writeScopedCache } 
 import { normalizeStaffingExpenses } from './lib/staffingExpenseIdentity';
 import { emptyIpoLinkedDcfRecords, fetchIpoLinkedDcfRecords, IpoLinkedDcfRecords } from './lib/ipoLinkedDcfRecords';
 import { fetchWorkflowEntityById, fetchWorkflowIpos } from './lib/workflowLookups';
+import {
+    getCanonicalModuleRoute,
+    getNavigationPageTitle,
+    isDashboardPagePath,
+    isProgramManagementPagePath,
+    isReferencePagePath,
+    resolveDashboardPage,
+    resolveProgramManagementPage,
+    resolveReferencePage,
+} from './lib/appNavigation';
 import { 
     initialUacsCodes, initialParticularTypes, Subproject, IPO, Activity, User,
     OfficeRequirement, StaffingRequirement, OtherProgramExpense, SystemSettings, defaultSystemSettings,
@@ -101,6 +111,8 @@ const buildDetailPath = (path: string, id?: number | string | null) => {
 // Helper to format page names for "Back to..." buttons
 const getPageName = (path: string) => {
     const routePath = parseAppRoute(path).path;
+    const navigationTitle = getNavigationPageTitle(routePath);
+    if (navigationTitle) return navigationTitle;
     if (routePath === '/') return 'Dashboard';
     if (routePath === '/ipo-detail') return 'IPO Details';
     if (routePath === '/ipo') return 'IPO List';
@@ -780,6 +792,16 @@ const AppContent: React.FC = () => {
     };
 
     useEffect(() => {
+        if (!isAuthReady || !currentUser) return;
+        const canonicalRoute = getCanonicalModuleRoute(routePath, currentUser.role);
+        if (!canonicalRoute || canonicalRoute === routePath) return;
+        const stack = historyStackRef.current;
+        currentPageRef.current = canonicalRoute;
+        setCurrentPage(canonicalRoute);
+        window.history.replaceState({ page: canonicalRoute, stack }, '', `/#${canonicalRoute}`);
+    }, [currentUser, isAuthReady, routePath]);
+
+    useEffect(() => {
         const handlePopState = (event: PopStateEvent) => {
             const leavingPage = parseAppRoute(currentPageRef.current).path;
             
@@ -1041,7 +1063,7 @@ const AppContent: React.FC = () => {
         const denied = <AccessDenied onBackToHome={() => navigateTo('/')} />;
 
         // Phase 6: Guard clauses for module-level access
-        if (routePath === '/dashboards' && !checkAccess('Dashboards')) return denied;
+        if (isDashboardPagePath(routePath) && !checkAccess('Dashboards')) return denied;
         if (routePath === '/reports' && !checkAccess('Reports')) return denied;
         
         if (['/subprojects', '/subproject-edit', '/subproject-detail'].includes(routePath)) {
@@ -1050,7 +1072,7 @@ const AppContent: React.FC = () => {
         if (['/trainings', '/other-activities', '/activities', '/activity-edit', '/activity-detail', '/activity-monitoring-report'].includes(routePath)) {
             if (!checkAccess('Activities')) return denied;
         }
-        if (['/program-management', '/program-management/office-detail', '/program-management/staffing-detail', '/program-management/other-expense-detail'].includes(routePath)) {
+        if (routePath === '/program-management' || routePath.startsWith('/program-management/')) {
             if (!checkAccess('Program Management')) return denied;
         }
         if (routePath === '/accomplishment/financial' && !checkAccess('Accomplishment - Financial')) return denied;
@@ -1068,10 +1090,80 @@ const AppContent: React.FC = () => {
         if (routePath === '/commodity-mapping') {
             if (!checkAccess('Commodity Mapping')) return denied;
         }
-        if (routePath === '/references' && !checkAccess('References')) return denied;
+        if (isReferencePagePath(routePath) && (currentUser?.role === 'Management' || !checkAccess('References'))) return denied;
         if (routePath === '/settings' && !checkAccess('System Management')) {
              // System Management is for the whole settings tab, but maybe we should allow profiles?
              // Usually settings has profile. Let's see.
+        }
+
+        if (isDashboardPagePath(routePath)) {
+            const dashboardPage = resolveDashboardPage(routePath, currentUser?.role);
+            return <DashboardsPage
+                activePage={dashboardPage.page}
+                subprojects={visibleSubprojects}
+                ipos={ipos}
+                trainings={visibleActivities.filter(a => a.type === 'Training')}
+                otherActivities={visibleActivities.filter(a => a.type === 'Activity')}
+                officeReqs={visibleOfficeReqs}
+                staffingReqs={visibleStaffingReqs}
+                otherProgramExpenses={visibleOtherExpenses}
+                marketingPartners={marketingPartners}
+                onSelectIpo={handleSelectIpo}
+                onSelectLodIpo={handleSelectIpoForLod}
+                onSelectSubproject={handleSelectSubproject}
+                onSelectActivity={handleSelectActivity}
+                onSelectMarketingPartner={handleSelectMarketingPartner}
+                setExternalFilters={setExternalFilters}
+                navigateTo={navigateTo}
+                onDataScopeChange={ensureDataScope}
+            />;
+        }
+
+        if (isProgramManagementPagePath(routePath)) {
+            const programPage = resolveProgramManagementPage(routePath);
+            return <ProgramManagement
+                activePage={programPage.page}
+                officeReqs={visibleOfficeReqs}
+                setOfficeReqs={setOfficeReqs}
+                staffingReqs={visibleStaffingReqs}
+                setStaffingReqs={setStaffingReqs}
+                otherProgramExpenses={visibleOtherExpenses}
+                setOtherProgramExpenses={setOtherProgramExpenses}
+                uacsCodes={derivedUacsCodes}
+                onSelectOfficeReq={handleSelectOfficeReq}
+                onSelectStaffingReq={handleSelectStaffingReq}
+                onSelectOtherExpense={handleSelectOtherExpense}
+                onDataScopeChange={ensureDataScope}
+            />;
+        }
+
+        if (isReferencePagePath(routePath)) {
+            const referencePage = resolveReferencePage(routePath);
+            return <References
+                activePage={referencePage.page}
+                uacsList={referenceUacsList}
+                setUacsList={setReferenceUacsList}
+                particularList={referenceParticularList}
+                setParticularList={setReferenceParticularList}
+                refCommodities={refCommodities}
+                setRefCommodities={setRefCommodities}
+                refLivestock={refLivestock}
+                setRefLivestock={setRefLivestock}
+                refEquipment={refEquipment}
+                setRefEquipment={setRefEquipment}
+                refInputs={refInputs}
+                setRefInputs={setRefInputs}
+                refInfrastructure={refInfrastructure}
+                setRefInfrastructure={setRefInfrastructure}
+                refTrainings={refTrainings}
+                setRefTrainings={setRefTrainings}
+                gidaList={gidaAreas}
+                setGidaList={setGidaAreas}
+                elcacList={elcacAreas}
+                setElcacList={setElcacAreas}
+                ipos={ipos}
+                setIpos={setIpos}
+            />;
         }
 
         switch (routePath) {
@@ -1089,25 +1181,6 @@ const AppContent: React.FC = () => {
                             navigateTo={navigateTo}
                             // @ts-ignore
                             externalFilters={externalFilters}
-                            onDataScopeChange={ensureDataScope}
-                        />;
-            case '/dashboards':
-                 return <DashboardsPage 
-                            subprojects={visibleSubprojects} 
-                            ipos={ipos} 
-                            trainings={visibleActivities.filter(a => a.type === 'Training')}
-                            otherActivities={visibleActivities.filter(a => a.type === 'Activity')}
-                            officeReqs={visibleOfficeReqs}
-                            staffingReqs={visibleStaffingReqs}
-                            otherProgramExpenses={visibleOtherExpenses}
-                            marketingPartners={marketingPartners}
-                            onSelectIpo={handleSelectIpo}
-                            onSelectLodIpo={handleSelectIpoForLod}
-                            onSelectSubproject={handleSelectSubproject}
-                            onSelectActivity={handleSelectActivity}
-                            onSelectMarketingPartner={handleSelectMarketingPartner}
-                            setExternalFilters={setExternalFilters}
-                            navigateTo={navigateTo}
                             onDataScopeChange={ensureDataScope}
                         />;
             case '/subprojects':
@@ -1278,23 +1351,6 @@ const AppContent: React.FC = () => {
                             refCommodities={refCommodities}
                             refLivestock={refLivestock}
                         />;
-            case '/program-management':
-                return <ProgramManagement
-                            officeReqs={visibleOfficeReqs}
-                            setOfficeReqs={setOfficeReqs}
-                            staffingReqs={visibleStaffingReqs}
-                            setStaffingReqs={setStaffingReqs}
-                            otherProgramExpenses={visibleOtherExpenses}
-                            setOtherProgramExpenses={setOtherProgramExpenses}
-                            budgetCeilings={budgetCeilings}
-                            uacsCodes={derivedUacsCodes}
-                            onSelectOfficeReq={handleSelectOfficeReq}
-                            onSelectStaffingReq={handleSelectStaffingReq}
-                            onSelectOtherExpense={handleSelectOtherExpense}
-                            // @ts-ignore
-                            externalFilters={externalFilters}
-                            onDataScopeChange={ensureDataScope}
-                        />;
             // NEW ACCOMPLISHMENT ROUTES
             case '/accomplishment/financial':
                 return <FinancialAccomplishment 
@@ -1349,7 +1405,7 @@ const AppContent: React.FC = () => {
                             title="Office requirement not found"
                             message="This office requirement is no longer available, or it is outside your current visibility scope."
                             actionLabel="Back to Program Management"
-                            onAction={() => navigateTo('/program-management')}
+                            onAction={() => navigateTo('/program-management/office-requirements')}
                         />
                     );
                 }
@@ -1377,7 +1433,7 @@ const AppContent: React.FC = () => {
                             title="Staffing requirement not found"
                             message="This staffing requirement is no longer available, or it is outside your current visibility scope."
                             actionLabel="Back to Program Management"
-                            onAction={() => navigateTo('/program-management')}
+                            onAction={() => navigateTo('/program-management/staffing-requirements')}
                         />
                     );
                 }
@@ -1405,7 +1461,7 @@ const AppContent: React.FC = () => {
                             title="Program expense not found"
                             message="This program expense is no longer available, or it is outside your current visibility scope."
                             actionLabel="Back to Program Management"
-                            onAction={() => navigateTo('/program-management')}
+                            onAction={() => navigateTo('/program-management/other-expenses')}
                         />
                     );
                 }
@@ -1433,31 +1489,6 @@ const AppContent: React.FC = () => {
                             onClearExternalFilters={clearExternalFilters}
                             gidaAreas={gidaAreas}
                             elcacAreas={elcacAreas}
-                        />;
-            case '/references':
-                return <References 
-                            uacsList={referenceUacsList} 
-                            setUacsList={setReferenceUacsList}
-                            particularList={referenceParticularList}
-                            setParticularList={setReferenceParticularList}
-                            refCommodities={refCommodities}
-                            setRefCommodities={setRefCommodities}
-                            refLivestock={refLivestock}
-                            setRefLivestock={setRefLivestock}
-                            refEquipment={refEquipment}
-                            setRefEquipment={setRefEquipment}
-                            refInputs={refInputs}
-                            setRefInputs={setRefInputs}
-                            refInfrastructure={refInfrastructure}
-                            setRefInfrastructure={setRefInfrastructure}
-                            refTrainings={refTrainings}
-                            setRefTrainings={setRefTrainings}
-                            gidaList={gidaAreas}
-                            setGidaList={setGidaAreas}
-                            elcacList={elcacAreas}
-                            setElcacList={setElcacAreas}
-                            ipos={ipos}
-                            setIpos={setIpos}
                         />;
             case '/reports':
                 return <Reports 

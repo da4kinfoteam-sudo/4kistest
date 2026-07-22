@@ -1,25 +1,21 @@
 
 // Author: 4K
-import React, { useState, useMemo, useEffect } from 'react';
-import { Subproject, Activity, OfficeRequirement, StaffingRequirement, OtherProgramExpense, operatingUnits, fundTypes, tiers, filterYears, ObligationRecord, DisbursementRecord } from '../../constants';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Subproject, Activity, OfficeRequirement, StaffingRequirement, OtherProgramExpense, ObligationRecord, DisbursementRecord } from '../../constants';
 import { supabase } from '../../supabaseClient';
 import { useUserAccess } from '../mainfunctions/TableHooks';
 import useLocalStorageState from '../../hooks/useLocalStorageState';
 import { getDcfModuleKeyForSourceType, normalizePolicyMonth, useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
-import { MonthYearPicker } from '../ui/MonthYearPicker';
-import { FormattedAmountInput } from '../ui/FormattedAmountInput';
-import { Undo2, Loader2, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, ListFilter, SlidersHorizontal, ChevronDown } from 'lucide-react';
-import { ObligationsEditor } from './ObligationsEditor';
-import { DisbursementsEditor } from './DisbursementsEditor';
-import { ObligationListEditor } from '../ui/ObligationListEditor';
-import { DisbursementListEditor } from '../ui/DisbursementListEditor';
+import { Undo2, Loader2, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, WalletCards, Landmark, Banknote, Scale, Lock } from 'lucide-react';
 import { getProgramManagementPhysicalDateBasis, resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../../lib/physicalAccomplishmentTimestamp';
 import { resolveDisbursementEntries, summarizeDisbursements } from '../../lib/disbursementUtils';
 import { getBudgetLineAmount } from '../../lib/budgetLineAdjustments';
 import type { DataScope } from '../../lib/scopedDataFetch';
 import { normalizeStaffingExpenses, staffingExpenseItemId } from '../../lib/staffingExpenseIdentity';
 import { ConfirmDialog, LoadingState } from '../ui/enterprise';
+import { DcfScopeFilterPanel, type DcfScopeFilterValue, useDcfScopeFilters } from '../ui/DcfScopeFilters';
+import { FinancialAmountCell, FinancialMonthCell, formatFinancialMonth, normalizeFinancialMonthValue } from './FinancialInlineEditors';
+import { FinancialActualsDialog } from './FinancialActualsDialog';
 
 interface Props {
  subprojects: Subproject[];
@@ -56,6 +52,7 @@ interface FinancialItem {
  // Display Info
  sourceName: string; // Project Name, Activity Name, etc.
  budgetParticular?: string; // For subprojects, the specific item name
+ fundYear: string;
 
  // Financials
  targetObligationMonth: string;
@@ -185,6 +182,36 @@ const getTargetDisbursementForTotals = (item: FinancialItem) =>
 const getTaggedAllocationAmount = (item: FinancialItem) =>
  isTaggedExclusion(item) ? toFiniteNumber(item.targetObligationAmount) : 0;
 
+const getUnobligatedAmount = (item: FinancialItem) =>
+ toFiniteNumber(item.targetObligationAmount) - toFiniteNumber(item.actualObligationAmount);
+
+const getObjectTypeLabel = (objectType: string) => {
+ if (objectType === 'CO') return 'CO — Capital Outlays';
+ if (objectType === 'MOOE') return 'MOOE — Maintenance & Other Operating Expenses';
+ return objectType;
+};
+
+type FinancialCategory = 'All' | 'Capital Outlay' | 'MOOE' | 'Staffing Requirements';
+
+const readLegacyFinancialScope = (): Partial<DcfScopeFilterValue> => {
+ if (typeof window === 'undefined') return {};
+ const read = (key: string) => {
+ try {
+ const raw = window.localStorage.getItem(key);
+ return raw ? JSON.parse(raw) : undefined;
+ } catch {
+ return undefined;
+ }
+ };
+ const year = read('fin_selectedYear');
+ return {
+ selectedYear: year ? String(year) : undefined,
+ selectedOu: read('fin_selectedOu'),
+ selectedTier: read('fin_selectedTier'),
+ selectedFundType: read('fin_selectedFundType'),
+ };
+};
+
 const FinancialAccomplishment: React.FC<Props> = ({
  subprojects, setSubprojects,
  activities, setActivities,
@@ -197,17 +224,18 @@ const FinancialAccomplishment: React.FC<Props> = ({
  onSelectOfficeReq, onSelectStaffingReq, onSelectOtherExpense,
  onDataScopeChange
 }) => {
- const { currentUser } = useAuth();
- const { canEdit, canViewAll } = useUserAccess('Accomplishment - Financial');
+ const { canEdit } = useUserAccess('Accomplishment - Financial');
  const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
  const defaultYear = new Date().getFullYear();
-
- // Filter States (Persistent)
- const [selectedYear, setSelectedYear] = useLocalStorageState<number | null>('fin_selectedYear', defaultYear);
- const [selectedOu, setSelectedOu] = useLocalStorageState<string>('fin_selectedOu', 'All');
- const [selectedTier, setSelectedTier] = useLocalStorageState<string>('fin_selectedTier', 'Tier 1');
- const [selectedFundType, setSelectedFundType] = useLocalStorageState<string>('fin_selectedFundType', 'Current');
- const [filtersOpen, setFiltersOpen] = useState(false);
+ const legacyScope = useMemo(readLegacyFinancialScope, []);
+ const dcfFilters = useDcfScopeFilters({
+ storageKey: 'financial_accomplishment_dcf_scope',
+ moduleName: 'Accomplishment - Financial',
+ onDataScopeChange,
+ initialApplied: legacyScope,
+ });
+ const { selectedYear, selectedOu, selectedTier, selectedFundType } = dcfFilters.value;
+ const [category, setCategory] = useState<FinancialCategory>('All');
 
  const [isLoading, setIsLoading] = useState(false);
  const [originalItems, setOriginalItems] = useState<FinancialItem[]>([]);
@@ -218,14 +246,17 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
  const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
  const [monthLockMessage, setMonthLockMessage] = useState('');
- type SortKey = 'targetObligationAmount' | 'targetObligationMonth' | 'actualObligationAmount' | 'actualObligationMonth' | 'targetDisbursementAmount' | 'targetDisbursementMonth' | 'actualDisbursementAmount' | 'actualDisbursementMonth';
+ const [actualsDialog, setActualsDialog] = useState<{ itemId: string; kind: 'obligation' | 'disbursement' } | null>(null);
+ const [actualsDialogSaving, setActualsDialogSaving] = useState(false);
+ const [actualsDialogError, setActualsDialogError] = useState('');
+ const skipNextFinancialReloadRef = useRef(false);
+ type SortKey = 'targetObligationAmount' | 'targetObligationMonth' | 'actualObligationAmount' | 'unobligatedAmount' | 'targetDisbursementAmount' | 'targetDisbursementMonth' | 'actualDisbursementAmount';
  const [sortConfig, setSortConfig] = useState<{ key: SortKey, direction: 'asc' | 'desc' } | null>(null);
 
  // Persistent Expansion States (Stored as Arrays in localStorage)
  const [expandedObjectTypes, setExpandedObjectTypes] = useLocalStorageState<string[]>('fin_expandedObjectTypes', ['MOOE', 'CO']);
  const [expandedGroups, setExpandedGroups] = useLocalStorageState<string[]>('fin_expandedGroups', []);
  const [expandedSubGroups, setExpandedSubGroups] = useLocalStorageState<string[]>('fin_expandedSubGroups', []);
- const [expandedRows, setExpandedRows] = useLocalStorageState<string[]>('fin_expandedRows', []);
 
  const getPolicySubjectForFinancialItem = (item: FinancialItem) => (
  item.sourceType === 'Staffing'
@@ -311,7 +342,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  return currentAmount > 0 && !valuesDiffer(currentAmount, originalAmount)
  ? ''
  : currentAmount > 0
- ? `${selectedYear || defaultYear}-${String(index + 1).padStart(2, '0')}`
+ ? `${item.fundYear || defaultYear}-${String(index + 1).padStart(2, '0')}`
  : '';
  })
  .filter(Boolean),
@@ -322,37 +353,25 @@ const FinancialAccomplishment: React.FC<Props> = ({
  return true;
  };
 
- // Initialize User OU lock based on permissions
  useEffect(() => {
- if (!selectedYear) {
- setSelectedYear(defaultYear);
- }
- if (!canViewAll && currentUser?.operatingUnit) {
- setSelectedOu(currentUser.operatingUnit);
- }
- }, [currentUser, canViewAll, defaultYear, selectedYear, setSelectedOu, setSelectedYear]);
-
- useEffect(() => {
- onDataScopeChange?.({
- year: selectedYear || defaultYear,
- operatingUnit: selectedOu,
- tier: selectedTier,
- fundType: selectedFundType,
- canViewAllOus: canViewAll,
- requestedBy: currentUser?.id ?? null
+ ['fin_selectedYear', 'fin_selectedOu', 'fin_selectedTier', 'fin_selectedFundType'].forEach(key => {
+ try { window.localStorage.removeItem(key); } catch { /* storage may be unavailable */ }
  });
- }, [canViewAll, currentUser?.id, defaultYear, onDataScopeChange, selectedFundType, selectedOu, selectedTier, selectedYear]);
+ }, []);
 
  // --- 1. Load and Normalize Data ---
  useEffect(() => {
- if (!selectedYear) return;
+ if (skipNextFinancialReloadRef.current) {
+ skipNextFinancialReloadRef.current = false;
+ return;
+ }
  setIsLoading(true);
 
  const fetchData = async () => {
  try {
  const matchesFilters = (item: any) => {
  const itemYear = item.fundingYear || item.fundYear;
- if (itemYear !== selectedYear) return false;
+ if (selectedYear !== 'All' && String(itemYear) !== String(selectedYear)) return false;
  if (selectedOu !== 'All' && item.operatingUnit !== selectedOu) return false;
  if (selectedTier !== 'All' && item.tier !== selectedTier) return false;
  if (selectedFundType !== 'All' && item.fundType !== selectedFundType) return false;
@@ -481,6 +500,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  uniqueId: `sp-${sp.id}-${d.id}`,
  sourceType: 'Subproject',
  sourceId: sp.id,
+ fundYear: String(sp.fundingYear || selectedYear || defaultYear),
  detailId: d.id,
  uacsCode: d.uacsCode,
  objectType: d.objectType || 'MOOE',
@@ -517,6 +537,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  uniqueId: `act-${act.id}-${e.id}`,
  sourceType: 'Activity',
  sourceId: act.id,
+ fundYear: String(act.fundingYear || selectedYear || defaultYear),
  detailId: e.id,
  uacsCode: e.uacsCode,
  objectType: e.objectType || 'MOOE',
@@ -551,6 +572,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  uniqueId: `office-${o.id}`,
  sourceType: 'Office',
  sourceId: o.id,
+ fundYear: String(o.fundYear || selectedYear || defaultYear),
  uacsCode: o.uacsCode,
  objectType: 'MOOE',
  expenseParticular: 'Office Requirements',
@@ -590,13 +612,14 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const centralDibs = getDisbursements('Staffing', s.id, e.id);
  const disbursements = centralDibs.length > 0
  ? centralDibs
- : resolveDisbursementEntries({ ...e, disbursements: undefined }, selectedYear);
- const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
+ : resolveDisbursementEntries({ ...e, disbursements: undefined }, String(s.fundYear || selectedYear || defaultYear));
+ const disbursementSummary = summarizeDisbursements(disbursements, String(s.fundYear || selectedYear || defaultYear));
 
  loadedItems.push({
  uniqueId: `staff-${s.id}-${e.id}`,
  sourceType: 'Staffing',
  sourceId: s.id,
+ fundYear: String(s.fundYear || selectedYear || defaultYear),
  detailId: e.id,
  uacsCode: e.uacsCode,
  objectType: e.objectType || 'MOOE',
@@ -626,13 +649,14 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const centralDibs = getDisbursements('Staffing', s.id);
  const disbursements = centralDibs.length > 0
  ? centralDibs
- : resolveDisbursementEntries({ ...s, disbursements: undefined }, selectedYear);
- const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
+ : resolveDisbursementEntries({ ...s, disbursements: undefined }, String(s.fundYear || selectedYear || defaultYear));
+ const disbursementSummary = summarizeDisbursements(disbursements, String(s.fundYear || selectedYear || defaultYear));
 
  loadedItems.push({
  uniqueId: `staff-${s.id}`,
  sourceType: 'Staffing',
  sourceId: s.id,
+ fundYear: String(s.fundYear || selectedYear || defaultYear),
  uacsCode: s.uacsCode,
  objectType: 'MOOE',
  expenseParticular: 'Salaries & Wages',
@@ -663,13 +687,14 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const centralDibs = getDisbursements('Other', ope.id);
  const disbursements = centralDibs.length > 0
  ? centralDibs
- : resolveDisbursementEntries({ ...ope, disbursements: undefined }, selectedYear);
- const disbursementSummary = summarizeDisbursements(disbursements, selectedYear);
+ : resolveDisbursementEntries({ ...ope, disbursements: undefined }, String(ope.fundYear || selectedYear || defaultYear));
+ const disbursementSummary = summarizeDisbursements(disbursements, String(ope.fundYear || selectedYear || defaultYear));
 
  loadedItems.push({
  uniqueId: `other-${ope.id}`,
  sourceType: 'Other',
  sourceId: ope.id,
+ fundYear: String(ope.fundYear || selectedYear || defaultYear),
  uacsCode: ope.uacsCode,
  objectType: 'MOOE',
  expenseParticular: 'Other Expenses',
@@ -713,11 +738,20 @@ const FinancialAccomplishment: React.FC<Props> = ({
  }, [selectedYear, selectedOu, selectedTier, selectedFundType, subprojects, activities, officeReqs, staffingReqs, otherProgramExpenses]);
 
 
+ const visibleItems = useMemo(() => items.filter(item => {
+ if (category === 'All') return true;
+ if (category === 'Capital Outlay') return item.objectType === 'CO';
+ if (category === 'MOOE') return item.objectType === 'MOOE';
+ return item.sourceType === 'Staffing';
+ }), [category, items]);
+
+ const categories: FinancialCategory[] = ['All', 'Capital Outlay', 'MOOE', 'Staffing Requirements'];
+
  // --- 2. Grouping Logic ---
  const groupedItems = useMemo(() => {
  const typeGroups: { [key: string]: { uacsMap: { [code: string]: { items: FinancialItem[], description: string, totalTargetObli: number, totalActualObli: number, totalTargetDisb: number, totalActualDisb: number } } } } = {};
 
- items.forEach(item => {
+ visibleItems.forEach(item => {
  const type = item.objectType || 'Unspecified';
  const code = item.uacsCode || 'No Code';
 
@@ -785,6 +819,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  uacsGroups: Object.entries(data.uacsMap).map(([code, groupData]) => ({
  uacsCode: code,
  description: groupData.description,
+ particular: groupData.items[0]?.expenseParticular || groupData.description,
  key: `${type}-${code}`,
  items: groupData.items,
  totalTargetObli: groupData.totalTargetObli,
@@ -798,24 +833,25 @@ const FinancialAccomplishment: React.FC<Props> = ({
  }
  })).sort((a, b) => a.uacsCode.localeCompare(b.uacsCode))
  })).sort((a, b) => a.objectType.localeCompare(b.objectType));
- }, [items, uacsCodes]);
+ }, [uacsCodes, visibleItems]);
 
  // --- 2.1 Grand Total Calculation ---
  const grandTotals = useMemo(() => {
- return items.reduce((acc, item) => ({
+ return visibleItems.reduce((acc, item) => ({
  targetObli: acc.targetObli + getTargetObligationForTotals(item),
  actualObli: acc.actualObli + toFiniteNumber(item.actualObligationAmount),
+ unobligated: acc.unobligated + getUnobligatedAmount(item),
  targetDisb: acc.targetDisb + getTargetDisbursementForTotals(item),
  actualDisb: acc.actualDisb + toFiniteNumber(item.actualDisbursementAmount)
- }), { targetObli: 0, actualObli: 0, targetDisb: 0, actualDisb: 0 });
- }, [items]);
+ }), { targetObli: 0, actualObli: 0, unobligated: 0, targetDisb: 0, actualDisb: 0 });
+ }, [visibleItems]);
 
  const summaryCards = useMemo(() => {
  const selectedYearNumber = Number(selectedYear);
  const hasBudgetCeilingScope = selectedTier === 'Tier 1' && selectedFundType === 'Current';
- const budgetCeiling = Number.isFinite(selectedYearNumber) && hasBudgetCeilingScope
+ const budgetCeiling = hasBudgetCeilingScope
  ? budgetCeilings.reduce((sum, ceiling) => {
- if (Number(ceiling.year) !== selectedYearNumber) return sum;
+ if (selectedYear !== 'All' && Number(ceiling.year) !== selectedYearNumber) return sum;
  if (selectedOu !== 'All' && ceiling.operating_unit !== selectedOu) return sum;
  return sum + toFiniteNumber(ceiling.amount);
  }, 0)
@@ -861,6 +897,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const financialSummaryCards = [
  {
  label: 'Total Allocation',
+ icon: WalletCards,
  value: summaryCards.totalAllocation,
  indicator: !summaryCards.hasBudgetCeilingScope
  ? 'Budget ceiling applies to Tier 1 Current only'
@@ -873,6 +910,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  },
  {
  label: 'Obligation',
+ icon: Landmark,
  value: summaryCards.actualObligation,
  indicator: obligationUtilizationPercent === null
  ? `Target ${formatCurrency(summaryCards.targetObligation)} · No target set`
@@ -881,6 +919,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  },
  {
  label: 'Disbursement',
+ icon: Banknote,
  value: summaryCards.actualDisbursement,
  indicator: disbursementUtilizationPercent === null
  ? `Target ${formatCurrency(summaryCards.targetDisbursement)} · No target set`
@@ -889,28 +928,32 @@ const FinancialAccomplishment: React.FC<Props> = ({
  },
  {
  label: 'Realigned/Savings',
+ icon: Scale,
  value: summaryCards.realignedSavings,
  indicator: taggedAllocationPercent === null ? '0% of allocation' : `${taggedAllocationPercent}% of allocation`,
  tone: summaryCards.realignedSavings > 0 ? 'warning' : 'neutral'
  },
  ];
 
- const availableYears = useMemo(() => {
- const years = new Set<string>(filterYears);
- [
- ...subprojects.map(item => item.fundingYear),
- ...activities.map(item => item.fundingYear),
- ...officeReqs.map(item => item.fundYear),
- ...staffingReqs.map(item => item.fundYear),
- ...otherProgramExpenses.map(item => item.fundYear),
- ...budgetCeilings.map(item => item.year),
- defaultYear,
- ].forEach(year => {
- if (year) years.add(year.toString());
- });
- return Array.from(years).sort((a, b) => Number(b) - Number(a));
- }, [activities, budgetCeilings, defaultYear, officeReqs, otherProgramExpenses, staffingReqs, subprojects]);
-
+ const financialProgress = [
+ {
+ label: 'Allocation Used',
+ value: allocationCeilingPercent,
+ detail: summaryCards.budgetCeiling > 0
+ ? `${formatCurrency(summaryCards.totalAllocation)} of ${formatCurrency(summaryCards.budgetCeiling)}`
+ : 'No applicable budget ceiling',
+ },
+ {
+ label: 'Obligation vs Target',
+ value: obligationUtilizationPercent,
+ detail: `${formatCurrency(summaryCards.actualObligation)} of ${formatCurrency(summaryCards.targetObligation)}`,
+ },
+ {
+ label: 'Disbursement vs Target',
+ value: disbursementUtilizationPercent,
+ detail: `${formatCurrency(summaryCards.actualDisbursement)} of ${formatCurrency(summaryCards.targetDisbursement)}`,
+ },
+ ];
 
  // --- 3. Handlers ---
 
@@ -935,13 +978,6 @@ const FinancialAccomplishment: React.FC<Props> = ({
  });
  };
 
- const toggleRowExpansion = (uniqueId: string) => {
- setExpandedRows(prev => {
- if (prev.includes(uniqueId)) return prev.filter(id => id !== uniqueId);
- return [...prev, uniqueId];
- });
- }
-
  // Update Local State for any field
  const updateLocalItem = (uniqueId: string, updates: Partial<FinancialItem>) => {
  setItems(prev => prev.map(item => {
@@ -961,7 +997,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
 
  // If disbursements were updated, auto-sum amount and update month
  if (updates.disbursements) {
- const summary = summarizeDisbursements(updates.disbursements, selectedYear?.toString());
+ const summary = summarizeDisbursements(updates.disbursements, item.fundYear);
  newItem.actualDisbursementAmount = summary.total;
  newItem.actualDisbursementMonth = summary.latestDate;
  Object.assign(newItem, summary.monthlyFields);
@@ -1148,8 +1184,14 @@ const FinancialAccomplishment: React.FC<Props> = ({
  }
  };
 
- const saveItemToDB = async (item: FinancialItem) => {
+ const saveItemToDB = async (
+ item: FinancialItem,
+ options: { includeTargets?: boolean; sync?: 'both' | 'obligation' | 'disbursement' } = {}
+ ) => {
+ const includeTargets = options.includeTargets ?? true;
+ const sync = options.sync ?? 'both';
  const submittedAt = new Date().toISOString();
+ let commitSourceState = () => {};
  if (item.sourceType === 'Subproject') {
  const sp = subprojects.find(s => s.id === item.sourceId);
  if (!sp) throw new Error("Subproject not found");
@@ -1166,7 +1208,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  disbursements: item.disbursements
  };
  // Update targets if Proposed
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  updated.obligationMonth = item.targetObligationMonth;
  updated.disbursementMonth = item.targetDisbursementMonth;
  updated.pricePerUnit = item.targetObligationAmount;
@@ -1181,7 +1223,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const { error: updateError } = await supabase.from('subprojects').update({ details: updatedDetails }).eq('id', sp.id);
  if (updateError) throw updateError;
  }
- setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, details: updatedDetails } : s));
+ commitSourceState = () => setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, details: updatedDetails } : s));
 
  } else if (item.sourceType === 'Activity') {
  const act = activities.find(a => a.id === item.sourceId);
@@ -1197,7 +1239,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  actualDisbursementAmount: item.actualDisbursementAmount
  };
  // Update targets if Proposed
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  updated.obligationMonth = item.targetObligationMonth;
  updated.disbursementMonth = item.targetDisbursementMonth;
  updated.amount = item.targetObligationAmount;
@@ -1213,7 +1255,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const { error: updateError } = await supabase.from('activities').update({ expenses: updatedExpenses }).eq('id', act.id);
  if (updateError) throw updateError;
  }
- setActivities(prev => prev.map(a => a.id === act.id ? { ...a, expenses: updatedExpenses } : a));
+ commitSourceState = () => setActivities(prev => prev.map(a => a.id === act.id ? { ...a, expenses: updatedExpenses } : a));
 
  } else if (item.sourceType === 'Staffing') {
  const s = staffingReqs.find(req => req.id === item.sourceId);
@@ -1225,7 +1267,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  if (staffingExpenseItemId(item.detailId)) {
  updatedExpenses = updatedExpenses.map(e => {
  if (e.id === item.detailId) {
- const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
+ const disbursementSummary = summarizeDisbursements(item.disbursements || [], item.fundYear);
  const updatedExpense: any = {
  ...e,
  actualObligationDate: item.actualObligationMonth,
@@ -1238,7 +1280,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  updatedExpense[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
  });
  // Update targets if Proposed
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  updatedExpense.obligationDate = item.targetObligationMonth;
  updatedExpense.amount = item.targetObligationAmount;
  }
@@ -1270,13 +1312,13 @@ const FinancialAccomplishment: React.FC<Props> = ({
  ...monthlyTotals
  };
 
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  payload.obligationDate = item.targetObligationMonth;
  payload.annualSalary = item.targetObligationAmount;
  }
 
  } else {
- const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
+ const disbursementSummary = summarizeDisbursements(item.disbursements || [], item.fundYear);
  payload = {
  actualObligationDate: item.actualObligationMonth,
  actualObligationAmount: item.actualObligationAmount,
@@ -1286,7 +1328,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  SHORT_MONTHS.forEach(m => {
  payload[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
  });
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  payload.obligationDate = item.targetObligationMonth;
  payload.annualSalary = item.targetObligationAmount;
  }
@@ -1305,10 +1347,10 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const { error: updateError } = await supabase.from('staffing_requirements').update(payload).eq('id', item.sourceId);
  if (updateError) throw updateError;
  }
- setStaffingReqs(prev => prev.map(req => req.id === item.sourceId ? { ...req, ...payload } : req));
+ commitSourceState = () => setStaffingReqs(prev => prev.map(req => req.id === item.sourceId ? { ...req, ...payload } : req));
 
  } else if (item.sourceType === 'Other') {
- const disbursementSummary = summarizeDisbursements(item.disbursements || [], selectedYear?.toString());
+ const disbursementSummary = summarizeDisbursements(item.disbursements || [], item.fundYear);
  const payload: any = {
  actualObligationDate: item.actualObligationMonth,
  actualObligationAmount: item.actualObligationAmount,
@@ -1320,7 +1362,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  payload[`actualDisbursement${m}`] = disbursementSummary.monthlyFields[`actualDisbursement${m}`];
  });
 
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  payload.obligationDate = item.targetObligationMonth;
  payload.disbursementDate = item.targetDisbursementMonth;
  payload.amount = item.targetObligationAmount;
@@ -1330,7 +1372,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.sourceId);
  if (updateError) throw updateError;
  }
- setOtherProgramExpenses(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
+ commitSourceState = () => setOtherProgramExpenses(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
  } else if (item.sourceType === 'Office') {
  const payload: any = {
  actualObligationDate: item.actualObligationMonth,
@@ -1340,7 +1382,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  obligations: item.obligations,
  disbursements: item.disbursements
  };
- if (item.status === 'Proposed') {
+ if (includeTargets && item.status === 'Proposed') {
  payload.obligationDate = item.targetObligationMonth;
  payload.disbursementDate = item.targetDisbursementMonth;
  payload.pricePerUnit = item.targetObligationAmount;
@@ -1359,12 +1401,13 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const { error: updateError } = await supabase.from('office_requirements').update(payload).eq('id', item.sourceId);
  if (updateError) throw updateError;
  }
- setOfficeReqs(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
+ commitSourceState = () => setOfficeReqs(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
  }
 
  // Sync with centralized obligations table
- await syncObligationsToCentralTable(item);
- await syncDisbursementsToCentralTable(item);
+ if (sync === 'both' || sync === 'obligation') await syncObligationsToCentralTable(item);
+ if (sync === 'both' || sync === 'disbursement') await syncDisbursementsToCentralTable(item);
+ commitSourceState();
  };
 
  const undoLocalItem = (uniqueId: string) => {
@@ -1457,163 +1500,248 @@ const FinancialAccomplishment: React.FC<Props> = ({
  }
  };
 
+ const mergeActualRecords = (
+ item: FinancialItem,
+ kind: 'obligation' | 'disbursement',
+ records: ObligationRecord[] | DisbursementRecord[]
+ ): FinancialItem => {
+ if (kind === 'obligation') {
+ const obligations = records as ObligationRecord[];
+ const latest = [...obligations]
+ .filter(record => record.date)
+ .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.date || '';
+ return {
+ ...item,
+ obligations,
+ actualObligationAmount: sumAmounts(obligations),
+ actualObligationMonth: latest,
+ };
+ }
+ const disbursements = records as DisbursementRecord[];
+ const summary = summarizeDisbursements(disbursements, item.fundYear);
+ return {
+ ...item,
+ disbursements,
+ actualDisbursementAmount: summary.total,
+ actualDisbursementMonth: summary.latestDate,
+ ...summary.monthlyFields,
+ };
+ };
+
+ const openActualsDialog = (item: FinancialItem, kind: 'obligation' | 'disbursement') => {
+ setActualsDialogError('');
+ setActualsDialog({ itemId: item.uniqueId, kind });
+ };
+
+ const closeActualsDialog = () => {
+ if (actualsDialogSaving) return;
+ setActualsDialog(null);
+ setActualsDialogError('');
+ };
+
+ const handleCategoryKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, currentCategory: FinancialCategory) => {
+ if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+ event.preventDefault();
+ const currentIndex = categories.indexOf(currentCategory);
+ const nextIndex = event.key === 'Home'
+ ? 0
+ : event.key === 'End'
+ ? categories.length - 1
+ : event.key === 'ArrowRight'
+ ? (currentIndex + 1) % categories.length
+ : (currentIndex - 1 + categories.length) % categories.length;
+ const nextCategory = categories[nextIndex];
+ setCategory(nextCategory);
+ document.getElementById(`financial-category-${nextIndex}`)?.focus();
+ };
+
+ const saveActualRecords = async (draftRecords: ObligationRecord[] | DisbursementRecord[]) => {
+ if (!actualsDialog) return;
+ const item = items.find(candidate => candidate.uniqueId === actualsDialog.itemId);
+ if (!item) {
+ setActualsDialogError('This financial line is no longer available. Close the dialog and try again.');
+ return;
+ }
+
+ const normalizedRecords = draftRecords.map((record, index) => ({
+ ...record,
+ id: Number(record.id) < 0 ? Date.now() + index : record.id,
+ amount: toFiniteNumber(record.amount),
+ date: normalizeFinancialMonthValue(record.date, item.fundYear),
+ }));
+ const invalidRecord = normalizedRecords.find(record => record.amount <= 0 || !record.date);
+ if (invalidRecord) {
+ setActualsDialogError('Each entry requires an amount greater than zero and a month/year.');
+ return;
+ }
+ if (!(await ensureFinancialItemAllowed(item))) {
+ setActualsDialogError(getFinancialStatusDecision(item).message || 'You do not have permission to edit this financial line.');
+ return;
+ }
+
+ const currentRecords = actualsDialog.kind === 'obligation' ? item.obligations : item.disbursements;
+ const changedMonths = getChangedRecordMonths(normalizedRecords, currentRecords);
+ for (const month of changedMonths) {
+ if (!(await validateFinancialActualMonth(item, month))) {
+ setActualsDialogError(getMonthLockMessage(getMonthDecision(month)) || 'The selected month is locked.');
+ return;
+ }
+ }
+
+ setActualsDialogSaving(true);
+ setActualsDialogError('');
+ skipNextFinancialReloadRef.current = true;
+ try {
+ const savedItem = mergeActualRecords(item, actualsDialog.kind, normalizedRecords);
+ await saveItemToDB(savedItem, { includeTargets: false, sync: actualsDialog.kind });
+ const mergeSavedActuals = (candidate: FinancialItem) => candidate.uniqueId === savedItem.uniqueId
+ ? mergeActualRecords(candidate, actualsDialog.kind, normalizedRecords)
+ : candidate;
+ setItems(previous => previous.map(mergeSavedActuals));
+ setOriginalItems(previous => previous.map(mergeSavedActuals));
+ setChangedItems(previous => {
+ const next = new Map<string, FinancialItem>(previous);
+ const changed = next.get(savedItem.uniqueId);
+ if (changed) next.set(savedItem.uniqueId, mergeActualRecords(changed, actualsDialog.kind, normalizedRecords));
+ return next;
+ });
+ setSaveSuccessMessage(`Actual ${actualsDialog.kind === 'obligation' ? 'obligations' : 'disbursements'} saved successfully.`);
+ setTimeout(() => setSaveSuccessMessage(''), 3000);
+ setActualsDialog(null);
+ } catch (error: any) {
+ skipNextFinancialReloadRef.current = false;
+ console.error(`Error saving actual ${actualsDialog.kind}s:`, error);
+ setActualsDialogError(error?.message || `Failed to save actual ${actualsDialog.kind}s. Your draft has been kept.`);
+ } finally {
+ setActualsDialogSaving(false);
+ }
+ };
+
+ const activeActualsItem = actualsDialog
+ ? items.find(candidate => candidate.uniqueId === actualsDialog.itemId) || null
+ : null;
+ const activeActualsCanEdit = activeActualsItem
+ ? canEdit && getFinancialStatusDecision(activeActualsItem).allowed
+ : false;
+
  // --- Render ---
 
  return (
- <div className="data-list-page">
+ <div className="data-list-page financial-accomplishment-page">
  <div className="data-list-header">
  <div>
  <h2 className="data-list-title">Financial Accomplishment Collection Form</h2>
- </div>
- <div className="page-filter-toggle">
- <span className="page-filter-summary">
- {[selectedOu === 'All' ? 'All OUs' : selectedOu, selectedTier, selectedFundType, selectedYear].join(' / ')}
- </span>
- <button
- type="button"
- className={`btn btn-secondary page-filter-button ${filtersOpen ? 'is-open' : ''}`}
- onClick={() => setFiltersOpen(prev => !prev)}
- aria-expanded={filtersOpen}
- aria-controls="financial-accomplishment-filter-panel"
- >
- <SlidersHorizontal aria-hidden="true" />
- <span>Filters</span>
- <ChevronDown aria-hidden="true" className="page-filter-button__chevron" />
- </button>
+ <p className="data-list-subtitle">Track obligation and disbursement accomplishments across the applied funding scope.</p>
  </div>
  </div>
-
- <div
- id="financial-accomplishment-filter-panel"
- className={`report-filter-panel dashboard-filter-panel page-filter-panel ${filtersOpen ? 'is-open' : ''}`}
- hidden={!filtersOpen}
- >
- <div className="report-filter-grid">
- <div className="report-filter">
- <label htmlFor="financial-ou-filter" className="form-label">OU</label>
- <select
- id="financial-ou-filter"
- value={selectedOu}
- onChange={(event) => setSelectedOu(event.target.value)}
- disabled={!canViewAll}
- className="form-control"
- >
- <option value="All">All OUs</option>
- {operatingUnits.map(ou => (
- <option key={ou} value={ou}>{ou}</option>
- ))}
- </select>
- </div>
- <div className="report-filter">
- <label htmlFor="financial-tier-filter" className="form-label">Tier</label>
- <select
- id="financial-tier-filter"
- value={selectedTier}
- onChange={(event) => setSelectedTier(event.target.value)}
- className="form-control"
- >
- <option value="All">All Tiers</option>
- {tiers.map(tier => (
- <option key={tier} value={tier}>{tier}</option>
- ))}
- </select>
- </div>
- <div className="report-filter">
- <label htmlFor="financial-fund-type-filter" className="form-label">Fund Type</label>
- <select
- id="financial-fund-type-filter"
- value={selectedFundType}
- onChange={(event) => setSelectedFundType(event.target.value)}
- className="form-control"
- >
- <option value="All">All Fund Types</option>
- {fundTypes.map(fundType => (
- <option key={fundType} value={fundType}>{fundType}</option>
- ))}
- </select>
- </div>
- <div className="report-filter">
- <label htmlFor="financial-year-filter" className="form-label">Year</label>
- <select
- id="financial-year-filter"
- value={(selectedYear || defaultYear).toString()}
- onChange={(event) => setSelectedYear(Number(event.target.value))}
- className="form-control"
- >
- {availableYears.map(year => (
- <option key={year} value={year}>{year}</option>
- ))}
- </select>
- </div>
- </div>
- </div>
+ <DcfScopeFilterPanel idPrefix="financial-accomplishment" filters={dcfFilters} />
 
  {isLoading ? (
  <LoadingState label="Loading financial data..." />
  ) : (
- <div className="data-table-card">
+ <>
  <section className="financial-accomplishment-summary-grid" aria-label="Financial accomplishment summary">
  {financialSummaryCards.map(card => (
  <div key={card.label} className={`financial-accomplishment-summary-card financial-accomplishment-summary-card--${card.tone}`}>
  <div className="financial-accomplishment-summary-card__header">
  <span>{card.label}</span>
+ <card.icon aria-hidden="true" />
  </div>
  <strong>{formatCurrency(card.value)}</strong>
  <small>{card.indicator}</small>
  </div>
  ))}
  </section>
+ <section className="financial-accomplishment-progress" aria-label="Financial progress">
+ {financialProgress.map(progress => {
+ const displayValue = progress.value === null ? 0 : progress.value;
+ const clampedValue = Math.min(100, Math.max(0, displayValue));
+ return (
+ <div className="financial-accomplishment-progress__item" key={progress.label}>
+ <div className="financial-accomplishment-progress__header">
+ <span>{progress.label}</span>
+ <strong>{progress.value === null ? 'No target' : `${progress.value}%`}</strong>
+ </div>
+ <div className="financial-accomplishment-progress__track" role="progressbar" aria-label={progress.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={clampedValue}>
+ <span style={{ width: `${clampedValue}%` }} />
+ </div>
+ <small>{progress.detail}</small>
+ </div>
+ );
+ })}
+ </section>
+ <div className="financial-accomplishment-category-tabs" role="tablist" aria-label="Financial category">
+ {categories.map(option => (
+ <button key={option} id={`financial-category-${categories.indexOf(option)}`} type="button" role="tab" tabIndex={category === option ? 0 : -1} onClick={() => setCategory(option)} onKeyDown={event => handleCategoryKeyDown(event, option)} className={category === option ? 'is-active' : ''} aria-selected={category === option} aria-controls="financial-accomplishment-table-panel">
+ <span>{option}</span>
+ </button>
+ ))}
+ </div>
+ <div id="financial-accomplishment-table-panel" className="data-table-card financial-accomplishment-table-card" role="tabpanel">
  <div className="data-table-scroll financial-accomplishment-table-scroll custom-scrollbar">
  <table className="data-table financial-accomplishment-table ">
  <colgroup>
  <col className="fac-width-particulars" />
- {Array.from({ length: 8 }).map((_, index) => (
- <col key={`financial-col-${index}`} className="fac-width-financial" />
- ))}
+ <col className="fac-width-money" />
+ <col className="fac-width-month" />
+ <col className="fac-width-money" />
+ <col className="fac-width-money" />
+ <col className="fac-width-money" />
+ <col className="fac-width-month" />
+ <col className="fac-width-money" />
  <col className="fac-width-action" />
  </colgroup>
  <thead>
  <tr>
- <th rowSpan={2} className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars financial-accomplishment-sticky-head fac-header-particulars px-4 py-3 text-center align-middle">Particulars / UACS</th>
+ <th className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars financial-accomplishment-sticky-head fac-header-particulars">Particulars / UACS</th>
  {/* Target Obligation */}
  <th colSpan={2} className="fac-col-target-obligation px-4 py-2 text-center border-l border-b ">Target Obligation</th>
 
  {/* Actual Obligation */}
- <th colSpan={2} className="fac-col-actual-obligation px-4 py-2 text-center border-l border-b ">Actual Obligation</th>
+ <th className="fac-col-actual-obligation">Actual Obligation</th>
+
+ {/* Unobligated */}
+ <th className="fac-col-unobligated">Unobligated Amount</th>
 
  {/* Target Disbursement */}
  <th colSpan={2} className="fac-col-target-disbursement px-4 py-2 text-center border-l border-b ">Target Disbursement</th>
 
  {/* Actual Disbursement */}
- <th colSpan={2} className="fac-col-actual-disbursement px-4 py-2 text-center border-l border-b ">Actual Disbursement</th>
+ <th className="fac-col-actual-disbursement">Actual Disbursement</th>
 
- <th rowSpan={2} className="fac-header-action fac-col-action px-4 py-3 text-center align-middle">Action</th>
+ <th className="fac-header-action fac-col-action">Action</th>
  </tr>
  <tr>
+ <th className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars financial-accomplishment-sticky-head fac-header-spacer" aria-hidden="true"></th>
  {/* Target Obligation */}
- <th className="fac-col-target-obligation px-2 py-2 text-center border-l cursor-pointer " onClick={() => handleSort('targetObligationAmount')}>
- Amount {SortIcon('targetObligationAmount')}
+ <th className="fac-col-target-obligation px-2 py-2 text-center border-l ">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('targetObligationAmount')}>Amount {SortIcon('targetObligationAmount')}</button>
  </th>
- <th className="fac-col-target-obligation px-2 py-2 text-center cursor-pointer " onClick={() => handleSort('targetObligationMonth')}>
- Date {SortIcon('targetObligationMonth')}
+ <th className="fac-col-target-obligation px-2 py-2 text-center ">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('targetObligationMonth')}>Date {SortIcon('targetObligationMonth')}</button>
  </th>
 
- <th className="fac-col-actual-obligation px-2 py-2 text-center border-l " colSpan={2}>
- Obligations
+ <th className="fac-col-actual-obligation border-l">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('actualObligationAmount')}>Obligations {SortIcon('actualObligationAmount')}</button>
+ </th>
+
+ <th className="fac-col-unobligated border-l">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('unobligatedAmount')}>Amount {SortIcon('unobligatedAmount')}</button>
  </th>
 
  {/* Target Disbursement */}
- <th className="fac-col-target-disbursement px-2 py-2 text-center border-l cursor-pointer " onClick={() => handleSort('targetDisbursementAmount')}>
- Amount {SortIcon('targetDisbursementAmount')}
+ <th className="fac-col-target-disbursement px-2 py-2 text-center border-l ">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('targetDisbursementAmount')}>Amount {SortIcon('targetDisbursementAmount')}</button>
  </th>
- <th className="fac-col-target-disbursement px-2 py-2 text-center cursor-pointer " onClick={() => handleSort('targetDisbursementMonth')}>
- Date {SortIcon('targetDisbursementMonth')}
+ <th className="fac-col-target-disbursement px-2 py-2 text-center ">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('targetDisbursementMonth')}>Date {SortIcon('targetDisbursementMonth')}</button>
  </th>
 
  {/* Actual Disbursement */}
- <th className="fac-col-actual-disbursement px-2 py-2 text-center border-l " colSpan={2}>
- Disbursements
+ <th className="fac-col-actual-disbursement border-l">
+ <button type="button" className="fac-sort-button" onClick={() => handleSort('actualDisbursementAmount')}>Disbursements {SortIcon('actualDisbursementAmount')}</button>
  </th>
+ <th className="fac-header-action fac-col-action fac-header-spacer" aria-hidden="true"></th>
  </tr>
  </thead>
  <tbody className="fac-table-body">
@@ -1621,6 +1749,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const isTypeExpanded = expandedObjectTypes.includes(typeGroup.objectType);
  const objectTypeTotalTargetObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetObli), 0);
  const objectTypeTotalActualObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualObli), 0);
+ const objectTypeTotalUnobligated = typeGroup.uacsGroups.reduce((sum, group) => sum + group.items.reduce((itemSum, item) => itemSum + getUnobligatedAmount(item), 0), 0);
  const objectTypeTotalTargetDisb = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetDisb), 0);
  const objectTypeTotalActualDisb = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualDisb), 0);
  return (
@@ -1628,54 +1757,63 @@ const FinancialAccomplishment: React.FC<Props> = ({
  {/* Level 1: Object Type Header (Container) */}
  <tr className="fac-row-object">
  <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3">
- <button onClick={() => toggleObjectType(typeGroup.objectType)} className="fac-drill-button group w-full">
- <span className="fac-expand-toggle" aria-hidden="true">{isTypeExpanded ? '-' : '+'}</span>
- <span className="fac-drill-text">{typeGroup.objectType}</span>
+ <button onClick={() => toggleObjectType(typeGroup.objectType)} className="fac-drill-button group w-full" aria-expanded={isTypeExpanded}>
+ <span className="fac-expand-toggle" aria-hidden="true">{isTypeExpanded ? <ChevronDown /> : <ChevronRight />}</span>
+ <span className="fac-drill-text">{getObjectTypeLabel(typeGroup.objectType)}</span>
  </button>
  </td>
  <td className="fac-col-target-obligation fac-collapsed-total px-4 py-3 text-center border-l ">
  {formatCurrency(objectTypeTotalTargetObli)}
  </td>
- <td className="fac-col-target-obligation px-4 py-3 text-center ">-</td>
- <td className="fac-col-actual-obligation fac-collapsed-total px-4 py-3 text-center border-l " colSpan={2}>{formatCurrency(objectTypeTotalActualObli)}</td>
+ <td className="fac-col-target-obligation px-4 py-3 text-center ">—</td>
+ <td className="fac-col-actual-obligation fac-collapsed-total">{formatCurrency(objectTypeTotalActualObli)}</td>
+ <td className={`fac-col-unobligated fac-collapsed-total ${objectTypeTotalUnobligated < 0 ? 'is-negative' : ''}`}>{formatCurrency(objectTypeTotalUnobligated)}</td>
  <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-3 text-center border-l ">{formatCurrency(objectTypeTotalTargetDisb)}</td>
- <td className="fac-col-target-disbursement px-4 py-3 text-center ">-</td>
- <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-3 text-center border-l " colSpan={2}>{formatCurrency(objectTypeTotalActualDisb)}</td>
+ <td className="fac-col-target-disbursement px-4 py-3 text-center ">—</td>
+ <td className="fac-col-actual-disbursement fac-collapsed-total">{formatCurrency(objectTypeTotalActualDisb)}</td>
  <td className="fac-col-action px-4 py-3"></td>
  </tr>
 
  {/* Level 2: UACS Groups */}
  {isTypeExpanded && typeGroup.uacsGroups.map((group) => {
  const isExpanded = expandedGroups.includes(group.key);
+ const groupUnobligated = group.items.reduce((sum, item) => sum + getUnobligatedAmount(item), 0);
  // Determine if all items have same month to display in group header
  return (
  <React.Fragment key={group.key}>
  {/* Group Header Row (UACS) */}
  <tr className="fac-row-uacs">
  <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3">
- <button onClick={() => toggleGroup(group.key)} className="fac-drill-button group text-left w-full" title={`${group.uacsCode} ${group.description}`}>
- <span className="fac-expand-toggle" aria-hidden="true">{isExpanded ? '-' : '+'}</span>
- <span className="fac-drill-text" title={`${group.uacsCode} ${group.description}`}>
- <span className="fac-uacs-code mr-2">{group.uacsCode}</span>
- <span className="fac-uacs-description">{group.description}</span>
+ <button onClick={() => toggleGroup(group.key)} className="fac-drill-button group text-left w-full" title={`${group.uacsCode} ${group.particular}`} aria-expanded={isExpanded}>
+ <span className="fac-expand-toggle" aria-hidden="true">{isExpanded ? <ChevronDown /> : <ChevronRight />}</span>
+ <span className="fac-drill-text" title={`${group.uacsCode} ${group.particular}`}>
+ <span className="fac-uacs-primary">
+ <span className="fac-uacs-code">{group.uacsCode}</span>
+ <span className="fac-uacs-copy">
+ <span className="fac-uacs-particular">{group.particular}</span>
+ {group.description && group.description !== group.particular && <span className="fac-uacs-description">{group.description}</span>}
+ </span>
+ <Lock className="fac-rollup-lock" aria-label="Roll-up total" />
+ </span>
  </span>
  </button>
  </td>
  {/* Targets Total */}
  <td className="fac-col-target-obligation fac-collapsed-total px-4 py-3 text-center border-l ">{formatCurrency(group.totalTargetObli)}</td>
- <td className="fac-col-target-obligation px-4 py-3 text-center ">-</td>
+ <td className="fac-col-target-obligation px-4 py-3 text-center ">—</td>
 
  {/* Actual Obli Total & Batch */}
- <td className="fac-col-actual-obligation px-4 py-3 text-center border-l " colSpan={2}>
+ <td className="fac-col-actual-obligation">
  {formatCurrency(group.totalActualObli)}
  </td>
+ <td className={`fac-col-unobligated fac-collapsed-total ${groupUnobligated < 0 ? 'is-negative' : ''}`}>{formatCurrency(groupUnobligated)}</td>
 
  {/* Target Disb Total */}
  <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-3 text-center border-l ">{formatCurrency(group.totalTargetDisb)}</td>
- <td className="fac-col-target-disbursement px-4 py-3 text-center ">-</td>
+ <td className="fac-col-target-disbursement px-4 py-3 text-center ">—</td>
 
  {/* Actual Disb Total & Batch */}
- <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-3 text-center border-l " colSpan={2}>{formatCurrency(group.totalActualDisb)}</td>
+ <td className="fac-col-actual-disbursement fac-collapsed-total">{formatCurrency(group.totalActualDisb)}</td>
  <td className="fac-col-action px-4 py-3"></td>
  </tr>
 
@@ -1688,6 +1826,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const isSubExpanded = expandedSubGroups.includes(subId);
  const subGroupTotalTargetObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetObligationAmount), 0);
  const subGroupTotalActualObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualObligationAmount), 0);
+ const subGroupTotalUnobligated = typedSourceGroups.reduce((sum, sourceGroup) => sum + sourceGroup.items.reduce((itemSum, item) => itemSum + getUnobligatedAmount(item), 0), 0);
  const subGroupTotalTargetDisb = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetDisbursementAmount), 0);
  const subGroupTotalActualDisb = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualDisbursementAmount), 0);
 
@@ -1695,28 +1834,28 @@ const FinancialAccomplishment: React.FC<Props> = ({
  <React.Fragment key={subId}>
  <tr className="fac-row-category border-b ">
  <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-2">
- <button onClick={() => toggleSubGroup(subId)} className="fac-drill-button ">
- <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSubExpanded ? '-' : '+'}</span>
+ <button onClick={() => toggleSubGroup(subId)} className="fac-drill-button " aria-expanded={isSubExpanded}>
+ <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSubExpanded ? <ChevronDown /> : <ChevronRight />}</span>
  <span className="fac-drill-text">{subKey}</span>
  </button>
  </td>
  <td className="fac-col-target-obligation fac-collapsed-total px-4 py-2 text-center border-l ">
  {formatCurrency(subGroupTotalTargetObli)}
  </td>
- <td className="fac-col-target-obligation px-4 py-2 text-center ">-</td>
- <td className="fac-col-actual-obligation fac-collapsed-total px-4 py-2 text-center border-l " colSpan={2}>{formatCurrency(subGroupTotalActualObli)}</td>
+ <td className="fac-col-target-obligation px-4 py-2 text-center ">—</td>
+ <td className="fac-col-actual-obligation fac-collapsed-total">{formatCurrency(subGroupTotalActualObli)}</td>
+ <td className={`fac-col-unobligated fac-collapsed-total ${subGroupTotalUnobligated < 0 ? 'is-negative' : ''}`}>{formatCurrency(subGroupTotalUnobligated)}</td>
  <td className="fac-col-target-disbursement fac-collapsed-total px-4 py-2 text-center border-l ">{formatCurrency(subGroupTotalTargetDisb)}</td>
- <td className="fac-col-target-disbursement px-4 py-2 text-center ">-</td>
- <td className="fac-col-actual-disbursement fac-collapsed-total px-4 py-2 text-center border-l " colSpan={2}>{formatCurrency(subGroupTotalActualDisb)}</td>
+ <td className="fac-col-target-disbursement px-4 py-2 text-center ">—</td>
+ <td className="fac-col-actual-disbursement fac-collapsed-total">{formatCurrency(subGroupTotalActualDisb)}</td>
  <td className="fac-col-action px-4 py-2"></td>
  </tr>
  {isSubExpanded && typedSourceGroups.map(sourceGroup => {
  const sourceId = `${subId}-${sourceGroup.sourceId}`;
- const isSourceExpanded = expandedRows.includes(sourceId);
 
  const sortedItems = sortConfig ? [...sourceGroup.items].sort((a, b) => {
- let valA = a[sortConfig.key];
- let valB = b[sortConfig.key];
+ let valA = sortConfig.key === 'unobligatedAmount' ? getUnobligatedAmount(a) : a[sortConfig.key];
+ let valB = sortConfig.key === 'unobligatedAmount' ? getUnobligatedAmount(b) : b[sortConfig.key];
  if (valA === valB) return 0;
  if (valA === undefined || valA === null) return 1;
  if (valB === undefined || valB === null) return -1;
@@ -1727,23 +1866,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
 
  return (
  <React.Fragment key={sourceId}>
- <tr className="fac-row-source border-b ">
- <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-1.5 ">
- <button onClick={() => toggleRowExpansion(sourceId)} className="fac-drill-button " title={sourceGroup.sourceName}>
- <span className="fac-expand-toggle fac-expand-toggle--small" aria-hidden="true">{isSourceExpanded ? '-' : '+'}</span>
- <span className="fac-drill-text leading-tight" title={sourceGroup.sourceName}>{sourceGroup.sourceName}</span>
- </button>
- </td>
- <td className="fac-col-target-obligation fac-collapsed-total px-2 py-1.5 text-center border-l ">{formatCurrency(sourceGroup.targetObligationAmount)}</td>
- <td className="fac-col-target-obligation px-2 py-1.5 text-center ">-</td>
- <td className="fac-col-actual-obligation fac-collapsed-total px-2 py-1.5 text-center border-l " colSpan={2}>{formatCurrency(sourceGroup.actualObligationAmount)}</td>
- <td className="fac-col-target-disbursement fac-collapsed-total px-2 py-1.5 text-center border-l ">{formatCurrency(sourceGroup.targetDisbursementAmount)}</td>
- <td className="fac-col-target-disbursement px-2 py-1.5 text-center ">-</td>
- <td className="fac-col-actual-disbursement fac-collapsed-total px-2 py-1.5 text-center border-l " colSpan={2}>{formatCurrency(sourceGroup.actualDisbursementAmount)}</td>
- <td className="fac-col-action px-4 py-1.5 text-right"></td>
- </tr>
- {isSourceExpanded && sortedItems.map(item => {
- const isBreakdownExpanded = expandedRows.includes(item.uniqueId);
+ {sortedItems.map(item => {
  const isChanged = changedItems.has(item.uniqueId);
  const contextDescription = getContextDescription(item);
  const isTagged = isTaggedExclusion(item);
@@ -1775,12 +1898,11 @@ const FinancialAccomplishment: React.FC<Props> = ({
  {/* Target Obli */}
  <td className={`fac-col-target-obligation px-2 py-1.5 text-center border-l ${isTagged ? 'fac-target-excluded fac-target-excluded-amount' : ''}`}>
  {item.status === 'Proposed' ? (
- <FormattedAmountInput
+ <FinancialAmountCell
  value={toFiniteNumber(item.targetObligationAmount)}
- onValueChange={(value) => updateLocalItem(item.uniqueId, { targetObligationAmount: value })}
+ onChange={(value) => updateLocalItem(item.uniqueId, { targetObligationAmount: value })}
  disabled={!canEditFinancialItem}
- className="form-control form-control--compact fac-number-input"
- placeholder="0.00"
+ ariaLabel={`${item.sourceName} target obligation amount`}
  emptyWhenZero
  />
  ) : (
@@ -1791,37 +1913,42 @@ const FinancialAccomplishment: React.FC<Props> = ({
  {item.targetObligationMonth === 'Monthly' ? (
  'Monthly'
  ) : item.status === 'Proposed' ? (
- <MonthYearPicker
+ <FinancialMonthCell
  value={item.targetObligationMonth}
  onChange={(val) => updateLocalItem(item.uniqueId, { targetObligationMonth: val })}
  disabled={!canEditFinancialItem}
- className="h-7 py-0"
+ ariaLabel={`${item.sourceName} target obligation month`}
+ fallbackYear={item.fundYear}
  />
  ) : (
- item.targetObligationMonth ? new Date(item.targetObligationMonth).toLocaleDateString(undefined, {month:'long', year:'numeric'}) : '-'
+ formatFinancialMonth(item.targetObligationMonth, item.fundYear)
  )}
  </td>
 
  {/* Actual Obli */}
- <td className="fac-col-actual-obligation px-2 py-1.5 border-l " colSpan={2}>
- <ObligationsEditor
- obligations={item.obligations || []}
- onChange={(newObs, total) => updateLocalItem(item.uniqueId, { obligations: newObs, actualObligationAmount: total })}
- defaultYear={selectedYear?.toString()}
- readOnly={!canEditFinancialItem}
- validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
- />
+ <td className="fac-col-actual-obligation">
+ <button
+ type="button"
+ className={`fac-actuals-trigger ${item.actualObligationAmount > 0 ? 'has-value' : ''}`}
+ onClick={() => openActualsDialog(item, 'obligation')}
+ aria-label={`${item.actualObligationAmount > 0 ? 'Manage' : 'Add'} actual obligations for ${item.sourceName}`}
+ >
+ {item.actualObligationAmount > 0 ? formatCurrency(item.actualObligationAmount) : '+ Add obligation'}
+ </button>
+ </td>
+
+ <td className={`fac-col-unobligated fac-collapsed-total ${getUnobligatedAmount(item) < 0 ? 'is-negative' : ''}`}>
+ {formatCurrency(getUnobligatedAmount(item))}
  </td>
 
  {/* Target Disb */}
  <td className={`fac-col-target-disbursement px-2 py-1.5 text-center border-l ${isTagged ? 'fac-target-excluded fac-target-excluded-amount' : ''}`}>
  {item.status === 'Proposed' ? (
- <FormattedAmountInput
+ <FinancialAmountCell
  value={toFiniteNumber(item.targetDisbursementAmount)}
- onValueChange={(value) => updateLocalItem(item.uniqueId, { targetDisbursementAmount: value })}
+ onChange={(value) => updateLocalItem(item.uniqueId, { targetDisbursementAmount: value })}
  disabled={!canEditFinancialItem}
- className="form-control form-control--compact fac-number-input"
- placeholder="0.00"
+ ariaLabel={`${item.sourceName} target disbursement amount`}
  emptyWhenZero
  />
  ) : (
@@ -1832,39 +1959,32 @@ const FinancialAccomplishment: React.FC<Props> = ({
  {item.targetDisbursementMonth === 'Monthly' ? (
  'Monthly'
  ) : item.status === 'Proposed' ? (
- <MonthYearPicker
+ <FinancialMonthCell
  value={item.targetDisbursementMonth}
  onChange={(val) => updateLocalItem(item.uniqueId, { targetDisbursementMonth: val })}
  disabled={!canEditFinancialItem}
- className="h-7 py-0"
+ ariaLabel={`${item.sourceName} target disbursement month`}
+ fallbackYear={item.fundYear}
  />
  ) : (
- item.targetDisbursementMonth ? (item.targetDisbursementMonth.includes('-') ? new Date(item.targetDisbursementMonth).toLocaleDateString(undefined, {month:'long', year:'numeric'}) : item.targetDisbursementMonth) : '-'
+ formatFinancialMonth(item.targetDisbursementMonth, item.fundYear)
  )}
  </td>
 
  {/* Actual Disbursement */}
- <td className="fac-col-actual-disbursement px-2 py-1.5 border-l " colSpan={2}>
- <DisbursementsEditor
- disbursements={item.disbursements || []}
- onChange={(newDibs, total) => updateLocalItem(item.uniqueId, { disbursements: newDibs, actualDisbursementAmount: total })}
- defaultYear={selectedYear?.toString()}
- readOnly={!canEditFinancialItem}
- validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
- />
+ <td className="fac-col-actual-disbursement">
+ <button
+ type="button"
+ className={`fac-actuals-trigger ${item.actualDisbursementAmount > 0 ? 'has-value' : ''}`}
+ onClick={() => openActualsDialog(item, 'disbursement')}
+ aria-label={`${item.actualDisbursementAmount > 0 ? 'Manage' : 'Add'} actual disbursements for ${item.sourceName}`}
+ >
+ {item.actualDisbursementAmount > 0 ? formatCurrency(item.actualDisbursementAmount) : '+ Add disbursement'}
+ </button>
  </td>
 
  <td className="fac-col-action px-4 py-1.5 text-right">
  <div className="flex items-center gap-1 justify-end">
- <button
- onClick={() => toggleRowExpansion(item.uniqueId)}
- className={`fac-breakdown-button ${isBreakdownExpanded ? 'is-expanded' : ''}`}
- title={isBreakdownExpanded ? 'Hide breakdown' : 'Show breakdown'}
- aria-label={isBreakdownExpanded ? 'Hide breakdown' : 'Show breakdown'}
- aria-expanded={isBreakdownExpanded}
- >
- {isBreakdownExpanded ? 'Collapse' : 'Expand'}
- </button>
  {canEdit && (
  <>
  {isChanged && !localSavingIds.has(item.uniqueId) && (
@@ -1889,47 +2009,6 @@ const FinancialAccomplishment: React.FC<Props> = ({
  </div>
  </td>
  </tr>
- {/* Expandable Breakdown (Monthly or Obligations) */}
- {isBreakdownExpanded && (
- <tr className="fac-row-breakdown animate-fadeIn">
- <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-3 py-4"></td>
- <td colSpan={9} className="px-4 py-4 border-l-4 ">
- <div className="flex flex-col lg:flex-row gap-6">
- {/* Multi-Obligation Section */}
- <div className="flex-1">
- <h4 className="fac-breakdown-title">
- <ListFilter className="w-4 h-4" />
- Multi-Obligation Records
- </h4>
- <ObligationListEditor
- obligations={item.obligations}
- onChange={(obs) => updateLocalItem(item.uniqueId, { obligations: obs })}
- readOnly={!canEditFinancialItem}
- hideHeaderAddButton
- validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
- />
- </div>
-
- {/* Monthly Disbursement Section (If supported) */}
- <div className="flex-1">
- <h4 className="fac-breakdown-title">
- <ListFilter className="w-4 h-4" />
- Multi-Disbursement Records
- </h4>
- <DisbursementListEditor
- disbursements={item.disbursements || []}
- onChange={(newDb) => {
- updateLocalItem(item.uniqueId, { disbursements: newDb });
- }}
- readOnly={!canEditFinancialItem}
- hideHeaderAddButton
- validateMonthChange={(month) => validateFinancialActualMonth(item, month)}
- />
- </div>
- </div>
- </td>
- </tr>
- )}
  </React.Fragment>
  );
  })}
@@ -1948,27 +2027,30 @@ const FinancialAccomplishment: React.FC<Props> = ({
  {groupedItems.length === 0 && (
  <tr>
  <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-8"></td>
- <td colSpan={9} className="px-6 py-8 text-center italic">No financial items found for the selected criteria.</td>
+ <td colSpan={8} className="px-6 py-8 text-center italic">No financial items found for the selected criteria.</td>
  </tr>
  )}
  </tbody>
  <tfoot>
  <tr>
- <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3 text-right ">GRAND TOTAL</td>
+ <td className="financial-accomplishment-sticky-col financial-accomplishment-sticky-particulars px-4 py-3 text-right ">{category === 'All' ? 'GRAND TOTAL' : `${category.toUpperCase()} SUBTOTAL`}</td>
  <td className="fac-col-target-obligation px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.targetObli)}</td>
  <td className="fac-col-target-obligation px-4 py-3"></td>
  <td className="fac-col-actual-obligation px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.actualObli)}</td>
- <td className="fac-col-actual-obligation px-4 py-3"></td>
+ <td className={`fac-col-unobligated px-4 py-3 text-center border-l ${grandTotals.unobligated < 0 ? 'is-negative' : ''}`}>{formatCurrency(grandTotals.unobligated)}</td>
  <td className="fac-col-target-disbursement px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.targetDisb)}</td>
  <td className="fac-col-target-disbursement px-4 py-3"></td>
  <td className="fac-col-actual-disbursement px-4 py-3 text-center border-l ">{formatCurrency(grandTotals.actualDisb)}</td>
- <td className="fac-col-actual-disbursement px-4 py-3"></td>
  <td className="fac-col-action px-4 py-3"></td>
+ </tr>
+ <tr className="fac-table-meta-row">
+ <td colSpan={9}>{visibleItems.length} line {visibleItems.length === 1 ? 'item' : 'items'} shown <span aria-hidden="true">·</span> All amounts in Philippine Peso (₱)</td>
  </tr>
  </tfoot>
  </table>
  </div>
  </div>
+ </>
  )}
 
  {/* Global Save Bar */}
@@ -2021,6 +2103,21 @@ const FinancialAccomplishment: React.FC<Props> = ({
  confirmLabel="Yes, Save Changes"
  onConfirm={confirmSaveAll}
  onCancel={() => setIsSaveConfirmOpen(false)}
+ />
+ )}
+
+ {actualsDialog && activeActualsItem && (
+ <FinancialActualsDialog
+ open
+ kind={actualsDialog.kind}
+ lineItemName={activeActualsItem.sourceType === 'Subproject' && activeActualsItem.budgetParticular ? activeActualsItem.budgetParticular : activeActualsItem.expenseParticular}
+ fallbackYear={activeActualsItem.fundYear}
+ records={actualsDialog.kind === 'obligation' ? activeActualsItem.obligations : activeActualsItem.disbursements}
+ readOnly={!activeActualsCanEdit}
+ saving={actualsDialogSaving}
+ error={actualsDialogError}
+ onClose={closeActualsDialog}
+ onSave={saveActualRecords}
  />
  )}
 

@@ -6,11 +6,12 @@ import {
 import { OfficeRequirementsTab } from './program_management/OfficeRequirementsTab';
 import { StaffingRequirementsTab } from './program_management/StaffingRequirementsTab';
 import { OtherExpensesTab } from './program_management/OtherExpensesTab';
-import useLocalStorageState from '../hooks/useLocalStorageState';
 import type { DataScope } from '../lib/scopedDataFetch';
+import type { ProgramManagementPageKey } from '../lib/appNavigation';
 import { DcfScopeFilterPanel, matchesDcfScope, useDcfScopeFilters } from './ui/DcfScopeFilters';
 
 interface ProgramManagementProps {
+    activePage: ProgramManagementPageKey;
     officeReqs: OfficeRequirement[];
     setOfficeReqs: React.Dispatch<React.SetStateAction<OfficeRequirement[]>>;
     staffingReqs: StaffingRequirement[];
@@ -24,9 +25,8 @@ interface ProgramManagementProps {
     onDataScopeChange?: (scope: Partial<DataScope>) => void;
 }
 
-type ActiveTab = 'Office' | 'Staffing' | 'Other';
-
 const ProgramManagement: React.FC<ProgramManagementProps> = ({
+    activePage,
     officeReqs, setOfficeReqs,
     staffingReqs, setStaffingReqs,
     otherProgramExpenses, setOtherProgramExpenses,
@@ -36,8 +36,7 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({
     onSelectOtherExpense,
     onDataScopeChange
 }) => {
-    // Use local storage state for persistence
-    const [activeTab, setActiveTab] = useLocalStorageState<ActiveTab>('programManagement_activeTab', 'Office');
+    const activeTab = activePage;
     const dcfFilters = useDcfScopeFilters({
         storageKey: 'program_management_dcf_scope',
         moduleName: 'Program Management',
@@ -57,29 +56,12 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({
         [otherProgramExpenses, dcfFilters.value]
     );
 
-    const TabButton = ({ name, label }: { name: ActiveTab; label: string }) => {
-        const isActive = activeTab === name;
-        return (
-            <button onClick={() => setActiveTab(name)} className={`data-tab ${isActive ? 'is-active' : ''}`}>
-                {label}
-            </button>
-        );
-    };
-
     return (
         <div className="data-list-page">
             <div className="data-list-header">
                 <h2 className="data-list-title">Program Management</h2>
             </div>
             <DcfScopeFilterPanel idPrefix="program-management-dcf" filters={dcfFilters} />
-
-            <div className="data-tabs">
-                <nav className="flex gap-1" aria-label="Tabs">
-                    <TabButton name="Office" label="Office Requirements" />
-                    <TabButton name="Staffing" label="Staffing Requirements" />
-                    <TabButton name="Other" label="Other Expenses" />
-                </nav>
-            </div>
 
             <div className="animate-fadeIn">
                 {activeTab === 'Office' && (
