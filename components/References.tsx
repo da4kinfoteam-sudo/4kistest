@@ -7,6 +7,7 @@ import { supabase } from '../supabaseClient';
 import { parseLocation } from './LocationPicker';
 import { usePagination, useUserAccess } from './mainfunctions/TableHooks';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader } from './ui/enterprise';
+import type { ReferencePageKey } from '../lib/appNavigation';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -28,6 +29,7 @@ export interface ReferenceParticular {
 
 
 interface ReferencesProps {
+    activePage: ReferencePageKey;
     uacsList: ReferenceUacs[];
     setUacsList: React.Dispatch<React.SetStateAction<ReferenceUacs[]>>;
     particularList: ReferenceParticular[];
@@ -146,10 +148,8 @@ const TRAINING_TOOLTIPS = {
     certification_type: "Type of certificate issued (e.g., Certificate of Completion, NC II)"
 };
 
-const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particularList, setParticularList, refCommodities, setRefCommodities, refLivestock, setRefLivestock, refEquipment, setRefEquipment, refInputs, setRefInputs, refInfrastructure, setRefInfrastructure, refTrainings, setRefTrainings, gidaList, setGidaList, elcacList, setElcacList, ipos, setIpos }) => {
+const References: React.FC<ReferencesProps> = ({ activePage: activeTab, uacsList, setUacsList, particularList, setParticularList, refCommodities, setRefCommodities, refLivestock, setRefLivestock, refEquipment, setRefEquipment, refInputs, setRefInputs, refInfrastructure, setRefInfrastructure, refTrainings, setRefTrainings, gidaList, setGidaList, elcacList, setElcacList, ipos, setIpos }) => {
     const { canEdit, canDelete } = useUserAccess('References');
-    const [activeGroup, setActiveGroup] = useState<'DCF Reference' | 'Commodity References' | 'Intervention References' | 'Policy References'>('DCF Reference');
-    const [activeTab, setActiveTab] = useState<'UACS' | 'Items' | 'Crop Reference' | 'Livestock Reference' | 'Equipment Reference' | 'Agricultural Input Reference' | 'Infrastructure Reference' | 'Training Reference' | 'GIDA' | 'ELCAC'>('UACS');
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<any>(null);
@@ -386,9 +386,15 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
 
     // Reset selection mode and sort on tab change
     useEffect(() => {
+        setSearchTerm('');
         setIsSelectionMode(false);
         setSelectedIds([]);
         setSortConfig(null);
+        setExpandedRowId(null);
+        setIsModalOpen(false);
+        setEditingItem(null);
+        setDeleteItem(null);
+        setIsMultiDeleteModalOpen(false);
     }, [activeTab]);
 
     // --- Sorting Logic ---
@@ -1796,61 +1802,6 @@ const References: React.FC<ReferencesProps> = ({ uacsList, setUacsList, particul
             {/* Header with Title */}
             <div className="data-list-header">
                 <h2 className="data-list-title">System References</h2>
-            </div>
-
-            {/* Tab Groups */}
-            <div className="data-tabs">
-                <nav className="data-tabs__nav">
-                    {['DCF Reference', 'Commodity References', 'Intervention References', 'Policy References'].map((group) => (
-                        <button
-                            key={group}
-                            onClick={() => {
-                                setActiveGroup(group as any);
-                                // Set default tab for group
-                                if (group === 'DCF Reference') setActiveTab('UACS');
-                                else if (group === 'Commodity References') setActiveTab('Crop Reference');
-                                else if (group === 'Intervention References') setActiveTab('Agricultural Input Reference');
-                                else if (group === 'Policy References') setActiveTab('GIDA');
-                                setSearchTerm('');
-                            }}
-                            className={`data-tab ${activeGroup === group ? 'is-active' : ''}`}
-                        >
-                            {group}
-                        </button>
-                    ))}
-                </nav>
-            </div>
-
-            {/* Sub-Tabs */}
-            <div className="data-tabs reference-tabs-secondary">
-                <nav className="data-tabs__nav">
-                    {activeGroup === 'DCF Reference' && (
-                        <>
-                            <button onClick={() => { setActiveTab('UACS'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'UACS' ? 'is-active' : ''}`}>UACS Codes</button>
-                            <button onClick={() => { setActiveTab('Items'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Items' ? 'is-active' : ''}`}>Subproject Items</button>
-                        </>
-                    )}
-                    {activeGroup === 'Commodity References' && (
-                        <>
-                            <button onClick={() => { setActiveTab('Crop Reference'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Crop Reference' ? 'is-active' : ''}`}>Crop</button>
-                            <button onClick={() => { setActiveTab('Livestock Reference'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Livestock Reference' ? 'is-active' : ''}`}>Livestock</button>
-                        </>
-                    )}
-                    {activeGroup === 'Intervention References' && (
-                        <>
-                            <button onClick={() => { setActiveTab('Agricultural Input Reference'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Agricultural Input Reference' ? 'is-active' : ''}`}>Agricultural Input Reference</button>
-                            <button onClick={() => { setActiveTab('Equipment Reference'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Equipment Reference' ? 'is-active' : ''}`}>Equipment Reference</button>
-                            <button onClick={() => { setActiveTab('Infrastructure Reference'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Infrastructure Reference' ? 'is-active' : ''}`}>Infrastructure Reference</button>
-                            <button onClick={() => { setActiveTab('Training Reference'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'Training Reference' ? 'is-active' : ''}`}>Training Reference</button>
-                        </>
-                    )}
-                    {activeGroup === 'Policy References' && (
-                        <>
-                            <button onClick={() => { setActiveTab('GIDA'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'GIDA' ? 'is-active' : ''}`}>GIDA Areas</button>
-                            <button onClick={() => { setActiveTab('ELCAC'); setSearchTerm(''); }} className={`data-tab ${activeTab === 'ELCAC' ? 'is-active' : ''}`}>ELCAC Areas</button>
-                        </>
-                    )}
-                </nav>
             </div>
 
             <div className="data-table-card">

@@ -21,6 +21,7 @@ interface MonthYearPickerProps {
   defaultYear?: number;
   allowClear?: boolean;
   clearLabel?: string;
+  ariaLabel?: string;
 }
 
 export function MonthYearPicker({
@@ -32,6 +33,7 @@ export function MonthYearPicker({
   defaultYear,
   allowClear = false,
   clearLabel = "Clear",
+  ariaLabel,
 }: MonthYearPickerProps) {
   const [date, setDate] = React.useState<Date | undefined>(() => {
     if (!value) return undefined;
@@ -77,6 +79,13 @@ export function MonthYearPicker({
             className
           )}
           disabled={disabled}
+          aria-label={ariaLabel}
+          onKeyDown={(event) => {
+            if (event.key === "F2" && !disabled) {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
         >
           <div className="flex items-center gap-1.5 overflow-hidden">
             <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
