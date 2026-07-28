@@ -9,6 +9,8 @@ import { supabase } from '../../supabaseClient';
 import { parseOfficeRequirementRow } from '../program_management/OfficeRequirementsTab';
 import { parseStaffingRequirementRow } from '../program_management/StaffingRequirementsTab';
 import { parseOtherExpenseRow } from '../program_management/OtherExpensesTab';
+import { getActivityDisplayTitle, resolveIpoByIdOrName } from '../../lib/entityIdentity';
+import { replaceManyActivityIpoRelationships, resolveSelectedIpoIds } from '../../lib/activityIpoRelationships';
 
 declare const XLSX: any;
 
@@ -259,7 +261,7 @@ export const handleSubprojectsUpload = (
                     
                     // Lookup IPO for Location
                     const ipoName = String(row.indigenousPeopleOrganization || '').trim();
-                    const matchedIpo = ipos.find(i => i.name === ipoName);
+                    const matchedIpo = resolveIpoByIdOrName(ipos, undefined, ipoName);
                     const locationString = matchedIpo ? matchedIpo.location : '';
 
                     // Prioritize row.operatingUnit from Excel with resolution
@@ -391,7 +393,8 @@ export const downloadActivitiesReport = (activities: Activity[]) => {
         'UID': a.uid || '',
         'Type': a.type,
         'Component': a.component,
-        'Activity Name': a.name,
+        'Activity Type': a.name,
+        'Activity Title': getActivityDisplayTitle(a),
         'Date': a.date,
         'Location': a.location,
         'Male Participants': a.participantsMale,
@@ -415,7 +418,7 @@ export const downloadActivitiesReport = (activities: Activity[]) => {
 
 export const downloadActivitiesTemplate = () => {
     const headers = [
-        'uid', 'type', 'component', 'name', 'date', 'province', 'municipality', 'facilitator', 'description',
+        'uid', 'type', 'component', 'name', 'activity_title', 'date', 'province', 'municipality', 'facilitator', 'description',
         'participatingIpos', 'participantsMale', 'participantsFemale',
         'fundingYear', 'fundType', 'tier', 'operatingUnit',
         'expense_uacsCode', 'expense_obligationMonth', 'expense_disbursementMonth', 'expense_amount'
@@ -426,6 +429,7 @@ export const downloadActivitiesTemplate = () => {
             type: 'Training',
             component: 'Social Preparation',
             name: 'Basic Leadership Training',
+            activity_title: 'Basic Leadership Training for the 2024 Officers',
             date: '2024-03-15',
             province: 'Rizal',
             municipality: 'Tanay',
@@ -447,6 +451,8 @@ export const downloadActivitiesTemplate = () => {
 
     const instructions = [
         ["Column", "Description"],
+        ["name", "Configured generic Activity Type or the legacy Training name."],
+        ["activity_title", "Required specific title for this Activity occurrence."],
         ["participatingIpos", "Names of IPOs. Separate multiple IPOs with a semicolon (;). Example: 'IPO One; IPO Two'"],
         ["province", "Province name."],
         ["municipality", "City or Municipality name."],
@@ -522,8 +528,11 @@ export const handleActivitiesUpload = (
 
                 if (!groupedData.has(uid)) {
                     // Removed required check for province and municipality
-                    if (!row.type || !row.component || !row.name || !row.date) {
-                        throw new Error(`Row ${rowNum} (UID: ${uid}): Missing required common fields (type, component, name, date).`);
+                    const activityTitle = String(
+                        row.activity_title || (row.type === 'Training' ? row.name : '')
+                    ).trim();
+                    if (!row.type || !row.component || !row.name || !activityTitle || !row.date) {
+                        throw new Error(`Row ${rowNum} (UID: ${uid}): Missing required common fields (type, component, name, activity_title, date).`);
                     }
 
                     const municipality = String(row.municipality || '').trim();
@@ -541,10 +550,12 @@ export const handleActivitiesUpload = (
                             type: row.type,
                             component: row.component as any,
                             name: String(row.name),
+                            activity_title: activityTitle,
                             date: String(row.date),
                             description: String(row.description || ''),
                             location: locationString,
                             participatingIpos: rowParticipatingIpos, // Use row's IPOs for initial entry
+                            participating_ipo_ids: resolveSelectedIpoIds(rowParticipatingIpos, ipos),
                             participantsMale: Number(row.participantsMale) || 0,
                             participantsFemale: Number(row.participantsFemale) || 0,
                             fundingYear: Number(row.fundingYear) || undefined,
@@ -608,6 +619,7 @@ export const handleActivitiesUpload = (
             groupedData.forEach((group) => {
                 newActivities.push({
                     ...group.common,
+                    participating_ipo_ids: resolveSelectedIpoIds(group.common.participatingIpos || [], ipos),
                     expenses: group.expenses,
                 });
             });
@@ -622,7 +634,18 @@ export const handleActivitiesUpload = (
                         console.error("Error inserting activities:", error);
                         alert(`Error inserting data: ${error.message}`);
                     } else if (data) {
-                        setActivities(prev => [...prev, ...(data as Activity[])]);
+                        const createdActivities = (data as Activity[]).map(created => ({
+                            ...created,
+                            participating_ipo_ids: resolveSelectedIpoIds(created.participatingIpos || [], ipos),
+                        }));
+                        await replaceManyActivityIpoRelationships(
+                            createdActivities.map(created => ({
+                                id: Number(created.id),
+                                ipoIds: created.participating_ipo_ids || [],
+                            })),
+                            currentUser?.fullName || currentUser?.email
+                        );
+                        setActivities(prev => [...prev, ...createdActivities]);
                         alert(`${data.length} activities imported successfully!`);
                     }
                 } else {

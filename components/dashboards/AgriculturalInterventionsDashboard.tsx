@@ -17,13 +17,15 @@ import {
     Truck,
     Users,
 } from 'lucide-react';
-import { Subproject } from '../../constants';
+import { IPO, Subproject } from '../../constants';
 import { parseLocation } from '../LocationPicker';
 import { XLSX } from '../reports/ReportUtils';
 import { isMonthTargetOverdue } from '../../lib/dateStatus';
+import { getSubprojectIpo, getSubprojectIpoName } from '../../lib/entityIdentity';
 
 interface Props {
     subprojects: Subproject[];
+    ipos?: IPO[];
 }
 
 type DeliveryStatus = 'completed' | 'partial' | 'delayed' | 'notStarted';
@@ -34,6 +36,7 @@ interface InterventionRow {
     province: string;
     municipality: string;
     ipo: string;
+    ipoKey: string;
     subprojectName: string;
     subprojectStatus: Subproject['status'];
     itemType: string;
@@ -298,7 +301,7 @@ const AlertItem = ({
     </div>
 );
 
-const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) => {
+const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects, ipos = [] }) => {
     const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -321,7 +324,9 @@ const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) =>
             const parsedLocation = parseLocation(subproject.location || '');
             const province = parsedLocation.province || subproject.location || 'Unspecified Province';
             const municipality = parsedLocation.municipality || 'Unspecified Municipality';
-            const ipo = subproject.indigenousPeopleOrganization || 'Unspecified IPO';
+            const linkedIpo = getSubprojectIpo(subproject, ipos);
+            const ipo = getSubprojectIpoName(subproject, ipos) || 'Unspecified IPO';
+            const ipoKey = linkedIpo ? `id:${linkedIpo.id}` : `legacy:${ipo.toLowerCase()}`;
             const region = subproject.operatingUnit || 'Unspecified OU';
 
             return (subproject.details || []).filter(Boolean).map((detail, index) => {
@@ -347,6 +352,7 @@ const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) =>
                     province,
                     municipality,
                     ipo,
+                    ipoKey,
                     subprojectName: subproject.name || 'Untitled subproject',
                     subprojectStatus: subproject.status,
                     itemType,
@@ -375,7 +381,7 @@ const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) =>
                 };
             });
         });
-    }, [subprojects]);
+    }, [ipos, subprojects]);
 
     const filteredRows = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -396,10 +402,10 @@ const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) =>
         filteredRows.forEach(row => {
             addRowToStats(allStats, row);
 
-            const ipoStats = ipoRows.get(row.ipo) || { total: 0, completed: 0 };
+            const ipoStats = ipoRows.get(row.ipoKey) || { total: 0, completed: 0 };
             ipoStats.total += 1;
             if (row.status === 'completed') ipoStats.completed += 1;
-            ipoRows.set(row.ipo, ipoStats);
+            ipoRows.set(row.ipoKey, ipoStats);
 
             if (row.actualQty > 0) {
                 deliveredQuantity += row.actualQty;
@@ -469,7 +475,7 @@ const AgriculturalInterventionsDashboard: React.FC<Props> = ({ subprojects }) =>
             addRowToStats(province.stats, row);
             const municipality = getOrCreateChild(province, `${province.key}|municipality:${row.municipality}`, row.municipality, 2);
             addRowToStats(municipality.stats, row);
-            const ipo = getOrCreateChild(municipality, `${municipality.key}|ipo:${row.ipo}`, row.ipo, 3);
+            const ipo = getOrCreateChild(municipality, `${municipality.key}|ipo:${row.ipoKey}`, row.ipo, 3);
             addRowToStats(ipo.stats, row);
             const subproject = getOrCreateChild(ipo, `${ipo.key}|subproject:${row.subprojectName}`, row.subprojectName, 4);
             addRowToStats(subproject.stats, row);

@@ -2,6 +2,7 @@
 // Author: 4K
 import React, { useState, useMemo, useEffect } from 'react';
 import { Subproject, Activity, SystemSettings } from '../constants';
+import { getActivityDisplayTitle } from '../lib/entityIdentity';
 
 export interface CalendarEvent {
     id: string;
@@ -144,7 +145,7 @@ const Calendar: React.FC<CalendarProps> = ({
 
                     addEvent(dateKey, {
                         id: `act-${act.id}-${dateKey}`,
-                        title: act.name,
+                        title: getActivityDisplayTitle(act),
                         type: act.type === 'Training' ? 'Training' : 'Activity',
                         tone,
                         originalData: act,

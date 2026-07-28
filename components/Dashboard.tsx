@@ -23,6 +23,7 @@ import {
     StatusIndicator,
 } from './ui/enterprise';
 import useLocalStorageState from '../hooks/useLocalStorageState';
+import { getActivityDisplayTitle, getSubprojectIpo } from '../lib/entityIdentity';
 
 // Since Leaflet is loaded from a script tag, we need to declare it for TypeScript
 declare const L: any;
@@ -172,11 +173,9 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ ipos, subprojects, trainings })
                 }
             });
 
-            const ipoMap = new Map<string, IPO>(ipos.map(i => [i.name, i]));
-
             (subprojects || []).forEach(project => {
                 let coords: [number, number] | null = null;
-                const linkedIpo = ipoMap.get(project.indigenousPeopleOrganization);
+                const linkedIpo = getSubprojectIpo(project, ipos);
                 
                 if (linkedIpo) {
                     coords = resolveCoordinates(linkedIpo.location);
@@ -209,7 +208,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({ ipos, subprojects, trainings })
 
                      const marker = L.marker([jitterLat, jitterLng], { icon: greenIcon })
                         .addTo(mapRef.current)
-                        .bindPopup(`<b>${training.name}</b><br>Type: Training<br>Location: ${training.location}`);
+                        .bindPopup(`<b>${getActivityDisplayTitle(training, [], ipos)}</b><br>Type: Training<br>Location: ${training.location}`);
                     markersRef.current.push(marker);
                 }
             });
@@ -1200,7 +1199,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                                         <span className="dashboard-activity-card__code">{activityCode}</span>
                                         <StatusIndicator status={activity.activityStatus} compact />
                                     </span>
-                                    <span className="dashboard-activity-card__title">{activity.name}</span>
+                                    <span className="dashboard-activity-card__title">
+                                        {activity.activityType === 'Subproject'
+                                            ? activity.name
+                                            : getActivityDisplayTitle(activity as Activity, [], ipos)}
+                                    </span>
                                     <span className="dashboard-activity-card__details">
                                         {activity.activityOu || 'No OU'} · {formatFeedDate(activity.activityDate, activity.activityEndDate)}
                                     </span>

@@ -9,6 +9,7 @@ import {
     Training,
 } from '../constants';
 import { collectFinancialLineItems } from './financialAggregation';
+import { getActivityIpoIds, getSubprojectIpoId } from './entityIdentity';
 
 export type AwardPeriod = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'Year End';
 export type AwardQuarter = Exclude<AwardPeriod, 'Year End'>;
@@ -253,8 +254,8 @@ const isCompletedSubproject = (subproject: Subproject) =>
 
 const recordYearMatches = (recordYear: number | undefined, year: number) => recordYear === year;
 
-const uniqueCount = (values: Array<string | undefined | null>) =>
-    new Set(values.filter((value): value is string => !!value && value.trim().length > 0)).size;
+const uniqueCount = (values: Array<string | number | undefined | null>) =>
+    new Set(values.filter(value => value !== undefined && value !== null && String(value).trim().length > 0)).size;
 
 const rankRows = <T extends { ou: string }>(
     rows: T[],
@@ -430,7 +431,7 @@ const buildQuarterPhysical = (
         return {
             ou,
             activitiesConducted: activitiesInQuarter.length,
-            iposTrained: uniqueCount(activitiesInQuarter.flatMap(activity => activity.participatingIpos || [])),
+            iposTrained: uniqueCount(activitiesInQuarter.flatMap(activity => getActivityIpoIds(activity, data.ipos))),
             targetsDue: completion.target,
             targetsCompleted: completion.actual,
             completionRate: completion.rate,
@@ -446,8 +447,8 @@ const buildQuarterPhysical = (
             trainingsConducted: trainingsInQuarter.length,
             subprojectsProvided: subprojectsInQuarter.length,
             iposAssisted: uniqueCount([
-                ...trainingsInQuarter.flatMap(activity => activity.participatingIpos || []),
-                ...subprojectsInQuarter.map(sp => sp.indigenousPeopleOrganization),
+                ...trainingsInQuarter.flatMap(activity => getActivityIpoIds(activity, data.ipos)),
+                ...subprojectsInQuarter.map(sp => getSubprojectIpoId(sp, data.ipos)).filter(Boolean),
             ]),
             targetsDue: completion.target,
             targetsCompleted: completion.actual,
@@ -461,7 +462,7 @@ const buildQuarterPhysical = (
         return {
             ou,
             activitiesConducted: activitiesInQuarter.length,
-            iposAssisted: uniqueCount(activitiesInQuarter.flatMap(activity => activity.participatingIpos || [])),
+            iposAssisted: uniqueCount(activitiesInQuarter.flatMap(activity => getActivityIpoIds(activity, data.ipos))),
             targetsDue: completion.target,
             targetsCompleted: completion.actual,
             completionRate: completion.rate,
@@ -647,8 +648,8 @@ const buildAnnualFinancialBuckets = (data: AwardsInputData, year: number) => {
 };
 
 const buildAnnualCounts = (data: AwardsInputData, year: number, manualMap: Map<string, AwardManualScore>) => {
-    const iposByOu = new Map<string, Set<string>>();
-    const targetIposByOu = new Map<string, Set<string>>();
+    const iposByOu = new Map<string, Set<number>>();
+    const targetIposByOu = new Map<string, Set<number>>();
     const attendanceByOu = new Map<string, number>();
     const trainingsByOu = new Map<string, number>();
     const subprojectsByOu = new Map<string, number>();
@@ -663,28 +664,28 @@ const buildAnnualCounts = (data: AwardsInputData, year: number, manualMap: Map<s
     data.subprojects
         .filter(sp => recordYearMatches(sp.fundingYear, year) && isTargetRecord(sp))
         .forEach(sp => {
-            if (sp.indigenousPeopleOrganization) {
-                targetIposByOu.get(sp.operatingUnit)?.add(sp.indigenousPeopleOrganization);
-            }
+            const ipoId = getSubprojectIpoId(sp, data.ipos);
+            if (ipoId) targetIposByOu.get(sp.operatingUnit)?.add(Number(ipoId));
         });
 
     data.subprojects
         .filter(sp => recordYearMatches(sp.fundingYear, year) && isCompletedSubproject(sp) && isDateOnOrBefore(sp.actualCompletionDate, new Date(year, 11, 31, 23, 59, 59, 999)))
         .forEach(sp => {
-            iposByOu.get(sp.operatingUnit)?.add(sp.indigenousPeopleOrganization);
+            const ipoId = getSubprojectIpoId(sp, data.ipos);
+            if (ipoId) iposByOu.get(sp.operatingUnit)?.add(Number(ipoId));
             subprojectsByOu.set(sp.operatingUnit, (subprojectsByOu.get(sp.operatingUnit) || 0) + 1);
         });
 
     [...data.trainings, ...data.otherActivities]
         .filter(activity => recordYearMatches(activity.fundingYear, year) && isTargetRecord(activity))
         .forEach(activity => {
-            (activity.participatingIpos || []).forEach(ipo => targetIposByOu.get(activity.operatingUnit)?.add(ipo));
+            getActivityIpoIds(activity, data.ipos).forEach(ipoId => targetIposByOu.get(activity.operatingUnit)?.add(ipoId));
         });
 
     [...data.trainings, ...data.otherActivities]
         .filter(activity => recordYearMatches(activity.fundingYear, year) && isCompletedActivity(activity) && isDateOnOrBefore(activity.actualDate, new Date(year, 11, 31, 23, 59, 59, 999)))
         .forEach(activity => {
-            (activity.participatingIpos || []).forEach(ipo => iposByOu.get(activity.operatingUnit)?.add(ipo));
+            getActivityIpoIds(activity, data.ipos).forEach(ipoId => iposByOu.get(activity.operatingUnit)?.add(ipoId));
             if (activity.type === 'Training') {
                 trainingsByOu.set(activity.operatingUnit, (trainingsByOu.get(activity.operatingUnit) || 0) + 1);
             }

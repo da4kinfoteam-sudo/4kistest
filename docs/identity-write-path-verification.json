@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-07-28T08:59:01.342Z",
+  "environment": {
+    "repository": "da4kinfoteam-sudo/4kistest",
+    "supabaseProjectRef": "zojmlmolznkqhxgwthsq",
+    "productionTouched": false
+  },
+  "result": "passed",
+  "scenarios": [
+    {
+      "scenario": "create",
+      "explicitTitle": true,
+      "legacyIdsWritten": true,
+      "junctionWritten": true
+    },
+    {
+      "scenario": "clone",
+      "explicitTitle": true,
+      "legacyIdsWritten": true,
+      "junctionWritten": true
+    },
+    {
+      "scenario": "repeat",
+      "explicitTitle": true,
+      "legacyIdsWritten": true,
+      "junctionWritten": true
+    },
+    {
+      "scenario": "import",
+      "explicitTitle": true,
+      "legacyIdsWritten": true,
+      "junctionWritten": true
+    }
+  ],
+  "edit": {
+    "titleUpdated": true,
+    "legacyIdsUpdated": true,
+    "staleJunctionRemoved": true,
+    "replacementJunctionWritten": true
+  },
+  "duplicateTitleWarning": {
+    "sameScopeRecords": 2,
+    "databaseConstraintBlockedDuplicate": false
+  },
+  "cleanup": "passed"
+}

@@ -4,6 +4,14 @@ import { Download, Printer, Search, X } from 'lucide-react';
 import { Subproject, Training, OtherActivity, IPO, ouToRegionMap } from '../../constants';
 import { parseLocation } from '../LocationPicker';
 import { ReportExcelRequest, ReportPrintRequest, countPhysicalTarget, isParentRealignmentOrSavings, withReportYearLabel } from './ReportUtils';
+import {
+    getActivityDisplayTitle,
+    getActivityIpoIds,
+    getActivityIpoNames,
+    getSubprojectIpo,
+    getSubprojectIpoId,
+    getSubprojectIpoName,
+} from '../../lib/entityIdentity';
 
 interface PICSReportProps {
     data: {
@@ -40,19 +48,19 @@ interface PicsRow {
     indicator: string;
     detailType: PicsDetailType;
     totalTarget: number;
-    ipoNames: Set<string>;
+    ipoIds: Set<number>;
     maleTarget: number;
     femaleTarget: number;
     unidentifiedTarget: number;
     totalParticipants: number;
     tier1TotalTarget: number;
-    tier1IpoNames: Set<string>;
+    tier1IpoIds: Set<number>;
     tier1MaleTarget: number;
     tier1FemaleTarget: number;
     tier1UnidentifiedTarget: number;
     tier1TotalParticipants: number;
     tier2TotalTarget: number;
-    tier2IpoNames: Set<string>;
+    tier2IpoIds: Set<number>;
     tier2MaleTarget: number;
     tier2FemaleTarget: number;
     tier2UnidentifiedTarget: number;
@@ -82,19 +90,19 @@ const createPicsRow = (region: string, province: string, indicator: string, deta
     indicator,
     detailType,
     totalTarget: 0,
-    ipoNames: new Set<string>(),
+    ipoIds: new Set<number>(),
     maleTarget: 0,
     femaleTarget: 0,
     unidentifiedTarget: 0,
     totalParticipants: 0,
     tier1TotalTarget: 0,
-    tier1IpoNames: new Set<string>(),
+    tier1IpoIds: new Set<number>(),
     tier1MaleTarget: 0,
     tier1FemaleTarget: 0,
     tier1UnidentifiedTarget: 0,
     tier1TotalParticipants: 0,
     tier2TotalTarget: 0,
-    tier2IpoNames: new Set<string>(),
+    tier2IpoIds: new Set<number>(),
     tier2MaleTarget: 0,
     tier2FemaleTarget: 0,
     tier2UnidentifiedTarget: 0,
@@ -140,8 +148,6 @@ const PICSReport: React.FC<PICSReportProps> = ({
             if (!aggregator.has(key)) aggregator.set(key, createPicsRow(region, province, indicator, detailType));
             return aggregator.get(key)!;
         };
-        const ipoMap = new Map<string, IPO>();
-        data.ipos.forEach(ipo => ipoMap.set(ipo.name, ipo));
         const adTracker = new Map<string, MutableAdTracker>();
         
         data.subprojects.forEach(sp => {
@@ -155,12 +161,18 @@ const PICSReport: React.FC<PICSReportProps> = ({
             entry.totalTarget += targetCount;
             if (targetCount > 0) {
                 entry.subprojects.push(sp);
-                entry.ipoNames.add(sp.indigenousPeopleOrganization);
-                if (sp.tier === 'Tier 1') { entry.tier1TotalTarget += 1; entry.tier1IpoNames.add(sp.indigenousPeopleOrganization); } 
-                else if (sp.tier === 'Tier 2') { entry.tier2TotalTarget += 1; entry.tier2IpoNames.add(sp.indigenousPeopleOrganization); }
+                const ipoId = getSubprojectIpoId(sp, data.ipos);
+                if (ipoId) entry.ipoIds.add(Number(ipoId));
+                if (sp.tier === 'Tier 1') {
+                    entry.tier1TotalTarget += 1;
+                    if (ipoId) entry.tier1IpoIds.add(Number(ipoId));
+                } else if (sp.tier === 'Tier 2') {
+                    entry.tier2TotalTarget += 1;
+                    if (ipoId) entry.tier2IpoIds.add(Number(ipoId));
+                }
             }
             
-            const ipo = ipoMap.get(sp.indigenousPeopleOrganization);
+            const ipo = getSubprojectIpo(sp, data.ipos);
             if (targetCount > 0 && ipo && ipo.ancestralDomainNo) { 
                 const locKey = `${region}|${provinceName}`;
                 if (!adTracker.has(locKey)) adTracker.set(locKey, { all: new Set(), t1: new Set(), t2: new Set(), details: new Map() });
@@ -220,9 +232,15 @@ const PICSReport: React.FC<PICSReportProps> = ({
             if (!isParentRealignmentOrSavings(activity)) {
                 entry.activities.push(activity);
                 entry.totalTarget += 1; 
-                activity.participatingIpos.forEach((ipo:any) => entry.ipoNames.add(ipo)); 
-                if (activity.tier === 'Tier 1') { entry.tier1TotalTarget += 1; activity.participatingIpos.forEach((ipo:any) => entry.tier1IpoNames.add(ipo)); } 
-                else if (activity.tier === 'Tier 2') { entry.tier2TotalTarget += 1; activity.participatingIpos.forEach((ipo:any) => entry.tier2IpoNames.add(ipo)); } 
+                const ipoIds = getActivityIpoIds(activity, data.ipos);
+                ipoIds.forEach(ipoId => entry.ipoIds.add(ipoId));
+                if (activity.tier === 'Tier 1') {
+                    entry.tier1TotalTarget += 1;
+                    ipoIds.forEach(ipoId => entry.tier1IpoIds.add(ipoId));
+                } else if (activity.tier === 'Tier 2') {
+                    entry.tier2TotalTarget += 1;
+                    ipoIds.forEach(ipoId => entry.tier2IpoIds.add(ipoId));
+                }
                 entry.maleTarget += (activity.participantsMale || 0); 
                 entry.femaleTarget += (activity.participantsFemale || 0); 
                 entry.totalParticipants += (activity.participantsMale || 0) + (activity.participantsFemale || 0); 
@@ -236,14 +254,20 @@ const PICSReport: React.FC<PICSReportProps> = ({
             const region = ouToRegionMap[activity.operatingUnit] || 'Unmapped Region'; 
             if (region === 'National Capital Region (NCR)') return; 
             const { province } = parseLocation(activity.location); 
-            const indicator = `${activity.name} conducted`; 
+            const indicator = `${getActivityDisplayTitle(activity)} conducted`;
             const entry = getOrCreateRow(region, province || 'Unspecified', indicator, 'activities');
             if (!isParentRealignmentOrSavings(activity)) {
                 entry.activities.push(activity);
                 entry.totalTarget += 1; 
-                activity.participatingIpos.forEach((ipo:any) => entry.ipoNames.add(ipo)); 
-                if (activity.tier === 'Tier 1') { entry.tier1TotalTarget += 1; activity.participatingIpos.forEach((ipo:any) => entry.tier1IpoNames.add(ipo)); } 
-                else if (activity.tier === 'Tier 2') { entry.tier2TotalTarget += 1; activity.participatingIpos.forEach((ipo:any) => entry.tier2IpoNames.add(ipo)); } 
+                const ipoIds = getActivityIpoIds(activity, data.ipos);
+                ipoIds.forEach(ipoId => entry.ipoIds.add(ipoId));
+                if (activity.tier === 'Tier 1') {
+                    entry.tier1TotalTarget += 1;
+                    ipoIds.forEach(ipoId => entry.tier1IpoIds.add(ipoId));
+                } else if (activity.tier === 'Tier 2') {
+                    entry.tier2TotalTarget += 1;
+                    ipoIds.forEach(ipoId => entry.tier2IpoIds.add(ipoId));
+                }
                 entry.maleTarget += (activity.participantsMale || 0); 
                 entry.femaleTarget += (activity.participantsFemale || 0); 
                 entry.totalParticipants += (activity.participantsMale || 0) + (activity.participantsFemale || 0); 
@@ -262,19 +286,19 @@ const PICSReport: React.FC<PICSReportProps> = ({
             femaleTarget: 0,
             unidentifiedTarget: 0,
             totalParticipants: 0,
-            allIpos: new Set<string>(),
+            allIpoIds: new Set<number>(),
             tier1TotalTarget: 0,
             tier1MaleTarget: 0,
             tier1FemaleTarget: 0,
             tier1UnidentifiedTarget: 0,
             tier1TotalParticipants: 0,
-            tier1AllIpos: new Set<string>(),
+            tier1AllIpoIds: new Set<number>(),
             tier2TotalTarget: 0,
             tier2MaleTarget: 0,
             tier2FemaleTarget: 0,
             tier2UnidentifiedTarget: 0,
             tier2TotalParticipants: 0,
-            tier2AllIpos: new Set<string>(),
+            tier2AllIpoIds: new Set<number>(),
         };
         items.forEach(item => {
             summary.totalTarget += item.totalTarget;
@@ -282,8 +306,8 @@ const PICSReport: React.FC<PICSReportProps> = ({
             summary.femaleTarget += item.femaleTarget;
             summary.unidentifiedTarget += item.unidentifiedTarget;
             summary.totalParticipants += item.totalParticipants;
-            if (item.ipoNames) {
-                item.ipoNames.forEach((name: string) => summary.allIpos.add(name));
+            if (item.ipoIds) {
+                item.ipoIds.forEach((id: number) => summary.allIpoIds.add(id));
             }
 
             summary.tier1TotalTarget += item.tier1TotalTarget;
@@ -291,20 +315,20 @@ const PICSReport: React.FC<PICSReportProps> = ({
             summary.tier1FemaleTarget += item.tier1FemaleTarget;
             summary.tier1UnidentifiedTarget += item.tier1UnidentifiedTarget;
             summary.tier1TotalParticipants += item.tier1TotalParticipants;
-            if (item.tier1IpoNames) item.tier1IpoNames.forEach((name: string) => summary.tier1AllIpos.add(name));
+            if (item.tier1IpoIds) item.tier1IpoIds.forEach((id: number) => summary.tier1AllIpoIds.add(id));
 
             summary.tier2TotalTarget += item.tier2TotalTarget;
             summary.tier2MaleTarget += item.tier2MaleTarget;
             summary.tier2FemaleTarget += item.tier2FemaleTarget;
             summary.tier2UnidentifiedTarget += item.tier2UnidentifiedTarget;
             summary.tier2TotalParticipants += item.tier2TotalParticipants;
-            if (item.tier2IpoNames) item.tier2IpoNames.forEach((name: string) => summary.tier2AllIpos.add(name));
+            if (item.tier2IpoIds) item.tier2IpoIds.forEach((id: number) => summary.tier2AllIpoIds.add(id));
         });
         return {
             ...summary,
-            totalGroup: summary.allIpos.size,
-            tier1TotalGroup: summary.tier1AllIpos.size,
-            tier2TotalGroup: summary.tier2AllIpos.size,
+            totalGroup: summary.allIpoIds.size,
+            tier1TotalGroup: summary.tier1AllIpoIds.size,
+            tier2TotalGroup: summary.tier2AllIpoIds.size,
         };
     };
 
@@ -348,19 +372,19 @@ const PICSReport: React.FC<PICSReportProps> = ({
                 row.indicator,
                 "number",
                 row.totalTarget, 
-                row.ipoNames.size, 
+                row.ipoIds.size,
                 row.maleTarget, 
                 row.femaleTarget, 
                 null, 
                 row.totalParticipants,
                 row.tier1TotalTarget,
-                row.tier1IpoNames.size,
+                row.tier1IpoIds.size,
                 row.tier1MaleTarget,
                 row.tier1FemaleTarget,
                 null,
                 row.tier1TotalParticipants,
                 row.tier2TotalTarget,
-                row.tier2IpoNames.size,
+                row.tier2IpoIds.size,
                 row.tier2MaleTarget,
                 row.tier2FemaleTarget,
                 null,
@@ -446,7 +470,7 @@ const PICSReport: React.FC<PICSReportProps> = ({
                     return [
                         sp.name,
                         sp.packageType,
-                        sp.indigenousPeopleOrganization,
+                        getSubprojectIpoName(sp, data.ipos),
                         sp.remarks,
                         sp.estimatedCompletionDate,
                         sp.actualCompletionDate,
@@ -459,11 +483,11 @@ const PICSReport: React.FC<PICSReportProps> = ({
                 .filter(activity => {
                     if (!term) return true;
                     return [
-                        activity.name,
+                        getActivityDisplayTitle(activity),
                         activity.component,
                         activity.type,
                         activity.description,
-                        ...(activity.participatingIpos || []),
+                        ...getActivityIpoNames(activity, data.ipos),
                     ].filter(Boolean).join(' ').toLowerCase().includes(term);
                 });
             return { type: 'activities' as const, records };
@@ -615,19 +639,19 @@ const PICSReport: React.FC<PICSReportProps> = ({
                                                         <td className={`${dataCellClass} text-left pl-10`}>{item.indicator}</td>
                                                         <td className={`${dataCellClass} text-center`}>number</td>
                                                         <td className={`${dataCellClass} text-center`}>{renderTargetButton(item, 'total')}</td>
-                                                        <td className={`${dataCellClass} text-center`}>{item.ipoNames.size}</td>
+                                                        <td className={`${dataCellClass} text-center`}>{item.ipoIds.size}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.maleTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.femaleTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.unidentifiedTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.totalParticipants}</td>
                                                         <td className={`${dataCellClass} text-center`}>{renderTargetButton(item, 'tier1')}</td>
-                                                        <td className={`${dataCellClass} text-center`}>{item.tier1IpoNames.size}</td>
+                                                        <td className={`${dataCellClass} text-center`}>{item.tier1IpoIds.size}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier1MaleTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier1FemaleTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier1UnidentifiedTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier1TotalParticipants}</td>
                                                         <td className={`${dataCellClass} text-center`}>{renderTargetButton(item, 'tier2')}</td>
-                                                        <td className={`${dataCellClass} text-center`}>{item.tier2IpoNames.size}</td>
+                                                        <td className={`${dataCellClass} text-center`}>{item.tier2IpoIds.size}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier2MaleTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier2FemaleTarget}</td>
                                                         <td className={`${dataCellClass} text-center`}>{item.tier2UnidentifiedTarget}</td>
@@ -686,10 +710,10 @@ const PICSReport: React.FC<PICSReportProps> = ({
                                     {drilldown.row.detailType !== 'subprojects' && drilldown.row.detailType !== 'activities'
                                         ? ''
                                         : ` · ${drilldown.scope === 'tier1'
-                                            ? drilldown.row.tier1IpoNames.size
+                                            ? drilldown.row.tier1IpoIds.size
                                             : drilldown.scope === 'tier2'
-                                                ? drilldown.row.tier2IpoNames.size
-                                                : drilldown.row.ipoNames.size} IPOs`}
+                                                ? drilldown.row.tier2IpoIds.size
+                                                : drilldown.row.ipoIds.size} IPOs`}
                                 </p>
                             </div>
                             <button
@@ -731,7 +755,7 @@ const PICSReport: React.FC<PICSReportProps> = ({
                                         <p>{sp.remarks || 'No description provided.'}</p>
                                         <dl>
                                             <div><dt>Package</dt><dd>{sp.packageType || '-'}</dd></div>
-                                            <div><dt>IPO</dt><dd>{sp.indigenousPeopleOrganization || '-'}</dd></div>
+                                            <div><dt>IPO</dt><dd>{getSubprojectIpoName(sp, data.ipos) || '-'}</dd></div>
                                             <div><dt>Target</dt><dd>{sp.estimatedCompletionDate || '-'}</dd></div>
                                             <div><dt>Completed</dt><dd>{sp.actualCompletionDate || '-'}</dd></div>
                                         </dl>
@@ -750,14 +774,14 @@ const PICSReport: React.FC<PICSReportProps> = ({
                                         onClick={() => onSelectActivity(activity)}
                                     >
                                         <div className="pics-drilldown-card__title">
-                                            <strong>{activity.name}</strong>
+                                            <strong>{getActivityDisplayTitle(activity)}</strong>
                                             {badge && <span className={`status-badge status-badge--compact ${badge === 'Cancelled' ? 'status-badge--cancelled' : badge === 'Realignment' ? 'status-badge--orange' : 'status-badge--purple'}`}>{badge}</span>}
                                         </div>
                                         <p>{activity.description || 'No description provided.'}</p>
                                         <dl>
                                             <div><dt>Component</dt><dd>{activity.component || activity.type || '-'}</dd></div>
                                             <div><dt>Target Date</dt><dd>{activity.date || '-'}</dd></div>
-                                            <div><dt>Target IPOs</dt><dd>{(activity.participatingIpos || []).join(', ') || '-'}</dd></div>
+                                            <div><dt>Target IPOs</dt><dd>{getActivityIpoNames(activity, data.ipos).join(', ') || '-'}</dd></div>
                                             <div><dt>Participants</dt><dd>{participants || '-'}</dd></div>
                                         </dl>
                                     </button>

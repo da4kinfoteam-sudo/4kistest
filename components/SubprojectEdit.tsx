@@ -11,6 +11,7 @@ import { useIpoHistory } from '../hooks/useIpoHistory';
 import { useDcfPolicyGuard } from '../hooks/useDcfPolicyGuard';
 import { supabase } from '../supabaseClient';
 import { resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../lib/physicalAccomplishmentTimestamp';
+import { resolveIpoByIdOrName } from '../lib/entityIdentity';
 import { isMonthTargetOverdue } from '../lib/dateStatus';
 import { ConfirmDialog } from './ui/enterprise';
 
@@ -120,7 +121,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
     useEffect(() => {
         if (subproject) {
             setFormData(subproject);
-            const linkedIpo = ipos.find(i => i.name === subproject.indigenousPeopleOrganization);
+            const linkedIpo = resolveIpoByIdOrName(ipos, subproject.ipo_id, subproject.indigenousPeopleOrganization);
             if (linkedIpo) setSelectedRegion(linkedIpo.region);
         } else {
             const defaultOu = currentUser?.operatingUnit || '';
@@ -145,7 +146,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
         setFormData(prev => {
             const newData = { ...prev, [name]: value };
             if (name === 'indigenousPeopleOrganization') {
-                const selectedIpo = ipos.find(ipo => ipo.name === value);
+                const selectedIpo = resolveIpoByIdOrName(ipos, undefined, value);
                 if (selectedIpo) {
                     newData.location = selectedIpo.location;
                     newData.ipo_id = selectedIpo.id;
@@ -157,6 +158,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                 const mappedRegion = ouToRegionMap[value] || '';
                 setSelectedRegion(mappedRegion);
                 newData.indigenousPeopleOrganization = '';
+                newData.ipo_id = undefined;
             } else if (name === 'fundingYear') {
                 const year = parseInt(value) || new Date().getFullYear();
                 newData.startDate = `${year}-01-01`;
@@ -520,7 +522,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
         
         let resolvedIpoId = formData.ipo_id;
         if (!resolvedIpoId && formData.indigenousPeopleOrganization) {
-            const matched = ipos.find(i => i.name === formData.indigenousPeopleOrganization);
+            const matched = resolveIpoByIdOrName(ipos, undefined, formData.indigenousPeopleOrganization);
             if (matched) resolvedIpoId = matched.id;
         }
 
@@ -603,7 +605,7 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
 
         if (payload.subprojectCommodities && payload.subprojectCommodities.length > 0) {
             setIpos(prev => prev.map(ipo => {
-                if (ipo.name === payload.indigenousPeopleOrganization) {
+                if (Number(ipo.id) === Number(payload.ipo_id)) {
                     const newComs = [...ipo.commodities];
                     let changed = false;
                     payload.subprojectCommodities.forEach((sc: SubprojectCommodity) => {

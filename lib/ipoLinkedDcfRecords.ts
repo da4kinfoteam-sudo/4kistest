@@ -13,7 +13,13 @@ const isAdminRole = (role?: string) => role === 'Super Admin' || role === 'Admin
 
 const isMissingColumnError = (error: any) => {
   const message = String(error?.message || '').toLowerCase();
-  return error?.code === 'PGRST204' || error?.code === '42703' || message.includes('column');
+  return error?.code === 'PGRST204'
+    || error?.code === 'PGRST205'
+    || error?.code === '42703'
+    || error?.code === '42P01'
+    || message.includes('column')
+    || message.includes('does not exist')
+    || message.includes('schema cache');
 };
 
 const isRecoverableOptionalFilterError = (error: any) => {
@@ -143,6 +149,7 @@ export async function fetchIpoLinkedDcfRecords(ipo: IPO, currentUser?: User | nu
   const [
     idMatchedSubprojects,
     nameMatchedSubprojects,
+    junctionRowsResult,
     idMatchedActivitiesResult,
     nameMatchedActivitiesResult,
   ] = await Promise.all([
@@ -163,6 +170,13 @@ export async function fetchIpoLinkedDcfRecords(ipo: IPO, currentUser?: User | nu
           .order('id', { ascending: true })
       ) as Promise<Subproject[]>
       : Promise.resolve([]),
+    fetchOptionalQuery<{ activity_id: number }>(
+      supabase
+        .from('activity_ipos')
+        .select('activity_id')
+        .eq('ipo_id', ipoId),
+      'activity_ipos.ipo_id'
+    ),
     fetchOptionalQuery<Activity>(
       supabase
         .from('activities')
@@ -183,6 +197,17 @@ export async function fetchIpoLinkedDcfRecords(ipo: IPO, currentUser?: User | nu
       : Promise.resolve([]),
   ]);
 
+  const junctionActivityIds = toNumericIds((junctionRowsResult || []).map(row => row.activity_id));
+  const junctionMatchedActivities = junctionActivityIds.length > 0
+    ? await fetchQuery(
+      supabase
+        .from('activities')
+        .select('*')
+        .in('id', junctionActivityIds)
+        .order('id', { ascending: true })
+    ) as Activity[]
+    : [];
+
   const fallbackActivities = idMatchedActivitiesResult === null || nameMatchedActivitiesResult === null
     ? await fetchActivityFallbackCandidates(ipo, currentUser)
     : [];
@@ -194,7 +219,7 @@ export async function fetchIpoLinkedDcfRecords(ipo: IPO, currentUser?: User | nu
     currentUser
   );
   const linkedActivities = filterByUserVisibility(
-    mergePreferFirstById(idMatchedActivities, nameMatchedActivities, fallbackActivities),
+    mergePreferFirstById(junctionMatchedActivities, idMatchedActivities, nameMatchedActivities, fallbackActivities),
     currentUser
   );
   const linkedTrainings = linkedActivities.filter(activity => activity.type === 'Training');

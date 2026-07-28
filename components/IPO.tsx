@@ -13,6 +13,7 @@ import { fetchAll } from '../hooks/useSupabaseTable';
 import useLocalStorageState from '../hooks/useLocalStorageState';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader as CanonicalSortableTableHeader } from './ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
+import { getActivityIpoIds, getSubprojectIpoId } from '../lib/entityIdentity';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -182,50 +183,54 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
 
     // Calculate derived data from activities
     const calculateTotalInvestment = useMemo(() => {
-        const investmentMap = new Map<string, number>();
+        const investmentMap = new Map<number, number>();
 
         // Calculate from subprojects
         (subprojects || []).forEach(sp => {
             if (sp.status === 'Completed') {
                 const budget = (sp.details || []).reduce((total, item) => total + (item.pricePerUnit * item.numberOfUnits), 0);
-                const currentInvestment = investmentMap.get(sp.indigenousPeopleOrganization) || 0;
-                investmentMap.set(sp.indigenousPeopleOrganization, currentInvestment + budget);
+                const ipoId = getSubprojectIpoId(sp, ipos);
+                if (!ipoId) return;
+                const currentInvestment = investmentMap.get(Number(ipoId)) || 0;
+                investmentMap.set(Number(ipoId), currentInvestment + budget);
             }
         });
 
         // Calculate from trainings (filtered from activities)
         (activities || []).filter(a => a.type === 'Training' && a.status === 'Completed').forEach(t => {
             const cost = (t.expenses || []).reduce((s, e) => s + e.amount, 0);
-            (t.participatingIpos || []).forEach(ipoName => {
-                const currentInvestment = investmentMap.get(ipoName) || 0;
-                investmentMap.set(ipoName, currentInvestment + cost);
+            getActivityIpoIds(t, ipos).forEach(ipoId => {
+                const currentInvestment = investmentMap.get(ipoId) || 0;
+                investmentMap.set(ipoId, currentInvestment + cost);
             });
         });
 
-        return (ipoName: string) => investmentMap.get(ipoName) || 0;
-    }, [subprojects, activities]);
+        return (ipoId: number) => investmentMap.get(Number(ipoId)) || 0;
+    }, [subprojects, activities, ipos]);
 
     const calculateTotalAllocation = useMemo(() => {
-        const allocationMap = new Map<string, number>();
+        const allocationMap = new Map<number, number>();
 
         // Calculate from subprojects (regardless of status)
         (subprojects || []).forEach(sp => {
             const budget = (sp.details || []).reduce((total, item) => total + (item.pricePerUnit * item.numberOfUnits), 0);
-            const currentAllocation = allocationMap.get(sp.indigenousPeopleOrganization) || 0;
-            allocationMap.set(sp.indigenousPeopleOrganization, currentAllocation + budget);
+            const ipoId = getSubprojectIpoId(sp, ipos);
+            if (!ipoId) return;
+            const currentAllocation = allocationMap.get(Number(ipoId)) || 0;
+            allocationMap.set(Number(ipoId), currentAllocation + budget);
         });
 
         // Calculate from trainings (regardless of status)
         (activities || []).filter(a => a.type === 'Training').forEach(t => {
             const cost = (t.expenses || []).reduce((s, e) => s + e.amount, 0);
-            (t.participatingIpos || []).forEach(ipoName => {
-                const currentAllocation = allocationMap.get(ipoName) || 0;
-                allocationMap.set(ipoName, currentAllocation + cost);
+            getActivityIpoIds(t, ipos).forEach(ipoId => {
+                const currentAllocation = allocationMap.get(ipoId) || 0;
+                allocationMap.set(ipoId, currentAllocation + cost);
             });
         });
 
-        return (ipoName: string) => allocationMap.get(ipoName) || 0;
-    }, [subprojects, activities]);
+        return (ipoId: number) => allocationMap.get(Number(ipoId)) || 0;
+    }, [subprojects, activities, ipos]);
 
     useEffect(() => {
         // Logic kept for "Add" mode or internal updates, though Edit button is removed from list
@@ -291,16 +296,16 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
 
         // New Filters
         if (flagFilter.withSubprojects) {
-            const iposWithSP = new Set((subprojects || []).map(sp => sp.indigenousPeopleOrganization));
-            filteredIpos = filteredIpos.filter(ipo => iposWithSP.has(ipo.name));
+            const iposWithSP = new Set((subprojects || []).map(sp => getSubprojectIpoId(sp, ipos)).filter(Boolean).map(Number));
+            filteredIpos = filteredIpos.filter(ipo => iposWithSP.has(Number(ipo.id)));
         }
 
         if (flagFilter.withTrainings) {
-            const iposWithTr = new Set();
+            const iposWithTr = new Set<number>();
             (activities || []).filter(a => a.type === 'Training').forEach(t => {
-                (t.participatingIpos || []).forEach(p => iposWithTr.add(p));
+                getActivityIpoIds(t, ipos).forEach(ipoId => iposWithTr.add(ipoId));
             });
-            filteredIpos = filteredIpos.filter(ipo => iposWithTr.has(ipo.name));
+            filteredIpos = filteredIpos.filter(ipo => iposWithTr.has(Number(ipo.id)));
         }
 
         const commodityFilters = ipoColumnFilters.commodities || [];
@@ -333,8 +338,8 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                 let bValue: any;
 
                 if (sortConfig.key === 'totalInvested') {
-                    aValue = calculateTotalInvestment(a.name);
-                    bValue = calculateTotalInvestment(b.name);
+                    aValue = calculateTotalInvestment(Number(a.id));
+                    bValue = calculateTotalInvestment(Number(b.id));
                 } else {
                     aValue = a[sortConfig.key as keyof IPO];
                     bValue = b[sortConfig.key as keyof IPO];

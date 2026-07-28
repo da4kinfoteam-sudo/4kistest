@@ -1,0 +1,52 @@
+{
+  "generatedAt": "2026-07-28T08:45:51.991Z",
+  "environment": {
+    "repository": "da4kinfoteam-sudo/4kistest",
+    "supabaseProjectRef": "zojmlmolznkqhxgwthsq",
+    "productionTouched": false
+  },
+  "result": "passed",
+  "renamedIpos": [
+    {
+      "id": 900001,
+      "originalName": "Banaue Highland Growers Test IPO",
+      "linkedSubprojects": 1,
+      "linkedActivities": 1,
+      "marketingLinkages": 0
+    },
+    {
+      "id": 900002,
+      "originalName": "Cordillera Coffee Producers Test IPO",
+      "linkedSubprojects": 1,
+      "linkedActivities": 2,
+      "marketingLinkages": 1
+    },
+    {
+      "id": 900003,
+      "originalName": "Ilocos Native Goat Raisers Test IPO",
+      "linkedSubprojects": 1,
+      "linkedActivities": 1,
+      "marketingLinkages": 0
+    },
+    {
+      "id": 1,
+      "originalName": "test",
+      "linkedSubprojects": 4,
+      "linkedActivities": 1,
+      "marketingLinkages": 0
+    }
+  ],
+  "subprojectFinancialIdentity": {
+    "id": 900001,
+    "uid": "SP-TEST-2026-001",
+    "obligations": 2,
+    "disbursements": 2
+  },
+  "activityFinancialIdentity": {
+    "id": 900001,
+    "uid": "ACT-TEST-2026-001",
+    "obligations": 1,
+    "disbursements": 1
+  },
+  "restoration": "passed"
+}

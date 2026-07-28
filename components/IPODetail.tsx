@@ -4,6 +4,7 @@ import React, { useState, useEffect, FormEvent, useMemo, useCallback } from 'rea
 import { AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Edit3, ExternalLink, Eye, FileText, HardDrive, Image as ImageIcon, Loader2, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
 import { Activity, ActivityMonitoringAction, ActivityMonitoringReport, IPO, Subproject, Training, Commodity, CommodityNeed, referenceCommodityTypes, MarketingPartner, MarketLinkage, LodAssessment } from '../constants';
 import { formatMarketQuantityTotals, getIpoMarketSalesRows, summarizeIpoMarketSales } from '../lib/marketSalesAggregation';
+import { getActivityDisplayTitle } from '../lib/entityIdentity';
 import LocationPicker, { parseLocation } from './LocationPicker';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserAccess, usePagination } from './mainfunctions/TableHooks';
@@ -515,7 +516,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
     // --- Market Linkages Logic ---
     const ipoLinkages = useMemo(() => {
-        return getIpoMarketSalesRows(marketingPartners, ipo.name);
+        return getIpoMarketSalesRows(marketingPartners, ipo);
     }, [marketingPartners, ipo.name]);
 
     const ipoMarketSalesSummary = useMemo(() => summarizeIpoMarketSales(ipoLinkages), [ipoLinkages]);
@@ -1445,7 +1446,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                         onClick={() => onSelectActivity(t)}
                                                         className="detail-list-title text-left focus:outline-none focus:underline"
                                                     >
-                                                        {t.name}
+                                                        {getActivityDisplayTitle(t, [], [ipo])}
                                                     </button>
                                                     <p className="detail-list-copy">{t.component}</p>
                                                 </div>
@@ -1494,7 +1495,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                         className="detail-list-title table-link text-left"
                                                         onClick={() => onOpenMonitoringReport?.(activity, ipo, report)}
                                                     >
-                                                        {activity.name}
+                                                        {getActivityDisplayTitle(activity, [], [ipo])}
                                                     </button>
                                                     <p className="detail-list-copy">{activity.component} - {formatDate(activity.date)}</p>
                                                 </div>

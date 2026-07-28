@@ -6,6 +6,7 @@ import { calculateMarketLinkageSales, getMarketLinkageUnit } from '../../lib/mar
 import { supabase } from '../../supabaseClient';
 import { useUserAccess } from '../mainfunctions/TableHooks';
 import { ConfirmDialog } from '../ui/enterprise';
+import { resolveIpoByIdOrName } from '../../lib/entityIdentity';
 
 interface MarketLinkageDetailProps {
     partner: MarketingPartner;
@@ -100,7 +101,8 @@ const MarketLinkageDetail: React.FC<MarketLinkageDetailProps> = ({ partner, link
     const handleSave = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!draft || linkageIndex < 0) return;
-        if (!draft.region || !draft.ipoName) {
+        const selectedIpo = resolveIpoByIdOrName(ipos, draft.ipoId, draft.ipoName);
+        if (!draft.region || !selectedIpo) {
             alert('Region and IPO are required.');
             return;
         }
@@ -112,6 +114,8 @@ const MarketLinkageDetail: React.FC<MarketLinkageDetailProps> = ({ partner, link
         const normalizedDraft: MarketLinkage = {
             ...draft,
             id: draft.id || Date.now(),
+            ipoId: selectedIpo.id,
+            ipoName: selectedIpo.name,
             unitOfMeasure: selectedUnit,
         };
         const updatedLinkages = linkages.map((link, idx) => idx === linkageIndex ? normalizedDraft : link);
@@ -236,16 +240,23 @@ const MarketLinkageDetail: React.FC<MarketLinkageDetailProps> = ({ partner, link
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
                                 <label className="form-label form-label--compact">Region</label>
-                                <select value={draft.region} onChange={e => setDraft({ ...draft, region: e.target.value, ipoName: '' })} className={commonInputClasses}>
+                                <select value={draft.region} onChange={e => setDraft({ ...draft, region: e.target.value, ipoId: null, ipoName: '' })} className={commonInputClasses}>
                                     <option value="">Select Region</option>
                                     {philippineRegions.map(region => <option key={region} value={region}>{region}</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label className="form-label form-label--compact">IPO</label>
-                                <select value={draft.ipoName} onChange={e => setDraft({ ...draft, ipoName: e.target.value })} disabled={!draft.region} className={commonInputClasses}>
+                                <select value={draft.ipoId ? String(draft.ipoId) : ''} onChange={e => {
+                                    const selectedIpo = iposInLinkageRegion.find(ipo => String(ipo.id) === e.target.value);
+                                    setDraft({
+                                        ...draft,
+                                        ipoId: selectedIpo?.id || null,
+                                        ipoName: selectedIpo?.name || '',
+                                    });
+                                }} disabled={!draft.region} className={commonInputClasses}>
                                     <option value="">Select IPO</option>
-                                    {iposInLinkageRegion.map(ipo => <option key={ipo.id} value={ipo.name}>{ipo.name}</option>)}
+                                    {iposInLinkageRegion.map(ipo => <option key={ipo.id} value={String(ipo.id)}>{ipo.name}</option>)}
                                 </select>
                             </div>
                             <div>

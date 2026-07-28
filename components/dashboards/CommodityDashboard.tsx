@@ -1,11 +1,13 @@
 // Author: 4K
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, Download, Layers3, PackageSearch, Search, Sprout, UsersRound, WalletCards } from 'lucide-react';
-import { Subproject } from '../../constants';
+import { IPO, Subproject } from '../../constants';
 import { XLSX } from '../reports/ReportUtils';
+import { getSubprojectIpo, getSubprojectIpoName } from '../../lib/entityIdentity';
 
 interface Props {
     subprojects: Subproject[];
+    ipos?: IPO[];
     onSelectSubproject?: (project: Subproject) => void;
 }
 
@@ -170,7 +172,7 @@ const CommodityMetricCard: React.FC<{
     </div>
 );
 
-const CommodityDashboard: React.FC<Props> = ({ subprojects, onSelectSubproject }) => {
+const CommodityDashboard: React.FC<Props> = ({ subprojects, ipos = [], onSelectSubproject }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedCommodities, setExpandedCommodities] = useState<Set<string>>(new Set());
 
@@ -199,8 +201,9 @@ const CommodityDashboard: React.FC<Props> = ({ subprojects, onSelectSubproject }
                 const share = totalQuantity > 0 ? commodity.quantity / totalQuantity : fallbackShare;
                 const allocatedAmount = subprojectAmount * share;
                 const subprojectKey = String(subproject.id ?? subproject.uid ?? subproject.name);
-                const ipoName = normalizeText(subproject.indigenousPeopleOrganization) || 'Unspecified IPO';
-                const ipoKey = String(subproject.ipo_id ?? ipoName.toLowerCase());
+                const linkedIpo = getSubprojectIpo(subproject, ipos);
+                const ipoName = getSubprojectIpoName(subproject, ipos) || 'Unspecified IPO';
+                const ipoKey = linkedIpo ? String(linkedIpo.id) : `legacy:${ipoName.toLowerCase()}`;
 
                 if (!summaryMap.has(key)) {
                     summaryMap.set(key, {
@@ -252,7 +255,7 @@ const CommodityDashboard: React.FC<Props> = ({ subprojects, onSelectSubproject }
 
         const sortedSummaries = Array.from(summaryMap.values()).sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
         return { summaries: sortedSummaries, detailRows: rows };
-    }, [subprojects]);
+    }, [ipos, subprojects]);
 
     const filteredSummaries = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
