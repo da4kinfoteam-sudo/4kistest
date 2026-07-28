@@ -2,6 +2,7 @@
 // Author: 4K
 import React, { useMemo } from 'react';
 import { Training, OtherActivity, IPO, Subproject } from '../../constants';
+import { getActivityIpoIds, getSubprojectIpoId } from '../../lib/entityIdentity';
 
 interface GADDashboardProps {
     trainings: Training[];
@@ -38,16 +39,16 @@ const GADDashboard: React.FC<GADDashboardProps> = ({ trainings, ipos, subproject
     const womenLedStats = useMemo(() => {
         // 1. Identify all Women-Led IPO names from the master list (ipos prop)
         // Note: The ipos prop passed here contains the registry needed for metadata lookup.
-        const womenLedIpoNames = new Set((ipos || []).filter(ipo => ipo.isWomenLed).map(ipo => ipo.name));
+        const womenLedIpoIds = new Set((ipos || []).filter(ipo => ipo.isWomenLed).map(ipo => Number(ipo.id)));
 
         // 2. Identify Subprojects linked to WL IPOs
         // Note: 'subprojects' prop is already filtered by the selected Year/FundYear in the parent component
-        const linkedSubprojects = (subprojects || []).filter(sp => womenLedIpoNames.has(sp.indigenousPeopleOrganization));
+        const linkedSubprojects = (subprojects || []).filter(sp => womenLedIpoIds.has(Number(getSubprojectIpoId(sp, ipos))));
 
         // 3. Identify Trainings linked to WL IPOs
         // Note: 'trainings' prop is already filtered by the selected Year/FundYear in the parent component
         const linkedTrainings = (trainings || []).filter(t =>
-            (t.participatingIpos || []).some(ipoName => womenLedIpoNames.has(ipoName))
+            getActivityIpoIds(t, ipos).some(ipoId => womenLedIpoIds.has(ipoId))
         );
 
         // 4. Calculate Total Allocation
@@ -63,16 +64,19 @@ const GADDashboard: React.FC<GADDashboardProps> = ({ trainings, ipos, subproject
 
         // 5. Count "Total Women-led IPOs" (Engaged)
         // Definition: IPOs that are tagged as Women-led with linked subprojects and trainings in the selected year
-        const engagedWomenLedIPOs = new Set<string>();
+        const engagedWomenLedIPOs = new Set<number>();
 
         // Add from Subprojects
-        linkedSubprojects.forEach(sp => engagedWomenLedIPOs.add(sp.indigenousPeopleOrganization));
+        linkedSubprojects.forEach(sp => {
+            const ipoId = getSubprojectIpoId(sp, ipos);
+            if (ipoId) engagedWomenLedIPOs.add(Number(ipoId));
+        });
 
         // Add from Trainings
         linkedTrainings.forEach(t => {
-            (t.participatingIpos || []).forEach(ipo => {
-                if (womenLedIpoNames.has(ipo)) {
-                    engagedWomenLedIPOs.add(ipo);
+            getActivityIpoIds(t, ipos).forEach(ipoId => {
+                if (womenLedIpoIds.has(ipoId)) {
+                    engagedWomenLedIPOs.add(ipoId);
                 }
             });
         });

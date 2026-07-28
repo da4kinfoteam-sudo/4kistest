@@ -48,6 +48,13 @@ import { normalizeStaffingExpenses } from './lib/staffingExpenseIdentity';
 import { emptyIpoLinkedDcfRecords, fetchIpoLinkedDcfRecords, IpoLinkedDcfRecords } from './lib/ipoLinkedDcfRecords';
 import { fetchWorkflowEntityById, fetchWorkflowIpos } from './lib/workflowLookups';
 import {
+    activityIncludesIpo,
+    getSubprojectIpoId,
+    hydrateActivityIpoRelationships,
+    hydrateMarketingLinkageRelationships,
+    hydrateSubprojectIpoRelationships,
+} from './lib/entityIdentity';
+import {
     getCanonicalModuleRoute,
     getNavigationPageTitle,
     isDashboardPagePath,
@@ -216,6 +223,41 @@ const AppContent: React.FC = () => {
     const [subprojectWorkflowIpos, setSubprojectWorkflowIpos] = useState<IPO[]>([]);
     const [activities, setActivities, activitiesSync] = useSupabaseTable<Activity>('activities', sampleActivities, scopedTableOptions);
     const [marketingPartners, setMarketingPartners, marketingPartnersSync] = useSupabaseTable<MarketingPartner>('marketing_partners', sampleMarketingPartners, scopedTableOptions);
+    const replaceLocalSubprojects = subprojectsSync.replaceLocalData;
+    const replaceLocalActivities = activitiesSync.replaceLocalData;
+    const replaceLocalMarketingPartners = marketingPartnersSync.replaceLocalData;
+
+    useEffect(() => {
+        const hydratedSubprojects = hydrateSubprojectIpoRelationships(subprojects, ipos);
+        if (hydratedSubprojects !== subprojects) replaceLocalSubprojects(hydratedSubprojects);
+
+        const hydratedActivities = hydrateActivityIpoRelationships(activities, ipos);
+        if (hydratedActivities !== activities) replaceLocalActivities(hydratedActivities);
+
+        const hydratedPartners = hydrateMarketingLinkageRelationships(marketingPartners, ipos);
+        if (hydratedPartners !== marketingPartners) replaceLocalMarketingPartners(hydratedPartners);
+
+        const refreshWorkflowNames = (rows: IPO[]) => {
+            let changed = false;
+            const next = rows.map(row => {
+                const current = ipos.find(ipo => Number(ipo.id) === Number(row.id));
+                if (!current || current.name === row.name) return row;
+                changed = true;
+                return { ...row, name: current.name };
+            });
+            return changed ? next : rows;
+        };
+        setActivityWorkflowIpos(refreshWorkflowNames);
+        setSubprojectWorkflowIpos(refreshWorkflowNames);
+    }, [
+        activities,
+        ipos,
+        marketingPartners,
+        replaceLocalActivities,
+        replaceLocalMarketingPartners,
+        replaceLocalSubprojects,
+        subprojects,
+    ]);
     
     // Program Management States - loaded at startup and refreshed manually
     const [officeReqs, setOfficeReqs, officeReqsSync] = useSupabaseTable<OfficeRequirement>('office_requirements', sampleOfficeRequirements, scopedTableOptions);
@@ -673,18 +715,10 @@ const AppContent: React.FC = () => {
     const fallbackIpoLinkedDcfRecords = useMemo<IpoLinkedDcfRecords>(() => {
         if (!selectedIpo?.id) return emptyIpoLinkedDcfRecords();
         const ipoId = Number(selectedIpo.id);
-        const ipoName = String(selectedIpo.name || '').trim();
         const linkedSubprojects = visibleSubprojects.filter(subproject =>
-            Number(subproject.ipo_id) === ipoId ||
-            String(subproject.indigenousPeopleOrganization || '').trim() === ipoName
+            Number(getSubprojectIpoId(subproject, ipos)) === ipoId
         );
-        const linkedActivities = visibleActivities.filter(activity =>
-            (activity.participating_ipo_ids || []).map(Number).includes(ipoId) ||
-            (Array.isArray(activity.participatingIpos)
-                ? activity.participatingIpos
-                : String(activity.participatingIpos || '').split(/[;,]/)
-            ).some(name => String(name || '').trim() === ipoName)
-        );
+        const linkedActivities = visibleActivities.filter(activity => activityIncludesIpo(activity, selectedIpo, ipos));
         const linkedActivityIds = new Set(linkedActivities.map(activity => Number(activity.id)));
         const linkedReports = activityMonitoringReports.filter(report =>
             Number(report.ipo_id) === ipoId &&
@@ -1268,6 +1302,7 @@ const AppContent: React.FC = () => {
                 return <ActivityEdit 
                             mode={activityEditMode}
                             activity={selectedActivity || undefined}
+                            activities={visibleActivities}
                             ipos={activityWorkflowIpos}
                             onBack={handleBack}
                             onUpdateActivity={(updated) => {
@@ -1324,7 +1359,7 @@ const AppContent: React.FC = () => {
                                 // Sync commodities to IPO
                                 if (updated.subprojectCommodities && updated.subprojectCommodities.length > 0) {
                                     setIpos(prev => prev.map(ipo => {
-                                        if (ipo.name === updated.indigenousPeopleOrganization) {
+                                        if (Number(ipo.id) === Number(getSubprojectIpoId(updated, ipos))) {
                                             const newCommodities = [...ipo.commodities];
                                             let changed = false;
                                             updated.subprojectCommodities?.forEach(sc => {
@@ -1543,7 +1578,7 @@ const AppContent: React.FC = () => {
                                 // Sync commodities to IPO
                                 if (updated.subprojectCommodities && updated.subprojectCommodities.length > 0) {
                                     setIpos(prev => prev.map(ipo => {
-                                        if (ipo.name === updated.indigenousPeopleOrganization) {
+                                        if (Number(ipo.id) === Number(getSubprojectIpoId(updated, ipos))) {
                                             const newCommodities = [...ipo.commodities];
                                             let changed = false;
                                             updated.subprojectCommodities?.forEach(sc => {

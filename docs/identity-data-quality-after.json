@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-07-28T09:04:13.117Z",
+  "environment": {
+    "supabaseProjectRef": "zojmlmolznkqhxgwthsq",
+    "repository": "da4kinfoteam-sudo/4kistest",
+    "mode": "read-only after audit",
+    "activityIpoJunctionAvailable": true
+  },
+  "counts": {
+    "ipos": 4,
+    "subprojects": 7,
+    "activities": 4,
+    "marketingPartners": 2,
+    "marketingLinkages": 1,
+    "marketingLinkagesWithImmutableIpoId": 1,
+    "activityIpoRelationships": 5,
+    "activitiesWithSpecificTitles": 3
+  },
+  "findings": {
+    "subprojectsMissingIpoId": [],
+    "subprojectNameMismatches": [],
+    "activitiesMissingLinkedIpoIds": [],
+    "activitiesMissingJunctionLinks": [],
+    "unresolvedActivityIpoNames": [],
+    "ambiguousIpoNames": [],
+    "marketingLinkagesWithoutResolvableIpos": [],
+    "uidAudit": {
+      "subprojects": {
+        "missing": [],
+        "duplicates": []
+      },
+      "activities": {
+        "missing": [],
+        "duplicates": []
+      },
+      "marketingPartners": {
+        "missing": [],
+        "duplicates": []
+      }
+    },
+    "legacyActivitiesWithoutSpecificTitles": [
+      {
+        "id": 900002,
+        "uid": "ACT-TEST-2026-002",
+        "type": "Activity",
+        "legacyName": "Market Matching and Test Buy Activity",
+        "operatingUnit": "RPMO CAR",
+        "targetDate": "2026-08-15"
+      }
+    ]
+  },
+  "summary": {
+    "subprojectsMissingIpoId": 0,
+    "subprojectNameMismatches": 0,
+    "activitiesMissingLinkedIpoIds": 0,
+    "activitiesMissingJunctionLinks": 0,
+    "unresolvedActivityIpoNames": 0,
+    "ambiguousIpoNames": 0,
+    "marketingLinkagesWithoutResolvableIpos": 0,
+    "missingUids": 0,
+    "duplicateUids": 0,
+    "legacyActivitiesWithoutSpecificTitles": 1
+  }
+}

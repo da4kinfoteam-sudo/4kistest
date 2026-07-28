@@ -6,6 +6,7 @@ import { Subproject, Training, OtherActivity, OfficeRequirement, StaffingRequire
 import { ReportExcelRequest, ReportPrintRequest, isParentRealignmentOrSavings, withReportYearLabel } from './ReportUtils';
 import { collectFinancialLineItems, getActualDisbursementTotalAsOf, getActualObligationTotalInWindow } from '../../lib/financialAggregation';
 import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../../lib/budgetLineAdjustments';
+import { getActivityDisplayTitle, getSubprojectIpo } from '../../lib/entityIdentity';
 
 interface MonthlyReportMatrixProps {
     data: {
@@ -124,8 +125,6 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
 
         // --- 1. Subprojects Logic ---
         const packages: Record<string, Subproject[]> = {};
-        const ipoAdMap = new Map<string, string>();
-        data.ipos.forEach(i => ipoAdMap.set(i.name, i.ancestralDomainNo));
 
         data.subprojects.forEach(sp => {
             const pkg = sp.packageType || 'Other';
@@ -144,13 +143,13 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
         }
         const spProvisions = structure['Production and Livelihood'].packages['Subproject Provisions'];
 
-        const targetIpoSetCum = new Set<string>();
-        const actualIpoSetCum = new Set<string>();
+        const targetIpoSetCum = new Set<number>();
+        const actualIpoSetCum = new Set<number>();
         const targetAdSetCum = new Set<string>();
         const actualAdSetCum = new Set<string>();
         
-        const targetIpoSetMonth = new Set<string>();
-        const actualIpoSetMonth = new Set<string>();
+        const targetIpoSetMonth = new Set<number>();
+        const actualIpoSetMonth = new Set<number>();
         const targetAdSetMonth = new Set<string>();
         const actualAdSetMonth = new Set<string>();
 
@@ -165,25 +164,26 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
             const actualCountCum = subList.filter(sp => sp.status === 'Completed' && isTargetDueCumulative(sp.actualCompletionDate)).length;
 
             subList.forEach(sp => {
-                const ad = ipoAdMap.get(sp.indigenousPeopleOrganization);
+                const ipo = getSubprojectIpo(sp, data.ipos);
+                const ad = ipo?.ancestralDomainNo;
                 
                 // Cumulative Sets
                 if (!isParentRealignmentOrSavings(sp) && isTargetDueCumulative(sp.estimatedCompletionDate)) {
-                    targetIpoSetCum.add(sp.indigenousPeopleOrganization);
+                    if (ipo) targetIpoSetCum.add(Number(ipo.id));
                     if (ad) targetAdSetCum.add(ad);
                 }
                 if (sp.status === 'Completed' && isTargetDueCumulative(sp.actualCompletionDate)) {
-                    actualIpoSetCum.add(sp.indigenousPeopleOrganization);
+                    if (ipo) actualIpoSetCum.add(Number(ipo.id));
                     if (ad) actualAdSetCum.add(ad);
                 }
 
                 // Monthly Sets
                 if (!isParentRealignmentOrSavings(sp) && isTargetDueMonthly(sp.estimatedCompletionDate)) {
-                    targetIpoSetMonth.add(sp.indigenousPeopleOrganization);
+                    if (ipo) targetIpoSetMonth.add(Number(ipo.id));
                     if (ad) targetAdSetMonth.add(ad);
                 }
                 if (sp.status === 'Completed' && isTargetDueMonthly(sp.actualCompletionDate)) {
-                    actualIpoSetMonth.add(sp.indigenousPeopleOrganization);
+                    if (ipo) actualIpoSetMonth.add(Number(ipo.id));
                     if (ad) actualAdSetMonth.add(ad);
                 }
             });
@@ -203,7 +203,7 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
             const aMonth = (act.actualDate && isTargetDueMonthly(act.actualDate)) ? 1 : 0;
             const aCum = (act.actualDate && isTargetDueCumulative(act.actualDate)) ? 1 : 0;
             
-            const item = createRow(act.name, 'Number', tMonth, aMonth, tCum, aCum);
+            const item = createRow(getActivityDisplayTitle(act), 'Number', tMonth, aMonth, tCum, aCum);
             
             // Cost Aggregation
             const cost = isExcluded ? 0 : act.expenses.reduce((sum: number, e: any) => sum + (isBudgetLineExcludedFromTargets(e) ? 0 : getBudgetLineAmount(e)), 0);

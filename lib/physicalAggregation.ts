@@ -1,5 +1,6 @@
 import { ouToRegionMap } from '../constants';
 import type { Activity, IPO, OfficeRequirement, StaffingRequirement, Subproject } from '../constants';
+import { getActivityIpoIds, getSubprojectIpoId } from './entityIdentity';
 
 type YearFilter = string | 'All';
 
@@ -94,16 +95,10 @@ const getVisibleIpoRegistry = (ipos: IPO[], filters: PhysicalAggregationFilters)
     });
 };
 
-const addNames = (target: Set<string>, names: Array<string | undefined> | undefined) => {
-    (names || []).forEach(name => {
-        if (name) target.add(name);
-    });
-};
-
-const getAds = (ipoNames: Set<string>, ipoRegistry: Map<string, IPO>) => {
+const getAds = (ipoIds: Set<number>, ipoRegistry: Map<number, IPO>) => {
     const ads = new Set<string>();
-    ipoNames.forEach(name => {
-        const ipo = ipoRegistry.get(name);
+    ipoIds.forEach(id => {
+        const ipo = ipoRegistry.get(id);
         if (ipo?.ancestralDomainNo) ads.add(ipo.ancestralDomainNo);
     });
     return ads;
@@ -124,28 +119,34 @@ export const aggregateHomepagePhysicalStats = (
         hasCompletedActivity(training) && isActualRecord(training, training.actualDate, filters)
     );
 
-    const targetIposWithSp = new Set<string>();
-    addNames(targetIposWithSp, targetSubprojects.map(subproject => subproject.indigenousPeopleOrganization));
+    const targetIposWithSp = new Set<number>();
+    targetSubprojects.forEach(subproject => {
+        const ipoId = getSubprojectIpoId(subproject, data.ipos);
+        if (ipoId) targetIposWithSp.add(Number(ipoId));
+    });
 
-    const actualIposWithSp = new Set<string>();
-    addNames(actualIposWithSp, actualSubprojects.map(subproject => subproject.indigenousPeopleOrganization));
+    const actualIposWithSp = new Set<number>();
+    actualSubprojects.forEach(subproject => {
+        const ipoId = getSubprojectIpoId(subproject, data.ipos);
+        if (ipoId) actualIposWithSp.add(Number(ipoId));
+    });
 
-    const targetIposWithTr = new Set<string>();
-    targetTrainings.forEach(training => addNames(targetIposWithTr, training.participatingIpos));
+    const targetIposWithTr = new Set<number>();
+    targetTrainings.forEach(training => getActivityIpoIds(training, data.ipos).forEach(id => targetIposWithTr.add(id)));
 
-    const actualIposWithTr = new Set<string>();
-    actualTrainings.forEach(training => addNames(actualIposWithTr, training.participatingIpos));
+    const actualIposWithTr = new Set<number>();
+    actualTrainings.forEach(training => getActivityIpoIds(training, data.ipos).forEach(id => actualIposWithTr.add(id)));
 
-    const targetIposAssisted = new Set<string>([
+    const targetIposAssisted = new Set<number>([
         ...Array.from(targetIposWithSp),
         ...Array.from(targetIposWithTr),
     ]);
-    const actualIposAssisted = new Set<string>([
+    const actualIposAssisted = new Set<number>([
         ...Array.from(actualIposWithSp),
         ...Array.from(actualIposWithTr),
     ]);
 
-    const ipoRegistry = new Map(getVisibleIpoRegistry(data.ipos || [], filters).map(ipo => [ipo.name, ipo]));
+    const ipoRegistry = new Map(getVisibleIpoRegistry(data.ipos || [], filters).map(ipo => [Number(ipo.id), ipo]));
 
     return {
         subprojects: { target: targetSubprojects.length, actual: actualSubprojects.length },

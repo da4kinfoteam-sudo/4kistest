@@ -5,6 +5,7 @@ import { Download, Printer } from 'lucide-react';
 import { Subproject, Training, OtherActivity, OfficeRequirement, StaffingRequirement, OtherProgramExpense } from '../../constants';
 import { getObjectTypeByCode, ReportExcelRequest, ReportPrintRequest, getReportingQuarter, isDateInReportingYear, isParentRealignmentOrSavings, withReportYearLabel } from './ReportUtils';
 import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../../lib/budgetLineAdjustments';
+import { getActivityDisplayTitle } from '../../lib/entityIdentity';
 
 interface WFPReportProps {
     data: {
@@ -141,7 +142,7 @@ const WFPReport: React.FC<WFPReportProps> = ({ data, uacsCodes, selectedYear, se
             });
 
             const item = {
-                indicator: t.name, totalPhysicalTarget: !isExcluded && physicalTargetQuarter ? 1 : 0, mooeCost, coCost, totalCost,
+                indicator: getActivityDisplayTitle(t), totalPhysicalTarget: !isExcluded && physicalTargetQuarter ? 1 : 0, mooeCost, coCost, totalCost,
                 q1Physical: !isExcluded && physicalTargetQuarter === 1 ? 1 : 0, q2Physical: !isExcluded && physicalTargetQuarter === 2 ? 1 : 0, q3Physical: !isExcluded && physicalTargetQuarter === 3 ? 1 : 0, q4Physical: !isExcluded && physicalTargetQuarter === 4 ? 1 : 0,
                 q1Financial: quarterlyFinancial.q1, q2Financial: quarterlyFinancial.q2,
                 q3Financial: quarterlyFinancial.q3, q4Financial: quarterlyFinancial.q4,

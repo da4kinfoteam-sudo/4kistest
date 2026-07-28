@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Subproject, IPO, Training, OtherActivity, OfficeRequirement, StaffingRequirement, operatingUnits, ouToRegionMap } from '../../constants';
 import { isMonthTargetOverdue } from '../../lib/dateStatus';
+import { getActivityDisplayTitle, getActivityIpoIds, getSubprojectIpoId } from '../../lib/entityIdentity';
 import { parseLocation } from '../LocationPicker';
 import { ModalItem } from './DashboardComponents';
 
@@ -489,6 +490,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
 
     const analytics = useMemo(() => {
         const ipoMap = new Map<string, IPO>((data.ipos || []).map(ipo => [ipo.name, ipo]));
+        const ipoById = new Map<number, IPO>((data.ipos || []).map(ipo => [Number(ipo.id), ipo]));
         const targetSubprojects = (data.subprojects || []).filter(isTargetRecord);
         const targetTrainings = (data.trainings || []).filter(isTargetRecord);
         const actualSubprojects = (data.subprojects || []).filter(sp =>
@@ -513,19 +515,19 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
         const cumulativeActualSubprojects = actualSubprojects.filter(sp => isDueByCutoff(sp.actualCompletionDate, cumulativeCutoff));
         const cumulativeActualTrainings = actualTrainings.filter(training => isDueByCutoff(training.actualDate, cumulativeCutoff));
 
-        const getIpoSetFromSubprojects = (items: Subproject[]): Set<string> =>
-            new Set(items.map(sp => sp.indigenousPeopleOrganization).filter((name): name is string => !!name));
-        const getIpoSetFromTrainings = (items: Training[]): Set<string> =>
-            new Set(items.flatMap(training => training.participatingIpos || []).filter((name): name is string => !!name));
-        const unionSets = (...sets: Set<string>[]): Set<string> => {
-            const merged = new Set<string>();
+        const getIpoSetFromSubprojects = (items: Subproject[]): Set<number> =>
+            new Set(items.map(sp => getSubprojectIpoId(sp, data.ipos)).filter((id): id is number => !!id).map(Number));
+        const getIpoSetFromTrainings = (items: Training[]): Set<number> =>
+            new Set(items.flatMap(training => getActivityIpoIds(training, data.ipos)));
+        const unionSets = (...sets: Set<number>[]): Set<number> => {
+            const merged = new Set<number>();
             sets.forEach(set => set.forEach(value => merged.add(value)));
             return merged;
         };
 
-        const getLinkedTargetsForIpo = (ipoName: string, subprojects: Subproject[], trainings: Training[]) => [
-            ...subprojects.filter(sp => sp.indigenousPeopleOrganization === ipoName),
-            ...trainings.filter(training => (training.participatingIpos || []).includes(ipoName)),
+        const getLinkedTargetsForIpo = (ipoId: number, subprojects: Subproject[], trainings: Training[]) => [
+            ...subprojects.filter(sp => Number(getSubprojectIpoId(sp, data.ipos)) === ipoId),
+            ...trainings.filter(training => getActivityIpoIds(training, data.ipos).includes(ipoId)),
         ];
 
         const isLinkedTargetIncomplete = (item: Subproject | Training) => {
@@ -556,25 +558,25 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
         };
 
         const makeIpoItems = (
-            names: Set<string>,
+            names: Set<number>,
             options: {
-                completedNames?: Set<string>;
+                completedNames?: Set<number>;
                 targetSubprojects?: Subproject[];
                 targetTrainings?: Training[];
             } = {}
         ) => Array.from(names)
-            .map(name => {
-                const ipo = ipoMap.get(name);
+            .map(ipoId => {
+                const ipo = ipoById.get(ipoId);
                 const linkedTargets = getLinkedTargetsForIpo(
-                    name,
+                    ipoId,
                     options.targetSubprojects || [],
                     options.targetTrainings || []
                 );
-                const isCompleted = options.completedNames?.has(name) || false;
+                const isCompleted = options.completedNames?.has(ipoId) || false;
                 if (!ipo) {
                     return {
-                        id: `unresolved-ipo:${name}`,
-                        name: `Unresolved IPO reference: ${name.trim() || '(blank reference)'}`,
+                        id: `unresolved-ipo:${ipoId}`,
+                        name: `Unresolved IPO ID: ${ipoId}`,
                         details: linkedTargets.length > 0
                             ? `Linked records: ${linkedTargets.map(formatLinkedSource).join('; ')}`
                             : 'No linked source record was found in this view.',
@@ -583,7 +585,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
                         isOverdue: !isCompleted && areAllLinkedTargetsOverdueAndIncomplete(linkedTargets),
                         isUnresolved: true,
                         isUnresolvedPlaceholder: true,
-                        unresolvedIpoReferences: [name],
+                        unresolvedIpoReferences: [String(ipoId)],
                     };
                 }
                 return {
@@ -629,7 +631,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
                     : '';
                 return {
                     id: training.id,
-                    name: training.name,
+                    name: getActivityDisplayTitle(training),
                     details: `${training.component} | Target: ${formatDate(targetDate)} | Conducted: ${formatDate(training.actualDate)}${unresolvedDetails}`,
                     operatingUnit: training.operatingUnit,
                     targetDate,
@@ -643,21 +645,21 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
             .sort((a, b) => compareOuThenName(a.operatingUnit, b.operatingUnit, a.name, b.name));
 
         const makeAdScope = (
-            ipoNames: Set<string>,
+            ipoNames: Set<number>,
             options: {
-                completedIpoNames?: Set<string>;
+                completedIpoNames?: Set<number>;
                 targetSubprojects?: Subproject[];
                 targetTrainings?: Training[];
             } = {}
         ) => {
             const completedAdNos = new Set<string>();
-            options.completedIpoNames?.forEach(name => {
-                const ipo = ipoMap.get(name);
+            options.completedIpoNames?.forEach(ipoId => {
+                const ipo = ipoById.get(ipoId);
                 if (ipo?.ancestralDomainNo) completedAdNos.add(ipo.ancestralDomainNo);
             });
             const adMap = new Map<string, { ipoNames: string[]; ou: string; linkedTargets: Array<Subproject | Training> }>();
-            ipoNames.forEach(name => {
-                const ipo = ipoMap.get(name);
+            ipoNames.forEach(ipoId => {
+                const ipo = ipoById.get(ipoId);
                 if (!ipo?.ancestralDomainNo) return;
                 if (!adMap.has(ipo.ancestralDomainNo)) {
                     adMap.set(ipo.ancestralDomainNo, {
@@ -669,7 +671,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
                 const adItem = adMap.get(ipo.ancestralDomainNo)!;
                 adItem.ipoNames.push(ipo.name);
                 adItem.linkedTargets.push(...getLinkedTargetsForIpo(
-                    name,
+                    ipoId,
                     options.targetSubprojects || [],
                     options.targetTrainings || []
                 ));
@@ -970,8 +972,8 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
         type MutableProvince = {
             ou: string;
             province: string;
-            targetIpos: Set<string>;
-            actualIpos: Set<string>;
+            targetIpos: Set<number>;
+            actualIpos: Set<number>;
             targetSubprojects: Set<number>;
             actualSubprojects: Set<number>;
             targetTrainings: Set<number>;
@@ -1016,45 +1018,47 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
         };
 
         targetSubprojects.forEach(sp => {
-            const ipo = ipoMap.get(sp.indigenousPeopleOrganization);
+            const ipoId = getSubprojectIpoId(sp, data.ipos);
+            const ipo = ipoId ? ipoById.get(Number(ipoId)) : undefined;
             const row = ensureProvince(sp.operatingUnit, getProvinceForIpo(ipo));
             row.targetSubprojects.add(sp.id);
-            if (sp.indigenousPeopleOrganization) row.targetIpos.add(sp.indigenousPeopleOrganization);
+            if (ipoId) row.targetIpos.add(Number(ipoId));
 
             const ouRow = ensureOu(sp.operatingUnit);
             ouRow.targetSubprojects.add(sp.id);
-            if (sp.indigenousPeopleOrganization) ouRow.targetIpos.add(sp.indigenousPeopleOrganization);
+            if (ipoId) ouRow.targetIpos.add(Number(ipoId));
         });
         actualSubprojects.forEach(sp => {
-            const ipo = ipoMap.get(sp.indigenousPeopleOrganization);
+            const ipoId = getSubprojectIpoId(sp, data.ipos);
+            const ipo = ipoId ? ipoById.get(Number(ipoId)) : undefined;
             const row = ensureProvince(sp.operatingUnit, getProvinceForIpo(ipo));
             row.actualSubprojects.add(sp.id);
-            if (sp.indigenousPeopleOrganization) row.actualIpos.add(sp.indigenousPeopleOrganization);
+            if (ipoId) row.actualIpos.add(Number(ipoId));
 
             const ouRow = ensureOu(sp.operatingUnit);
             ouRow.actualSubprojects.add(sp.id);
-            if (sp.indigenousPeopleOrganization) ouRow.actualIpos.add(sp.indigenousPeopleOrganization);
+            if (ipoId) ouRow.actualIpos.add(Number(ipoId));
         });
         targetTrainings.forEach(training => {
             const ouRow = ensureOu(training.operatingUnit);
             ouRow.targetTrainings.add(training.id);
-            (training.participatingIpos || []).forEach(ipoName => {
-                const ipo = ipoMap.get(ipoName);
+            getActivityIpoIds(training, data.ipos).forEach(ipoId => {
+                const ipo = ipoById.get(ipoId);
                 const row = ensureProvince(training.operatingUnit, getProvinceForIpo(ipo));
                 row.targetTrainings.add(training.id);
-                row.targetIpos.add(ipoName);
-                ouRow.targetIpos.add(ipoName);
+                row.targetIpos.add(ipoId);
+                ouRow.targetIpos.add(ipoId);
             });
         });
         actualTrainings.forEach(training => {
             const ouRow = ensureOu(training.operatingUnit);
             ouRow.actualTrainings.add(training.id);
-            (training.participatingIpos || []).forEach(ipoName => {
-                const ipo = ipoMap.get(ipoName);
+            getActivityIpoIds(training, data.ipos).forEach(ipoId => {
+                const ipo = ipoById.get(ipoId);
                 const row = ensureProvince(training.operatingUnit, getProvinceForIpo(ipo));
                 row.actualTrainings.add(training.id);
-                row.actualIpos.add(ipoName);
-                ouRow.actualIpos.add(ipoName);
+                row.actualIpos.add(ipoId);
+                ouRow.actualIpos.add(ipoId);
             });
         });
 
@@ -1124,7 +1128,7 @@ const PhysicalDashboard: React.FC<PhysicalDashboardProps> = ({
             .filter(activity => activity.status !== 'Cancelled' && !!activity.actualDate)
             .map(activity => ({
                 id: `activity-${activity.id}`,
-                name: activity.name,
+                name: getActivityDisplayTitle(activity),
                 type: activity.type === 'Training' ? 'Training' : 'Activity',
                 component: activity.component || 'Activity',
                 operatingUnit: activity.operatingUnit || 'Unknown OU',

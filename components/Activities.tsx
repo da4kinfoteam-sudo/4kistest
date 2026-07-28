@@ -17,6 +17,8 @@ import { DcfScopeFilterPanel, matchesDcfScope, useDcfScopeFilters } from './ui/D
 import { ConfirmDialog, DataTablePagination, SortableTableHeader } from './ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
 import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../lib/budgetLineAdjustments';
+import { getActivityDisplayTitle, getActivitySecondaryContext, resolveActivityIpos } from '../lib/entityIdentity';
+import { replaceManyActivityIpoRelationships, resolveSelectedIpoIds } from '../lib/activityIpoRelationships';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -179,6 +181,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         if (searchTerm) {
             const lowercasedSearchTerm = searchTerm.toLowerCase();
             filtered = filtered.filter(t =>
+                getActivityDisplayTitle(t, referenceActivities, ipos).toLowerCase().includes(lowercasedSearchTerm) ||
                 t.name.toLowerCase().includes(lowercasedSearchTerm) ||
                 t.location.toLowerCase().includes(lowercasedSearchTerm) ||
                 t.description.toLowerCase().includes(lowercasedSearchTerm) ||
@@ -188,13 +191,15 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
             );
         }
         return filtered;
-    }, [activities, searchTerm, forcedType, currentUser, canViewAll, dcfFilters.value]);
+    }, [activities, searchTerm, forcedType, currentUser, canViewAll, dcfFilters.value, ipos, referenceActivities]);
 
     // 2. Extract Unique Values for Column Filters based on Initially Filtered Data
     const uniqueValues = useMemo(() => {
         const getUnique = (key: keyof Activity) => Array.from(new Set(initiallyFilteredActivities.map(a => String(a[key] || '')))).filter(Boolean).sort();
         return {
-            name: getUnique('name'),
+            name: Array.from(new Set(
+                initiallyFilteredActivities.map(activity => getActivityDisplayTitle(activity, referenceActivities, ipos))
+            )).filter(Boolean).sort(),
             status: getUnique('status'),
             date: getUnique('date'),
             description: getUnique('description'),
@@ -205,7 +210,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
             fundingYear: filterYears,
             fundType: fundTypes
         };
-    }, [initiallyFilteredActivities]);
+    }, [initiallyFilteredActivities, ipos, referenceActivities]);
 
     // 3. Apply Column Filters & Sort
     const processedActivities = useMemo(() => {
@@ -216,7 +221,9 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
             const selectedValues = columnFilters[key];
             if (selectedValues.length > 0) {
                 filtered = filtered.filter(item => {
-                    const itemValue = String((item as any)[key] || '');
+                    const itemValue = key === 'name'
+                        ? getActivityDisplayTitle(item, referenceActivities, ipos)
+                        : String((item as any)[key] || '');
                     return selectedValues.includes(itemValue);
                 });
             }
@@ -234,6 +241,9 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                 } else if (sortConfig.key === 'budget') {
                     aValue = calculateActivityBudget(a);
                     bValue = calculateActivityBudget(b);
+                } else if (sortConfig.key === 'name') {
+                    aValue = getActivityDisplayTitle(a, referenceActivities, ipos);
+                    bValue = getActivityDisplayTitle(b, referenceActivities, ipos);
                 } else {
                     aValue = a[sortConfig.key as keyof Activity] || '';
                     bValue = b[sortConfig.key as keyof Activity] || '';
@@ -245,7 +255,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
             });
         }
         return filtered;
-    }, [initiallyFilteredActivities, columnFilters, sortConfig]);
+    }, [initiallyFilteredActivities, columnFilters, sortConfig, ipos, referenceActivities]);
 
     useEffect(() => {
         if (!isSelectionMode) return;
@@ -364,7 +374,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
         const currentYear = new Date().getFullYear();
 
         const newActivitiesPayload = itemsToClone.map((item, index) => {
-            const { id, uid, created_at, updated_at, history, participating_ipo_ids, physical_accomplishment_submitted_at, ...rest } = item;
+            const { id, uid, created_at, updated_at, history, physical_accomplishment_submitted_at, ...rest } = item;
 
             const prefix = item.type === 'Training' ? 'TRN' : 'ACT';
             const sequence = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
@@ -408,7 +418,21 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
             if (error) {
                 alert('Failed to clone items: ' + error.message);
             } else if (data) {
-                setActivities(prev => [...data as Activity[], ...prev]);
+                const createdActivities = (data as Activity[]).map((created, index) => ({
+                    ...created,
+                    participating_ipo_ids: resolveSelectedIpoIds(
+                        itemsToClone[index]?.participatingIpos || [],
+                        ipos
+                    ),
+                }));
+                await replaceManyActivityIpoRelationships(
+                    createdActivities.map(created => ({
+                        id: Number(created.id),
+                        ipoIds: created.participating_ipo_ids || [],
+                    })),
+                    currentUser?.fullName || currentUser?.email
+                );
+                setActivities(prev => [...createdActivities, ...prev]);
                 resetSelection();
                 alert(`Successfully cloned ${data.length} activities.`);
             }
@@ -448,12 +472,12 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                 entityType: 'activity',
             });
             if (!allowed) return;
-            logAction(`Deleted ${itemToDelete.type}`, itemToDelete.name, itemToDelete.participatingIpos.join(', '), itemToDelete.type, String(itemToDelete.id));
+            const deletedTitle = getActivityDisplayTitle(itemToDelete, referenceActivities, ipos);
+            logAction(`Deleted ${itemToDelete.type}`, deletedTitle, itemToDelete.participatingIpos.join(', '), itemToDelete.type, String(itemToDelete.id));
 
-             for (const ipoName of itemToDelete.participatingIpos) {
-                const ipo = ipos.find(i => i.name === ipoName);
+             for (const ipo of resolveActivityIpos(itemToDelete, ipos)) {
                 if (ipo) {
-                    await addIpoHistory(ipo.id, `${itemToDelete.type} Deleted: ${itemToDelete.name}`);
+                    await addIpoHistory(ipo.id, `${itemToDelete.type} Deleted: ${deletedTitle}`);
                 }
             }
 
@@ -541,7 +565,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
     };
 
     const columnFilterFields = [
-        { key: 'name', label: 'Activity Name', values: uniqueValues.name },
+        { key: 'name', label: 'Activity Title', values: uniqueValues.name },
         { key: 'component', label: 'Component', values: uniqueValues.component },
         { key: 'status', label: 'Status', values: uniqueValues.status },
         { key: 'date', label: 'Date', values: uniqueValues.date }
@@ -586,7 +610,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                         <thead><tr>
                             {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all activities on this page" onChange={(event) => handleSelectAll(event, paginatedActivities)} checked={paginatedActivities.length > 0 && paginatedActivities.every(item => selectedIds.includes(item.id))} indeterminate={paginatedActivities.some(item => selectedIds.includes(item.id)) && !paginatedActivities.every(item => selectedIds.includes(item.id))} /></th>}
                             <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={handleSort} />
-                            <SortableTableHeader label="Activity Name" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
+                            <SortableTableHeader label="Activity Title" columnKey="name" sortConfig={sortConfig} onSort={handleSort} />
                             <SortableTableHeader label="Operating Unit" columnKey="operatingUnit" sortConfig={sortConfig} onSort={handleSort} />
                             <th>IPO</th>
                             <SortableTableHeader label="Fund Year" columnKey="fundingYear" sortConfig={sortConfig} onSort={handleSort} />
@@ -599,6 +623,8 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                         <tbody>
                             {paginatedActivities.map(activity => {
                                 const totalBudget = calculateActivityBudget(activity);
+                                const displayTitle = getActivityDisplayTitle(activity, referenceActivities, ipos);
+                                const secondaryContext = getActivitySecondaryContext(activity, referenceActivities, ipos);
                                 const participatingIpos = activity.participatingIpos || [];
                                 const ipoPreview = participatingIpos.length > 0
                                     ? `${participatingIpos[0]}${participatingIpos.length > 1 ? ` +${participatingIpos.length - 1}` : ''}`
@@ -607,19 +633,22 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                                     key={activity.id}
                                     className={isSelectionMode ? (selectedIds.includes(activity.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'}
                                     tabIndex={isSelectionMode ? undefined : 0}
-                                    aria-label={isSelectionMode ? undefined : `View details for ${activity.name}`}
+                                    aria-label={isSelectionMode ? undefined : `View details for ${displayTitle}`}
                                     onClick={isSelectionMode ? undefined : () => onSelectActivity(activity)}
                                     onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectActivity(activity); } }}
                                 >
-                                    {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${activity.name}`} checked={selectedIds.includes(activity.id)} onChange={() => handleSelectRow(activity.id)} /></td>}
+                                    {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${displayTitle}`} checked={selectedIds.includes(activity.id)} onChange={() => handleSelectRow(activity.id)} /></td>}
                                     <td className="data-table__cell--mono"><TruncatedTableCell value={activity.uid || 'No code'} /></td>
-                                    <td className="data-table__cell--primary"><TruncatedTableCell value={activity.name} /></td>
+                                    <td className="data-table__cell--primary">
+                                        <TruncatedTableCell value={displayTitle} />
+                                        <div className="data-table__secondary">{secondaryContext}</div>
+                                    </td>
                                     <td><TruncatedTableCell value={activity.operatingUnit} /></td>
                                     <td><TruncatedTableCell value={ipoPreview} fullText={participatingIpos.join(', ') || 'No participating IPO'} /></td>
                                     <td>{activity.fundingYear || '—'}</td><td>{activity.fundType || '—'}</td><td>{activity.tier || '—'}</td>
                                     <td className="data-table__cell--numeric">{currency.format(totalBudget)}</td>
                                     <td><span className={getStatusBadge(activity.status)}>{activity.status || 'Unknown'}</span></td>
-                                    <td><div className="data-table__actions">{getWorkflowStatusBadge(activity.workflow_status)}{activity.workflow_status === 'PENDING' && canApprove(currentUser?.role) && <><button onClick={(event) => handleApprove(activity.id, event)} className="action-mini action-mini--approve" aria-label={`Approve ${activity.name}`}><Check aria-hidden="true" /></button><button onClick={(event) => handleReject(activity.id, event)} className="action-mini action-mini--reject" aria-label={`Reject ${activity.name}`}><X aria-hidden="true" /></button></>}</div></td>
+                                    <td><div className="data-table__actions">{getWorkflowStatusBadge(activity.workflow_status)}{activity.workflow_status === 'PENDING' && canApprove(currentUser?.role) && <><button onClick={(event) => handleApprove(activity.id, event)} className="action-mini action-mini--approve" aria-label={`Approve ${displayTitle}`}><Check aria-hidden="true" /></button><button onClick={(event) => handleReject(activity.id, event)} className="action-mini action-mini--reject" aria-label={`Reject ${displayTitle}`}><X aria-hidden="true" /></button></>}</div></td>
                                 </tr>;
                             })}
                             {paginatedActivities.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No activities match the current filters.</td></tr>}

@@ -23,6 +23,7 @@ import {
     listActivityDriveFiles,
     uploadActivityDriveFile
 } from '../lib/googleDriveStorage';
+import { getActivityDisplayTitle, resolveActivityIpos } from '../lib/entityIdentity';
 
 interface ActivityDetailProps {
     activity: Activity;
@@ -207,7 +208,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
             moduleKey: 'activities',
             item: activity,
             itemId: activity.id,
-            itemName: activity.name,
+            itemName: getActivityDisplayTitle(activity, referenceActivities, ipos),
             status: activity.status,
             action: mode === 'details' ? 'editDetails' : mode === 'expenses' ? 'editBudget' : physicalAccomplishmentDecision.allowed ? 'editPhysicalAccomplishment' : 'editFinancialAccomplishment',
             entityType: 'activity',
@@ -232,30 +233,10 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
         !!monitoringReference?.id &&
         String(activity.reference_activity_id) === String(monitoringReference.id);
 
-    const participatingIpos = useMemo(() => {
-        const byId = new Map<number, IPO>(ipos.map(ipo => [Number(ipo.id), ipo]));
-        const byName = new Map<string, IPO>(ipos.map(ipo => [ipo.name, ipo]));
-        const resolved: IPO[] = [];
-        const seen = new Set<number>();
-
-        (activity.participating_ipo_ids || []).forEach(id => {
-            const ipo = byId.get(Number(id));
-            if (ipo && !seen.has(ipo.id)) {
-                resolved.push(ipo);
-                seen.add(ipo.id);
-            }
-        });
-
-        (activity.participatingIpos || []).forEach(name => {
-            const ipo = byName.get(name);
-            if (ipo && !seen.has(ipo.id)) {
-                resolved.push(ipo);
-                seen.add(ipo.id);
-            }
-        });
-
-        return resolved;
-    }, [activity.participatingIpos, activity.participating_ipo_ids, ipos]);
+    const participatingIpos = useMemo(
+        () => resolveActivityIpos(activity, ipos),
+        [activity, ipos]
+    );
 
     const loadDriveFiles = useCallback(async () => {
         if (!currentUser?.id || !activity.id) return;
@@ -510,7 +491,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
             {/* Header */}
             <header className="detail-header">
                 <div className="detail-heading">
-                    <h1 className="detail-title">{activity.name}</h1>
+                    <h1 className="detail-title">{getActivityDisplayTitle(activity, referenceActivities, ipos)}</h1>
                     <p className="detail-meta">
                         {activity.location} | {formatDate(activity.date)}
                         {activity.endDate && activity.endDate !== activity.date ? ` - ${formatDate(activity.endDate)}` : ''}
@@ -587,24 +568,20 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
 
                             <div className="detail-item detail-item--wide">
                                 <dt className="detail-label mb-2">Participating IPOs</dt>
-                                {activity.participatingIpos.length > 0 ? (
+                                {participatingIpos.length > 0 ? (
                                     <ul className="flex flex-wrap gap-2">
-                                        {activity.participatingIpos.map((ipoName, idx) => {
-                                            const ipo = ipos.find(i => i.name === ipoName);
-                                            return (
-                                                <li key={idx}>
+                                        {participatingIpos.map(ipo => (
+                                                <li key={ipo.id}>
                                                     <button 
-                                                        onClick={() => ipo && onSelectIpo(ipo)}
-                                                        disabled={!ipo}
-                                                        className={`detail-pill-button ${ipo ? 'detail-pill-button--active' : 'detail-pill-button--disabled'}`}
-                                                        title={ipo ? 'View IPO Profile' : 'IPO details not found'}
+                                                        onClick={() => onSelectIpo(ipo)}
+                                                        className="detail-pill-button detail-pill-button--active"
+                                                        title="View IPO Profile"
                                                     >
                                                         <span className="detail-pill-button__dot"></span>
-                                                        <span>{ipoName}</span>
+                                                        <span>{ipo.name}</span>
                                                     </button>
                                                 </li>
-                                            );
-                                        })}
+                                        ))}
                                     </ul>
                                 ) : (
                                     <p className="detail-empty">No participating IPOs selected.</p>

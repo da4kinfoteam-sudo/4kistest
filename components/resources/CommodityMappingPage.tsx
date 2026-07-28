@@ -24,7 +24,7 @@ const CommodityMappingPage: React.FC<Props> = ({ subprojects, ipos }) => {
             </section>
 
             <section>
-                <AgriculturalInterventionsDashboard subprojects={subprojects} />
+                <AgriculturalInterventionsDashboard subprojects={subprojects} ipos={ipos} />
             </section>
         </div>
     );

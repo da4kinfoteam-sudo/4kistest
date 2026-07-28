@@ -4,6 +4,7 @@ import { Activity, ActivityMonitoringAction, ActivityMonitoringReport, ActivityM
 import { useAuth } from '../contexts/AuthContext';
 import { useUserAccess } from './mainfunctions/TableHooks';
 import { supabase } from '../supabaseClient';
+import { getActivityDisplayTitle } from '../lib/entityIdentity';
 
 interface ActivityMonitoringReportDetailProps {
     activity: Activity;
@@ -375,7 +376,7 @@ const ActivityMonitoringReportDetail: React.FC<ActivityMonitoringReportDetailPro
             <header className="detail-header">
                 <div className="detail-heading">
                     <h1 className="detail-title">Monitoring Report</h1>
-                    <p className="detail-meta">{activity.name} | {ipo.name}</p>
+                    <p className="detail-meta">{getActivityDisplayTitle(activity, [], [ipo])} | {ipo.name}</p>
                 </div>
                 <div className="detail-actions">
                     <button type="button" onClick={onBack} className="btn btn-secondary btn-responsive">
