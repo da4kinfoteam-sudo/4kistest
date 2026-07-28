@@ -1,5 +1,13 @@
 import { Subproject, Training, OtherActivity, OfficeRequirement, StaffingRequirement, OtherProgramExpense, IPO, HistoryEntry } from '../../constants';
 import { countPhysicalActual, countPhysicalTarget, getReportingMonthIndex, isParentRealignmentOrSavings } from './ReportUtils';
+import {
+    getActivityDisplayTitle,
+    getActivityIpoNames,
+    getActivityTypeLabel,
+    getSubprojectIpo,
+    getSubprojectIpoName,
+    resolveActivityIpos,
+} from '../../lib/entityIdentity';
 
 export interface BAR1DataGroup {
     indicator: string;
@@ -186,37 +194,39 @@ export const calculateBAR1ReportData = (data: {
         }
     };
 
-    const ipoAdMap = new Map<string, string>();
-    const ipoMap = new Map<string, IPO>();
-    data.ipos.forEach(ipo => {
-        ipoMap.set(ipo.name, ipo);
-        if (ipo.ancestralDomainNo) ipoAdMap.set(ipo.name, ipo.ancestralDomainNo);
-    });
-    const makeSubprojectRecord = (sp: Subproject): BAR1DrilldownRecord => ({
-        id: `subproject-${sp.id}`,
-        type: 'subproject',
-        label: sp.name,
-        description: sp.remarks || '',
-        targetDate: sp.estimatedCompletionDate,
-        actualDate: sp.actualCompletionDate,
-        ipoName: sp.indigenousPeopleOrganization,
-        ipoNames: sp.indigenousPeopleOrganization ? [sp.indigenousPeopleOrganization] : [],
-        packageName: sp.packageType,
-        component: 'Production and Livelihood',
-        source: sp,
-    });
-    const makeSubprojectIpoRecord = (sp: Subproject): BAR1DrilldownRecord => ({
-        id: `ipo-${sp.indigenousPeopleOrganization}`,
-        type: 'ipo',
-        label: sp.indigenousPeopleOrganization,
-        targetDate: sp.estimatedCompletionDate,
-        actualDate: sp.actualCompletionDate,
-        linkedNames: [sp.name],
-        packageName: sp.packageType,
-        source: ipoMap.get(sp.indigenousPeopleOrganization),
-    });
+    const makeSubprojectRecord = (sp: Subproject): BAR1DrilldownRecord => {
+        const ipoName = getSubprojectIpoName(sp, data.ipos);
+        return {
+            id: `subproject-${sp.id}`,
+            type: 'subproject',
+            label: sp.name,
+            description: sp.remarks || '',
+            targetDate: sp.estimatedCompletionDate,
+            actualDate: sp.actualCompletionDate,
+            ipoName,
+            ipoNames: ipoName ? [ipoName] : [],
+            packageName: sp.packageType,
+            component: 'Production and Livelihood',
+            source: sp,
+        };
+    };
+    const makeSubprojectIpoRecord = (sp: Subproject): BAR1DrilldownRecord | undefined => {
+        const ipo = getSubprojectIpo(sp, data.ipos);
+        if (!ipo) return undefined;
+        return {
+            id: `ipo-${ipo.id}`,
+            type: 'ipo',
+            label: ipo.name,
+            targetDate: sp.estimatedCompletionDate,
+            actualDate: sp.actualCompletionDate,
+            linkedNames: [sp.name],
+            packageName: sp.packageType,
+            source: ipo,
+        };
+    };
     const makeSubprojectAdRecord = (sp: Subproject): BAR1DrilldownRecord | undefined => {
-        const adNo = ipoAdMap.get(sp.indigenousPeopleOrganization);
+        const ipo = getSubprojectIpo(sp, data.ipos);
+        const adNo = ipo?.ancestralDomainNo;
         if (!adNo) return undefined;
         return {
             id: `ad-${adNo}`,
@@ -225,7 +235,7 @@ export const calculateBAR1ReportData = (data: {
             adNo,
             targetDate: sp.estimatedCompletionDate,
             actualDate: sp.actualCompletionDate,
-            ipoNames: sp.indigenousPeopleOrganization ? [sp.indigenousPeopleOrganization] : [],
+            ipoNames: [ipo.name],
             linkedNames: [sp.name],
             packageName: sp.packageType,
         };
@@ -233,23 +243,23 @@ export const calculateBAR1ReportData = (data: {
     const makeActivityRecord = (activity: Training | OtherActivity, actualDate?: string): BAR1DrilldownRecord => ({
         id: `activity-${activity.id}`,
         type: activity.type === 'Training' ? 'training' : 'activity',
-        label: activity.name,
+        label: getActivityDisplayTitle(activity),
         description: activity.description,
         targetDate: activity.endDate || activity.date,
         actualDate: actualDate || activity.actualDate,
-        ipoNames: activity.participatingIpos || [],
+        ipoNames: getActivityIpoNames(activity, data.ipos),
         component: activity.component,
         source: activity,
     });
-    const makeActivityIpoRecord = (activity: Training | OtherActivity, ipoName: string, actualDate?: string): BAR1DrilldownRecord => ({
-        id: `ipo-${ipoName}`,
+    const makeActivityIpoRecord = (activity: Training | OtherActivity, ipo: IPO, actualDate?: string): BAR1DrilldownRecord => ({
+        id: `ipo-${ipo.id}`,
         type: 'ipo',
-        label: ipoName,
+        label: ipo.name,
         targetDate: activity.endDate || activity.date,
         actualDate: actualDate || activity.actualDate,
-        linkedNames: [activity.name],
+        linkedNames: [getActivityDisplayTitle(activity)],
         component: activity.component,
-        source: ipoMap.get(ipoName),
+        source: ipo,
     });
     const makeProgramRecord = (pm: OfficeRequirement | StaffingRequirement, type: 'office' | 'staffing', label: string, actualDate?: string): BAR1DrilldownRecord => ({
         id: `${type}-${pm.id}`,
@@ -264,30 +274,30 @@ export const calculateBAR1ReportData = (data: {
 
     // Production and Livelihood - Subproject Reach
     const allTargetADs = data.subprojects.filter(sp => !isParentRealignmentOrSavings(sp)).map(sp => ({
-        id: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
-        label: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
+        id: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
+        label: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
         date: sp.estimatedCompletionDate,
         record: makeSubprojectAdRecord(sp)
     })).filter(x => x.id);
     const allActualADs = data.subprojects.map(sp => ({
-        id: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
-        label: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
+        id: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
+        label: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
         date: actualDateIfSubmitted(sp, sp.actualCompletionDate),
         record: makeSubprojectAdRecord(sp)
     })).filter(x => x.id);
 
     const allTargetIPOs = data.subprojects.filter(sp => !isParentRealignmentOrSavings(sp)).map(sp => ({
-        id: sp.indigenousPeopleOrganization,
-        label: sp.indigenousPeopleOrganization,
+        id: String(getSubprojectIpo(sp, data.ipos)?.id || ''),
+        label: getSubprojectIpoName(sp, data.ipos),
         date: sp.estimatedCompletionDate,
         record: makeSubprojectIpoRecord(sp)
-    }));
+    })).filter(item => item.id);
     const allActualIPOs = data.subprojects.map(sp => ({
-        id: sp.indigenousPeopleOrganization,
-        label: sp.indigenousPeopleOrganization,
+        id: String(getSubprojectIpo(sp, data.ipos)?.id || ''),
+        label: getSubprojectIpoName(sp, data.ipos),
         date: actualDateIfSubmitted(sp, sp.actualCompletionDate),
         record: makeSubprojectIpoRecord(sp)
-    }));
+    })).filter(item => item.id);
 
     finalData['Production and Livelihood'].packages['Subproject Reach'] = {
         items: [
@@ -318,14 +328,14 @@ export const calculateBAR1ReportData = (data: {
         const pkgItems = finalData['Production and Livelihood'].packages[pkgName].items;
 
         const targetADs = subprojects.filter(sp => !isParentRealignmentOrSavings(sp)).map(sp => ({
-            id: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
-            label: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
+            id: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
+            label: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
             date: sp.estimatedCompletionDate,
             record: makeSubprojectAdRecord(sp)
         })).filter(x => x.id); 
         const actualADs = subprojects.map(sp => ({
-            id: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
-            label: ipoAdMap.get(sp.indigenousPeopleOrganization) || '',
+            id: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
+            label: getSubprojectIpo(sp, data.ipos)?.ancestralDomainNo || '',
             date: actualDateIfSubmitted(sp, sp.actualCompletionDate),
             record: makeSubprojectAdRecord(sp)
         })).filter(x => x.id);
@@ -337,17 +347,17 @@ export const calculateBAR1ReportData = (data: {
         });
 
         const targetIPOs = subprojects.filter(sp => !isParentRealignmentOrSavings(sp)).map(sp => ({
-            id: sp.indigenousPeopleOrganization,
-            label: sp.indigenousPeopleOrganization,
+            id: String(getSubprojectIpo(sp, data.ipos)?.id || ''),
+            label: getSubprojectIpoName(sp, data.ipos),
             date: sp.estimatedCompletionDate,
             record: makeSubprojectIpoRecord(sp)
-        }));
+        })).filter(item => item.id);
         const actualIPOs = subprojects.map(sp => ({
-            id: sp.indigenousPeopleOrganization,
-            label: sp.indigenousPeopleOrganization,
+            id: String(getSubprojectIpo(sp, data.ipos)?.id || ''),
+            label: getSubprojectIpoName(sp, data.ipos),
             date: actualDateIfSubmitted(sp, sp.actualCompletionDate),
             record: makeSubprojectIpoRecord(sp)
-        }));
+        })).filter(item => item.id);
 
         pkgItems.push({
             indicator: "Number of IPOs",
@@ -375,29 +385,29 @@ export const calculateBAR1ReportData = (data: {
         const getActualDate = (t: Training) => actualDateIfSubmitted(t, t.actualDate);
         const targetTrainings = relevantTrainings
             .filter(t => !isParentRealignmentOrSavings(t))
-            .map(t => ({ val: 1, label: t.name, date: getTargetDate(t), record: makeActivityRecord(t, getActualDate(t)) }));
-        const actualTrainings = relevantTrainings.map(t => ({ val: countPhysicalActual(t, 1), label: t.name, date: getActualDate(t), record: makeActivityRecord(t, getActualDate(t)) }));
+            .map(t => ({ val: 1, label: getActivityDisplayTitle(t), date: getTargetDate(t), record: makeActivityRecord(t, getActualDate(t)) }));
+        const actualTrainings = relevantTrainings.map(t => ({ val: countPhysicalActual(t, 1), label: getActivityDisplayTitle(t), date: getActualDate(t), record: makeActivityRecord(t, getActualDate(t)) }));
         const targetIPOs: { id: string, label: string, date?: string, record?: BAR1DrilldownRecord }[] = [];
         const actualIPOs: { id: string, label: string, date?: string, record?: BAR1DrilldownRecord }[] = [];
         
         relevantTrainings.forEach(t => {
             const tDate = getTargetDate(t);
             const aDate = getActualDate(t);
-            (t.participatingIpos || []).forEach(ipo => {
-                if (!isParentRealignmentOrSavings(t)) targetIPOs.push({ id: ipo, label: ipo, date: tDate, record: makeActivityIpoRecord(t, ipo, aDate) });
-                if (aDate) actualIPOs.push({ id: ipo, label: ipo, date: aDate, record: makeActivityIpoRecord(t, ipo, aDate) });
+            resolveActivityIpos(t, data.ipos).forEach(ipo => {
+                if (!isParentRealignmentOrSavings(t)) targetIPOs.push({ id: String(ipo.id), label: ipo.name, date: tDate, record: makeActivityIpoRecord(t, ipo, aDate) });
+                if (aDate) actualIPOs.push({ id: String(ipo.id), label: ipo.name, date: aDate, record: makeActivityIpoRecord(t, ipo, aDate) });
             });
         });
 
         const targetPax = relevantTrainings.filter(t => !isParentRealignmentOrSavings(t)).map(t => ({
             val: (t.participantsMale || 0) + (t.participantsFemale || 0), 
-            label: t.name,
+            label: getActivityDisplayTitle(t),
             date: getTargetDate(t),
             record: { ...makeActivityRecord(t, getActualDate(t)), type: 'participant' as BAR1DrilldownRecordType }
         }));
         const actualPax = relevantTrainings.map(t => ({ 
             val: (t.actualParticipantsMale || 0) + (t.actualParticipantsFemale || 0), 
-            label: t.name,
+            label: getActivityDisplayTitle(t),
             date: getActualDate(t),
             record: { ...makeActivityRecord(t, getActualDate(t)), type: 'participant' as BAR1DrilldownRecordType }
         }));
@@ -440,27 +450,26 @@ export const calculateBAR1ReportData = (data: {
         // Group by name
         const groups: { [name: string]: OtherActivity[] } = {};
         relevantActivities.forEach(a => {
-            if (!groups[a.name]) groups[a.name] = [];
-            groups[a.name].push(a);
+            const activityType = getActivityTypeLabel(a);
+            if (!groups[activityType]) groups[activityType] = [];
+            groups[activityType].push(a);
         });
 
         Object.entries(groups).forEach(([name, activities]) => {
             const targetConducted = activities
                 .filter(a => !isParentRealignmentOrSavings(a))
-                .map(a => ({ val: 1, label: a.location || a.name, date: a.date, record: makeActivityRecord(a, actualDateIfSubmitted(a, a.actualDate)) }));
-            const actualConducted = activities.map(a => ({ val: countPhysicalActual(a, 1), label: a.location || a.name, date: actualDateIfSubmitted(a, a.actualDate), record: makeActivityRecord(a, actualDateIfSubmitted(a, a.actualDate)) }));
+                .map(a => ({ val: 1, label: getActivityDisplayTitle(a), date: a.date, record: makeActivityRecord(a, actualDateIfSubmitted(a, a.actualDate)) }));
+            const actualConducted = activities.map(a => ({ val: countPhysicalActual(a, 1), label: getActivityDisplayTitle(a), date: actualDateIfSubmitted(a, a.actualDate), record: makeActivityRecord(a, actualDateIfSubmitted(a, a.actualDate)) }));
 
             const targetIPOs: { id: string, label: string, date?: string, record?: BAR1DrilldownRecord }[] = [];
             const actualIPOs: { id: string, label: string, date?: string, record?: BAR1DrilldownRecord }[] = [];
             
             activities.forEach(a => {
-                if (a.participatingIpos) {
-                    a.participatingIpos.forEach(ipo => {
-                        const actualDate = actualDateIfSubmitted(a, a.actualDate);
-                        if (!isParentRealignmentOrSavings(a)) targetIPOs.push({ id: ipo, label: ipo, date: a.date, record: makeActivityIpoRecord(a, ipo, actualDate) });
-                        if (actualDate) actualIPOs.push({ id: ipo, label: ipo, date: actualDate, record: makeActivityIpoRecord(a, ipo, actualDate) });
-                    });
-                }
+                resolveActivityIpos(a, data.ipos).forEach(ipo => {
+                    const actualDate = actualDateIfSubmitted(a, a.actualDate);
+                    if (!isParentRealignmentOrSavings(a)) targetIPOs.push({ id: String(ipo.id), label: ipo.name, date: a.date, record: makeActivityIpoRecord(a, ipo, actualDate) });
+                    if (actualDate) actualIPOs.push({ id: String(ipo.id), label: ipo.name, date: actualDate, record: makeActivityIpoRecord(a, ipo, actualDate) });
+                });
             });
 
             let activityGroup: any;

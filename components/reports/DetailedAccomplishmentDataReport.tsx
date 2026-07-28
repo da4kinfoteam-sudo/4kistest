@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
 import { parseLocation } from '../LocationPicker';
 import { ReportExcelRequest, ReportPrintRequest, isDateInReportingYear, withReportYearLabel } from './ReportUtils';
+import { getActivityDisplayTitle, getSubprojectIpo, resolveActivityIpos } from '../../lib/entityIdentity';
 
 interface DetailedAccomplishmentDataReportProps {
     data: {
@@ -335,24 +336,6 @@ const getLevel2 = (component: ActivityComponentType | 'Production and Livelihood
     return '';
 };
 
-const findIpoById = (ipos: IPO[], id?: number) => id ? ipos.find(ipo => Number(ipo.id) === Number(id)) : undefined;
-
-const findIpoByName = (ipos: IPO[], name?: string) => {
-    const normalized = normalizeText(name);
-    return normalized ? ipos.find(ipo => normalizeText(ipo.name) === normalized) : undefined;
-};
-
-const dedupeIpos = (ipos: Array<IPO | undefined>) => {
-    const seen = new Set<string>();
-    return ipos.filter((ipo): ipo is IPO => {
-        if (!ipo) return false;
-        const key = ipo.id ? `id:${ipo.id}` : `name:${normalizeText(ipo.name)}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-};
-
 const buildBeneficiaryFields = (ipos: IPO[]) => {
     const locations = ipos.map(ipo => parseBeneficiaryLocation(ipo.location, ipo.region));
     return {
@@ -368,10 +351,10 @@ const buildBeneficiaryFields = (ipos: IPO[]) => {
     };
 };
 
-const getSubprojectLinkedIpos = (subproject: Subproject, ipos: IPO[]) => dedupeIpos([
-    findIpoById(ipos, subproject.ipo_id),
-    findIpoByName(ipos, subproject.indigenousPeopleOrganization),
-]);
+const getSubprojectLinkedIpos = (subproject: Subproject, ipos: IPO[]) => {
+    const ipo = getSubprojectIpo(subproject, ipos);
+    return ipo ? [ipo] : [];
+};
 
 const getLatestDate = (values: Array<string | undefined | null>) => values
     .map(value => (value || '').trim())
@@ -501,12 +484,11 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
         const activityRows = [...(data.trainings || []), ...(data.otherActivities || [])]
             .filter(activity => !!activity.actualDate && activity.component !== 'Program Management')
             .map(activity => {
-                const idMatches = (activity.participating_ipo_ids || []).map(id => findIpoById(ipoRegistry, id));
-                const nameMatches = (activity.participatingIpos || []).map(name => findIpoByName(ipoRegistry, name));
-                const linkedIpos = dedupeIpos([...idMatches, ...nameMatches]);
+                const linkedIpos = resolveActivityIpos(activity, ipoRegistry);
                 const beneficiary = buildBeneficiaryFields(linkedIpos);
                 const component = activity.component;
-                const performanceIndicatorLevel3 = `${activity.name} conducted`.replace(/\s+/g, ' ').trim();
+                const activityTitle = getActivityDisplayTitle(activity);
+                const performanceIndicatorLevel3 = `${activityTitle} conducted`.replace(/\s+/g, ' ').trim();
 
                 return {
                     id: `activity-${activity.id}`,
@@ -527,7 +509,7 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
                     performanceIndicatorLevel1: component,
                     performanceIndicatorLevel2: getLevel2(component, 'Activity'),
                     performanceIndicatorLevel3,
-                    title: activity.name || '',
+                    title: activityTitle,
                     unitOfMeasure: 'Activity',
                     quantity: 1,
                     beneficiaryProvince: beneficiary.province,

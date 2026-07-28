@@ -13,6 +13,7 @@ import { DisbursementsEditor } from './accomplishment/DisbursementsEditor';
 import { supabase } from '../supabaseClient';
 import { resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../lib/physicalAccomplishmentTimestamp';
 import { resolveSubprojectCompletionRollup } from '../lib/subprojectCompletion';
+import { resolveIpoByIdOrName } from '../lib/entityIdentity';
 import { isMonthTargetOverdue } from '../lib/dateStatus';
 import { ConfirmDialog } from './ui/enterprise';
 import { getActualDisbursementSummary, getActualObligationSummary, hasFinancialActuals } from '../lib/financialActualSummary';
@@ -615,10 +616,11 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                 setEditedSubproject(prev => ({ ...prev, status: newStatus, actualCompletionDate: '' }));
             }
         } else if (name === 'indigenousPeopleOrganization') {
-             const selectedIpo = ipos.find(ipo => ipo.name === value);
+             const selectedIpo = resolveIpoByIdOrName(ipos, undefined, value);
              setEditedSubproject(prev => ({
                  ...prev,
                  [name]: value,
+                 ipo_id: selectedIpo?.id,
                  location: selectedIpo ? selectedIpo.location : ''
              }));
         } else if (name === 'fundingYear') {
@@ -657,7 +659,8 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                 [name]: value,
                 // We don't have a region field on Subproject, it's derived from IPO.
                 // But we can clear the IPO if the OU changes to force them to re-select.
-                indigenousPeopleOrganization: mappedRegion ? '' : prev.indigenousPeopleOrganization
+                 indigenousPeopleOrganization: mappedRegion ? '' : prev.indigenousPeopleOrganization,
+                 ipo_id: mappedRegion ? undefined : prev.ipo_id,
             }));
         } else {
             setEditedSubproject(prev => ({ ...prev, [name]: value }));
@@ -1050,7 +1053,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
 
         let resolvedIpoId = editedSubproject.ipo_id;
         if (!resolvedIpoId && editedSubproject.indigenousPeopleOrganization) {
-            const matchedIpo = ipos.find(i => i.name === editedSubproject.indigenousPeopleOrganization);
+            const matchedIpo = resolveIpoByIdOrName(ipos, undefined, editedSubproject.indigenousPeopleOrganization);
             if (matchedIpo) resolvedIpoId = matchedIpo.id;
         }
 

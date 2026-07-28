@@ -13,6 +13,7 @@ import { resolveSubprojectCompletionRollup } from '../../lib/subprojectCompletio
 import { isMonthTargetOverdue } from '../../lib/dateStatus';
 import type { DataScope } from '../../lib/scopedDataFetch';
 import { ConfirmDialog, LoadingState } from '../ui/enterprise';
+import { getActivityDisplayTitle } from '../../lib/entityIdentity';
 
 interface Props {
     subprojects: Subproject[];
@@ -399,7 +400,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     uniqueId: `act-${act.id}`,
                     sourceType: 'Activity',
                     sourceId: act.id,
-                    name: act.name,
+                    name: getActivityDisplayTitle(act),
                     subName: act.type,
                     targetDateStart: act.date,
                     targetDateEnd: act.endDate !== act.date ? act.endDate : undefined,

@@ -26,6 +26,12 @@ import {
   sampleSubprojects,
 } from '../samples';
 import { sampleIPOs } from '../sampleIPOs';
+import {
+  ActivityIpoRelationship,
+  hydrateActivityIpoRelationships,
+  hydrateMarketingLinkageRelationships,
+  hydrateSubprojectIpoRelationships,
+} from './entityIdentity';
 
 export interface DataScope {
   year: string | number;
@@ -258,6 +264,35 @@ async function enrichScopedIpos(baseIpos: any[], sources: IpoReferenceSources) {
   ]);
 
   return mergeIpos(baseIpos, [...iposById, ...iposByName]);
+}
+
+async function fetchActivityIpoRelationships(activities: any[]): Promise<ActivityIpoRelationship[]> {
+  const activityIds = uniqueNumbers(activities.map(activity => activity.id));
+  if (activityIds.length === 0) return [];
+  try {
+    return await fetchRowsByValues('activity_ipos', 'activity_id', activityIds) as ActivityIpoRelationship[];
+  } catch (error: any) {
+    // Compatibility with a frontend deployed before the additive migration is applied.
+    if (/activity_ipos|does not exist|schema cache/i.test(String(error?.message || error))) return [];
+    throw error;
+  }
+}
+
+function attachJunctionIpoIds(
+  activities: any[],
+  relationships: ActivityIpoRelationship[]
+) {
+  const idsByActivity = new Map<number, number[]>();
+  relationships.forEach(relationship => {
+    const activityId = Number(relationship.activity_id);
+    const ipoId = Number(relationship.ipo_id);
+    if (!Number.isFinite(activityId) || !Number.isFinite(ipoId)) return;
+    idsByActivity.set(activityId, [...(idsByActivity.get(activityId) || []), ipoId]);
+  });
+  return activities.map(activity => {
+    const ids = idsByActivity.get(Number(activity.id));
+    return ids?.length ? { ...activity, participating_ipo_ids: ids } : activity;
+  });
 }
 
 async function fetchScopedMarketingPartners(scope: DataScope) {
@@ -493,12 +528,15 @@ function loadLocalSeedScopedData(scope: DataScope): ScopedAppData {
   };
   const { activityMonitoringReports, activityMonitoringActions } = filterLocalMonitoringRows(activities);
   const ipos = enrichLocalIpos(baseIpos, { subprojects, activities, activityMonitoringReports });
+  const hydratedSubprojects = hydrateSubprojectIpoRelationships(subprojects, ipos);
+  const hydratedActivities = hydrateActivityIpoRelationships(activities, ipos);
+  const hydratedMarketingPartners = hydrateMarketingLinkageRelationships(marketingPartners, ipos);
 
   return {
-    subprojects,
+    subprojects: hydratedSubprojects,
     ipos,
-    activities,
-    marketingPartners,
+    activities: hydratedActivities,
+    marketingPartners: hydratedMarketingPartners,
     officeReqs,
     staffingReqs,
     otherProgramExpenses,
@@ -577,6 +615,7 @@ export async function loadScopedAppData(scope: DataScope): Promise<ScopedAppData
     { financialObligations, financialDisbursements },
     { activityMonitoringReports, activityMonitoringActions },
     budgetItemAdjustmentHistory,
+    activityIpoRelationships,
   ] = await Promise.all([
     fetchScopedFinancialRows(
       subprojects,
@@ -587,14 +626,27 @@ export async function loadScopedAppData(scope: DataScope): Promise<ScopedAppData
     ),
     fetchScopedMonitoringRows(activities),
     fetchBudgetItemAdjustmentHistory(subprojects, activities, staffingReqs),
+    fetchActivityIpoRelationships(activities),
   ]);
-  const ipos = await enrichScopedIpos(baseIpos, { subprojects, activities, activityMonitoringReports });
+  const activitiesWithRelationshipIds = attachJunctionIpoIds(activities, activityIpoRelationships);
+  const ipos = await enrichScopedIpos(baseIpos, {
+    subprojects,
+    activities: activitiesWithRelationshipIds,
+    activityMonitoringReports,
+  });
+  const hydratedSubprojects = hydrateSubprojectIpoRelationships(subprojects, ipos);
+  const hydratedActivities = hydrateActivityIpoRelationships(
+    activitiesWithRelationshipIds,
+    ipos,
+    activityIpoRelationships
+  );
+  const hydratedMarketingPartners = hydrateMarketingLinkageRelationships(marketingPartners, ipos);
 
   return {
-    subprojects,
+    subprojects: hydratedSubprojects,
     ipos,
-    activities,
-    marketingPartners,
+    activities: hydratedActivities,
+    marketingPartners: hydratedMarketingPartners,
     officeReqs,
     staffingReqs,
     otherProgramExpenses,

@@ -296,6 +296,7 @@ export interface Activity extends BaseEntity {
     uid?: string;
     type: 'Training' | 'Activity'; // Database Discriminator
     reference_activity_id?: number | string | null;
+    activity_title?: string | null;
     name: string;
     date: string; // Start Date
     endDate?: string; // End Date (Optional, same as date if single day)
@@ -525,6 +526,7 @@ export type MarketLinkageUnit = typeof marketLinkageUnits[number];
 export interface MarketLinkage {
     id: number | string;
     region: string;
+    ipoId?: number | null;
     ipoName: string;
     commodityNeedId: string | number | null;
     commodityName: string;

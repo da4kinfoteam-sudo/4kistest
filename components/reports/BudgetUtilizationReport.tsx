@@ -4,6 +4,7 @@ import { Download, Printer } from 'lucide-react';
 import { Subproject, Training, OtherActivity, OfficeRequirement, StaffingRequirement, OtherProgramExpense } from '../../constants';
 import { deriveExcelHeaderMerges, ExcelColumnFormat, getObjectTypeByCode, ReportExcelRequest, ReportPrintRequest, withReportYearLabel } from './ReportUtils';
 import { collectFinancialLineItems, FinancialAggregationFilters } from '../../lib/financialAggregation';
+import { getActivityDisplayTitle } from '../../lib/entityIdentity';
 
 interface BudgetUtilizationReportProps {
     data: {
@@ -141,7 +142,7 @@ const ActivityRow: React.FC<{
 
     return (
         <tr className="bur-report__row">
-            <td className={`${dataCellClass} text-left ${indentClasses[indentLevel]} sticky left-0 z-10 bur-report__sticky`}>{activity.name}</td>
+            <td className={`${dataCellClass} text-left ${indentClasses[indentLevel]} sticky left-0 z-10 bur-report__sticky`}>{getActivityDisplayTitle(activity)}</td>
             
             {/* Allotment */}
             <td className={`${dataCellClass} text-right whitespace-nowrap`}>{formatCurrencyWhole(activity.allotment.mooe)}</td>
@@ -474,7 +475,7 @@ const BudgetUtilizationReport: React.FC<BudgetUtilizationReportProps> = ({ data,
             if (Array.isArray(componentData)) {
                 dataRows.push(summaryRow(componentData, componentName, 0));
                 if (expandedRows.has(componentName)) {
-                    componentData.forEach(activity => dataRows.push(activityRow(activity, activity.name, 1)));
+                    componentData.forEach(activity => dataRows.push(activityRow(activity, getActivityDisplayTitle(activity), 1)));
                 }
                 return;
             }
@@ -486,7 +487,7 @@ const BudgetUtilizationReport: React.FC<BudgetUtilizationReportProps> = ({ data,
                     Object.entries((componentData as any).packages).forEach(([pkgName, pkgData]: [string, any]) => {
                         dataRows.push(summaryRow(pkgData.items, pkgName, 1));
                         if (expandedRows.has(pkgName)) {
-                            pkgData.items.forEach((activity: any) => dataRows.push(activityRow(activity, activity.name, 2)));
+                            pkgData.items.forEach((activity: any) => dataRows.push(activityRow(activity, getActivityDisplayTitle(activity), 2)));
                         }
                     });
                 }

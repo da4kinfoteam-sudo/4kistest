@@ -17,6 +17,7 @@ import { collectFinancialLineItems, FinancialAggregationFilters } from '../../li
 import { calculateMarketLinkageSales, createEmptyMarketQuantityTotals, formatMarketQuantityTotals } from '../../lib/marketSalesAggregation';
 import { parseLocation } from '../LocationPicker';
 import { XLSX } from '../reports/ReportUtils';
+import { getSubprojectIpo, getSubprojectIpoName, resolveIpoByIdOrName } from '../../lib/entityIdentity';
 
 interface Props {
     subprojects: Subproject[];
@@ -154,19 +155,10 @@ const matchesYear = (dateString: string | undefined, selectedYear: string) => (
 
 const getCommodityKey = (type: string, name: string) => `${normalizeKey(type || 'Unspecified')}::${normalizeKey(name || 'Unspecified')}`;
 
-const getIpoKey = (ipoName: string) => normalizeKey(ipoName);
-
 const getStatusTone = (value: number, good = 80, warning = 50) => {
     if (value >= good) return 'good';
     if (value >= warning) return 'warning';
     return 'danger';
-};
-
-const getSubprojectIpoName = (subproject: Subproject) => normalizeText(subproject.indigenousPeopleOrganization) || 'Unspecified IPO';
-
-const getMatchingIpo = (subproject: Subproject, ipoByName: Map<string, IPO>, ipoById: Map<string, IPO>) => {
-    const byId = subproject.ipo_id ? ipoById.get(String(subproject.ipo_id)) : undefined;
-    return byId || ipoByName.get(getIpoKey(getSubprojectIpoName(subproject)));
 };
 
 const getFallbackTargetYield = (commodity: { name: string; area: number }, ipo?: IPO) => {
@@ -350,13 +342,6 @@ const FarmProductivityDashboard: React.FC<Props> = ({
     onSelectMarketingPartner,
 }) => {
     const analytics = useMemo(() => {
-        const ipoByName = new Map<string, IPO>();
-        const ipoById = new Map<string, IPO>();
-        (ipos || []).forEach(ipo => {
-            ipoByName.set(getIpoKey(ipo.name), ipo);
-            ipoById.set(String(ipo.id), ipo);
-        });
-
         const filters: FinancialAggregationFilters = {
             year: selectedYear,
             operatingUnit: selectedOu,
@@ -406,8 +391,8 @@ const FarmProductivityDashboard: React.FC<Props> = ({
                 const subprojectInvestment = investmentBySubproject.get(String(subproject.id)) || 0;
                 const totalQuantity = commodities.reduce((sum, commodity) => sum + commodity.area, 0);
                 const equalShare = commodities.length > 0 ? 1 / commodities.length : 0;
-                const ipoName = getSubprojectIpoName(subproject);
-                const ipo = getMatchingIpo(subproject, ipoByName, ipoById);
+                const ipo = getSubprojectIpo(subproject, ipos);
+                const ipoName = getSubprojectIpoName(subproject, ipos) || 'Unspecified IPO';
                 const province = parseLocation(subproject.location || '').province || 'Unspecified Province';
 
                 let subIncome = 0;
@@ -491,7 +476,7 @@ const FarmProductivityDashboard: React.FC<Props> = ({
                 const sales = calculateMarketLinkageSales(link);
                 if (sales.salesValue <= 0 && sales.quantity <= 0) return;
 
-                const ipo = ipoByName.get(getIpoKey(link.ipoName));
+                const ipo = resolveIpoByIdOrName(ipos, link.ipoId, link.ipoName);
                 const assignedCommodityName = normalizeText(link.commodityName);
                 if (assignedCommodityName) {
                     marketingRows.push({
@@ -499,7 +484,7 @@ const FarmProductivityDashboard: React.FC<Props> = ({
                         commodityName: assignedCommodityName,
                         commodityType: normalizeText(link.commodityType) || 'Unspecified',
                         isCommodityAssigned: true,
-                        ipoName: link.ipoName || 'Unspecified IPO',
+                        ipoName: ipo?.name || link.ipoName || 'Unspecified IPO',
                         marketName: partner.companyName || 'Unspecified Market',
                         operatingUnit: 'Unspecified OU',
                         quantity: sales.quantity,
@@ -529,7 +514,7 @@ const FarmProductivityDashboard: React.FC<Props> = ({
                         commodityName: normalizeText((commodity as any).particular) || 'Unspecified Commodity',
                         commodityType: normalizeText((commodity as any).type) || 'Unspecified',
                         isCommodityAssigned: false,
-                        ipoName: link.ipoName || 'Unspecified IPO',
+                        ipoName: ipo?.name || link.ipoName || 'Unspecified IPO',
                         marketName: partner.companyName || 'Unspecified Market',
                         operatingUnit: 'Unspecified OU',
                         quantity: sales.quantity * share,

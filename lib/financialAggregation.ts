@@ -1,6 +1,7 @@
 import type { Activity, OtherProgramExpense, OfficeRequirement, StaffingRequirement, Subproject } from '../constants';
 import { getBudgetLineTag, isRecordOrLineExcludedFromTargets } from './budgetLineAdjustments';
 import { normalizeStaffingExpenses } from './staffingExpenseIdentity';
+import { getActivityDisplayTitle } from './entityIdentity';
 
 type YearFilter = string | 'All';
 
@@ -428,7 +429,7 @@ export const collectFinancialLineItems = (
                 sourceType: activity.type === 'Training' ? 'training' : 'activity',
                 component: activity.component,
                 packageType: activity.component === 'Program Management' ? 'Activities' : undefined,
-                activityName: activity.name,
+                activityName: getActivityDisplayTitle(activity),
                 operatingUnit: activity.operatingUnit,
                 location: activity.location,
                 ipoIds: (activity.participating_ipo_ids || []).map(Number).filter(Number.isFinite),

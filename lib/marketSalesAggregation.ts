@@ -71,7 +71,8 @@ export const summarizeMarketLinkages = (linkages: MarketLinkage[] = []): MarketS
     const totals = linkages.reduce(
         (summary, link) => {
             const sales = calculateMarketLinkageSales(link);
-            if (link.ipoName) linkedIpos.add(link.ipoName);
+            if (link.ipoId) linkedIpos.add(`id:${link.ipoId}`);
+            else if (link.ipoName) linkedIpos.add(`name:${link.ipoName}`);
 
             return {
                 linkageCount: summary.linkageCount + 1,
@@ -99,12 +100,18 @@ export const summarizeMarketPartnerSales = (partner: MarketingPartner): MarketSa
     summarizeMarketLinkages(partner.marketingLinkages || [])
 );
 
-export const getIpoMarketSalesRows = (partners: MarketingPartner[] = [], ipoName: string): IpoMarketSalesRow[] => {
+export const getIpoMarketSalesRows = (
+    partners: MarketingPartner[] = [],
+    ipo: { id: number | string; name: string } | string
+): IpoMarketSalesRow[] => {
     const rows: IpoMarketSalesRow[] = [];
+    const ipoId = typeof ipo === 'string' ? null : Number(ipo.id);
+    const ipoName = typeof ipo === 'string' ? ipo : ipo.name;
 
     partners.forEach(partner => {
         (partner.marketingLinkages || []).forEach(link => {
-            if (link.ipoName !== ipoName) return;
+            const hasImmutableId = Number.isFinite(Number(link.ipoId));
+            if (hasImmutableId ? Number(link.ipoId) !== ipoId : link.ipoName !== ipoName) return;
             rows.push({
                 partner,
                 link,

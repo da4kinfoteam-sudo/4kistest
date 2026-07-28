@@ -58,6 +58,7 @@ import {
     formatRecordMetricCurrency,
     formatRecordMetricNumber
 } from './ui/RecordDetailLayout';
+import { getActivityDisplayTitle, resolveActivityIpos } from '../lib/entityIdentity';
 
 interface ActivityDetailProps {
     activity: Activity;
@@ -213,7 +214,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
             moduleKey: 'activities',
             item: activity,
             itemId: activity.id,
-            itemName: activity.name,
+            itemName: getActivityDisplayTitle(activity, referenceActivities, ipos),
             status: activity.status,
             action: mode === 'details' ? 'editDetails' : mode === 'expenses' ? 'editBudget' : physicalAccomplishmentDecision.allowed ? 'editPhysicalAccomplishment' : 'editFinancialAccomplishment',
             entityType: 'activity',
@@ -244,30 +245,10 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
         !!monitoringReference?.id &&
         String(activity.reference_activity_id) === String(monitoringReference.id);
 
-    const participatingIpos = useMemo(() => {
-        const byId = new Map<number, IPO>(ipos.map(ipo => [Number(ipo.id), ipo]));
-        const byName = new Map<string, IPO>(ipos.map(ipo => [ipo.name, ipo]));
-        const resolved: IPO[] = [];
-        const seen = new Set<number>();
-
-        (activity.participating_ipo_ids || []).forEach(id => {
-            const ipo = byId.get(Number(id));
-            if (ipo && !seen.has(ipo.id)) {
-                resolved.push(ipo);
-                seen.add(ipo.id);
-            }
-        });
-
-        (activity.participatingIpos || []).forEach(name => {
-            const ipo = byName.get(name);
-            if (ipo && !seen.has(ipo.id)) {
-                resolved.push(ipo);
-                seen.add(ipo.id);
-            }
-        });
-
-        return resolved;
-    }, [activity.participatingIpos, activity.participating_ipo_ids, ipos]);
+    const participatingIpos = useMemo(
+        () => resolveActivityIpos(activity, ipos),
+        [activity, ipos]
+    );
 
     const loadDriveFiles = useCallback(async () => {
         if (!currentUser?.id || !activity.id) return;
@@ -439,7 +420,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
             <RecordBackLink onClick={onBack}>Back to {previousPageName}</RecordBackLink>
 
             <RecordHeader
-                title={activity.name}
+                title={getActivityDisplayTitle(activity, referenceActivities, ipos)}
                 metadata={
                     <>
                         <span className="ipo-detail-record-id">{activity.uid || `ACT-${activity.id}`}</span>

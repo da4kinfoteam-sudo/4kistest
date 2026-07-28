@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test:financial-breakdown": "node scripts/run-financial-breakdown-hierarchy-check.mjs",
+    "test:identity": "node scripts/verify-identity-helpers.mjs",
     "audit:ui": "node scripts/ui-consistency-audit.mjs",
     "audit:legacy-ui": "node scripts/legacy-ui-inventory.mjs"
   },

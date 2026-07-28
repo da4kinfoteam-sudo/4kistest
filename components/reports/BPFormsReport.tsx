@@ -4,6 +4,7 @@ import { Download, Printer } from 'lucide-react';
 import { Subproject, Training, OtherActivity, OfficeRequirement, StaffingRequirement, OtherProgramExpense } from '../../constants';
 import { formatCurrency, getObjectTypeByCode, ReportExcelRequest, ReportPrintRequest, withReportYearLabel } from './ReportUtils';
 import { getBudgetLineAmount } from '../../lib/budgetLineAdjustments';
+import { getActivityDisplayTitle } from '../../lib/entityIdentity';
 
 interface BPFormsReportProps {
     data: {
@@ -47,7 +48,7 @@ const ActivityRow: React.FC<{
             <td className={`${dataCellClass} ${indentClasses[indentLevel]} bp-report__cell--sticky`}>
                 {hasParticulars && toggleRow && <span className="bp-report__expand" aria-hidden="true">{isExpanded ? '−' : '+'}</span>}
                 {!hasParticulars && <span className="inline-block w-5"></span>}
-                {activity.name}
+                {getActivityDisplayTitle(activity)}
             </td>
             
             {/* MOOE Columns */}
@@ -228,7 +229,7 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
         data.trainings.forEach(t => {
             t.expenses.forEach(e => {
                 addLineItem({
-                    component: t.component, packageType: t.component === 'Program Management' ? 'Activities' : undefined, activityName: t.name,
+                    component: t.component, packageType: t.component === 'Program Management' ? 'Activities' : undefined, activityName: getActivityDisplayTitle(t),
                     objectType: e.objectType, uacsCode: e.uacsCode, amount: getBudgetLineAmount(e),
                     isTraining: true, particularName: e.expenseParticular,
                     isRealignment: t.isRealignment || e.isRealignment,
@@ -579,10 +580,10 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
 
         const addActivityRows = (pkgName: string, items: any[], prefix: string) => {
             items.forEach((activity: any, i: number) => {
-                const actKey = `${pkgName}-${activity.name}-${i}`;
+                const actKey = `${pkgName}-${activity.id}-${i}`;
                 const isActExpanded = expandedRows.has(actKey);
                 
-                const row: (string | number | null)[] = [`${prefix}${activity.name}`];
+                const row: (string | number | null)[] = [`${prefix}${getActivityDisplayTitle(activity)}`];
                 appendBpValueCells(row, activity.uacsValues, activity.totalMOOE, activity.totalCO);
                 flatDataRows.push(row);
 
@@ -921,7 +922,7 @@ const BPFormsReport: React.FC<BPFormsReportProps> = ({ data, uacsCodes, selected
                                                         indentClasses={indentClasses}
                                                     />
                                                     {isPkgExpanded && pkgData.items.map((act: any, i: number) => {
-                                                        const actKey = `${pkgName}-${act.name}-${i}`;
+                                                        const actKey = `${pkgName}-${act.id}-${i}`;
                                                         const isActExpanded = expandedRows.has(actKey);
                                                         return (
                                                             <React.Fragment key={actKey}>
