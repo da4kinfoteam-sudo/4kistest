@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-28T09:04:13.117Z",
+  "generatedAt": "2026-07-29T02:33:20.093Z",
   "environment": {
     "supabaseProjectRef": "zojmlmolznkqhxgwthsq",
     "repository": "da4kinfoteam-sudo/4kistest",
@@ -9,12 +9,12 @@
   "counts": {
     "ipos": 4,
     "subprojects": 7,
-    "activities": 4,
+    "activities": 5,
     "marketingPartners": 2,
     "marketingLinkages": 1,
     "marketingLinkagesWithImmutableIpoId": 1,
-    "activityIpoRelationships": 5,
-    "activitiesWithSpecificTitles": 3
+    "activityIpoRelationships": 6,
+    "activitiesWithSpecificTitles": 4
   },
   "findings": {
     "subprojectsMissingIpoId": [],
