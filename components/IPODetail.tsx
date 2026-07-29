@@ -1,7 +1,30 @@
 
 // Author: 4K 
-import React, { useState, useEffect, FormEvent, useMemo, useCallback } from 'react';
-import { AlertCircle, ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Edit3, ExternalLink, Eye, FileText, HardDrive, Image as ImageIcon, Loader2, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
+import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
+import {
+    AlertCircle,
+    ArrowLeft,
+    CalendarDays,
+    Check,
+    ChevronRight,
+    Coins,
+    Edit3,
+    ExternalLink,
+    Layers,
+    Loader2,
+    MapPin,
+    Pencil,
+    Plus,
+    RefreshCw,
+    Ruler,
+    Sprout,
+    Store,
+    Trash2,
+    TrendingUp,
+    UploadCloud,
+    Wallet,
+    X
+} from 'lucide-react';
 import { Activity, ActivityMonitoringAction, ActivityMonitoringReport, IPO, Subproject, Training, Commodity, CommodityNeed, referenceCommodityTypes, MarketingPartner, MarketLinkage, LodAssessment } from '../constants';
 import { formatMarketQuantityTotals, getIpoMarketSalesRows, summarizeIpoMarketSales } from '../lib/marketSalesAggregation';
 import { getActivityDisplayTitle } from '../lib/entityIdentity';
@@ -11,21 +34,35 @@ import { useUserAccess, usePagination } from './mainfunctions/TableHooks';
 import { useIpoHistory } from '../hooks/useIpoHistory';
 import { supabase } from '../supabaseClient';
 import {
-    canPreviewIpoDriveFile,
     deleteIpoDriveFile,
     formatFileSize,
     getGoogleDriveStatus,
-    getIpoDrivePreviewUrl,
     getIpoDriveImageUrl,
     GoogleDriveStatus,
-    IPO_DRIVE_FILE_ACCEPT,
     IpoDriveFile,
-    isIpoDriveImageFile,
-    isAllowedIpoDriveFile,
     listIpoDriveFiles,
-    uploadIpoDriveFile
+    uploadIpoDriveFile,
+    updateIpoDriveFileMetadata,
+    DriveUploadSection
 } from '../lib/googleDriveStorage';
+import {
+    DriveUploadModal,
+    EntityFilesList,
+    EntityGallery,
+    GalleryViewMode,
+    GalleryViewToggle,
+    getPersistedDriveUploadSection
+} from './ui/DriveMediaSections';
 import { ConfirmDialog, DataTablePagination } from './ui/enterprise';
+import {
+    RecordDetailAside,
+    RecordDetailGrid,
+    RecordDetailMain,
+    RecordDetailPage,
+    RecordKpiCard,
+    RecordKpiGrid,
+    RecordPanel
+} from './ui/RecordDetailLayout';
 
 
 interface IPODetailProps {
@@ -114,6 +151,16 @@ const getTrainingStatusBadge = (status: string) => {
     }
 }
 
+const getSubprojectPhysicalRate = (subproject: Subproject) => {
+    const deliverables = subproject.details || [];
+    if (deliverables.length === 0) {
+        return subproject.status === 'Completed' ? 100 : 0;
+    }
+
+    const completed = deliverables.filter(item => item.isCompleted || !!item.actualDeliveryDate).length;
+    return Math.round((completed / deliverables.length) * 100);
+};
+
 const DetailItem: React.FC<{ label: string; value?: string | number | React.ReactNode; half?: boolean }> = ({ label, value, half }) => (
     <div className={`detail-item ${half ? '' : 'detail-item--wide'}`}>
         <dt className="detail-label">{label}</dt>
@@ -128,13 +175,14 @@ const MonitoringPreviewLine: React.FC<{ label: string; value?: string | null }> 
     </div>
 );
 
-const OverviewMetric: React.FC<{ label: string; value: string; fullValue?: string }> = ({ label, value, fullValue }) => (
-    <div className="detail-metric">
-        <p className="detail-metric-label">{label}</p>
-        <p className="detail-metric-value" title={fullValue || value}>
-            {value}
-        </p>
-    </div>
+const OverviewMetric: React.FC<{
+    label: string;
+    value: string;
+    fullValue?: string;
+    note?: string;
+    icon?: React.ReactNode;
+}> = ({ label, value, fullValue, note, icon }) => (
+    <RecordKpiCard label={label} value={value} title={fullValue || value} note={note} icon={icon} />
 );
 
 const MembershipRow: React.FC<{ label: string; value?: number | string | null }> = ({ label, value }) => {
@@ -214,27 +262,113 @@ const PaginationControls: React.FC<{
     />
 );
 
-type IpoDetailSectionKey = 'subprojects' | 'trainings' | 'monitoringReports' | 'marketLinkages' | 'gallery' | 'files' | 'history';
-
-const CollapsibleDetailCard: React.FC<{
+const IpoDetailPanel: React.FC<{
     title: string;
-    isOpen: boolean;
-    onToggle: () => void;
+    description?: string;
+    actions?: React.ReactNode;
+    footer?: React.ReactNode;
+    className?: string;
     children: React.ReactNode;
-}> = ({ title, isOpen, onToggle, children }) => (
-    <section className="detail-card detail-card--collapsible">
-        <button
-            type="button"
-            className="detail-card__toggle-header"
-            onClick={onToggle}
-            aria-expanded={isOpen}
-        >
-            <span className="detail-card-title mb-0">{title}</span>
-            <ChevronDown className={`detail-card__collapse-icon ${isOpen ? 'is-open' : ''}`} aria-hidden="true" />
-        </button>
-        {isOpen && <div className="detail-card__collapsible-body">{children}</div>}
-    </section>
+}> = ({ title, description, actions, footer, className = '', children }) => (
+    <RecordPanel title={title} description={description} actions={actions} footer={footer} className={className}>
+        {children}
+    </RecordPanel>
 );
+
+type IpoSectionModalKey = 'subprojects' | 'activities' | 'gallery' | 'galleryUpload' | 'filesUpload';
+
+const IpoSectionModal: React.FC<{
+    title: string;
+    description: string;
+    count?: number;
+    compact?: boolean;
+    onClose: () => void;
+    children: React.ReactNode;
+}> = ({ title, description, count, compact = false, onClose, children }) => {
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const previousBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        closeButtonRef.current?.focus();
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+                return;
+            }
+            if (event.key !== 'Tab' || !dialogRef.current) return;
+
+            const focusable = (Array.from(dialogRef.current.querySelectorAll(
+                'button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+            )) as HTMLElement[]).filter(element => !element.hasAttribute('hidden'));
+            if (focusable.length === 0) return;
+
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = previousBodyOverflow;
+            previouslyFocused?.focus();
+        };
+    }, [onClose]);
+
+    return (
+        <div
+            className="dashboard-modal-backdrop ipo-section-modal-backdrop"
+            role="presentation"
+            onMouseDown={event => {
+                if (event.target === event.currentTarget) onClose();
+            }}
+        >
+            <div
+                ref={dialogRef}
+                className={`dashboard-modal dashboard-modal--wide ipo-section-modal${compact ? ' ipo-section-modal--compact' : ''}`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="ipo-section-modal-title"
+                onMouseDown={event => event.stopPropagation()}
+            >
+                <div className="dashboard-modal__header ipo-section-modal__header">
+                    <div>
+                        <h3 id="ipo-section-modal-title">{title}</h3>
+                        <p className="dashboard-modal__metric-subtext">
+                            {description}
+                            {typeof count === 'number' && (
+                                <> · {count.toLocaleString()} {count === 1 ? 'item' : 'items'}</>
+                            )}
+                        </p>
+                    </div>
+                    <button
+                        ref={closeButtonRef}
+                        type="button"
+                        className="dashboard-modal__close"
+                        onClick={onClose}
+                        aria-label={`Close ${title}`}
+                    >
+                        <X aria-hidden="true" />
+                    </button>
+                </div>
+                <div className="dashboard-modal__body custom-scrollbar ipo-section-modal__body">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, monitoringActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], linkedDcfLoading = false, linkedDcfError = null, marketingPartners, onBack, previousPageName, onUpdateIpo, onSelectSubproject, onSelectActivity, onOpenMonitoringReport, onSelectLodYear, onSelectMarketingPartner, particularTypes, commodityCategories }) => {
     const { currentUser } = useAuth();
@@ -253,21 +387,13 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
     const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
     const [driveFiles, setDriveFiles] = useState<IpoDriveFile[]>([]);
     const [isDriveLoading, setIsDriveLoading] = useState(true);
-    const [isDriveUploading, setIsDriveUploading] = useState(false);
     const [deletingDriveFileId, setDeletingDriveFileId] = useState<number | null>(null);
-    const [previewDriveFile, setPreviewDriveFile] = useState<IpoDriveFile | null>(null);
     const [driveFilePendingDelete, setDriveFilePendingDelete] = useState<IpoDriveFile | null>(null);
     const [driveToast, setDriveToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-    const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
-    const [galleryImageFailed, setGalleryImageFailed] = useState(false);
-    const [expandedSections, setExpandedSections] = useState<Record<IpoDetailSectionKey, boolean>>({
-        subprojects: false,
-        trainings: false,
-        monitoringReports: false,
-        marketLinkages: false,
-        gallery: false,
-        files: false,
-        history: false
+    const [sectionModal, setSectionModal] = useState<IpoSectionModalKey | null>(null);
+    const [galleryView, setGalleryView] = useState<GalleryViewMode>(() => {
+        const saved = window.localStorage.getItem('4kis-gallery-view:ipo');
+        return saved === 'list' || saved === 'carousel' ? saved : 'thumbnail';
     });
     const [monitoringReports, setMonitoringReports] = useState<ActivityMonitoringReport[]>([]);
     const [latestMonitoringActions, setLatestMonitoringActions] = useState<Record<number, ActivityMonitoringAction | undefined>>({});
@@ -315,10 +441,6 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         const timeout = window.setTimeout(() => setDriveToast(null), 4200);
         return () => window.clearTimeout(timeout);
     }, [driveToast]);
-
-    const toggleSection = (section: IpoDetailSectionKey) => {
-        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-    };
 
     const monitoringActivityById = useMemo(() => {
         return new Map(monitoringActivities.map(activity => [Number(activity.id), activity]));
@@ -424,38 +546,21 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         loadDriveFiles();
     }, [ipo.id, currentUser?.id]);
 
-    const handleDriveFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-        if (!isAllowedIpoDriveFile(file)) {
-            showDriveToast('error', 'Only PDF and image files are allowed. Please upload a PDF, PNG, JPG, WEBP, or GIF file.');
-            return;
-        }
+    const uploadDriveFile = async (file: File, uploadSection: DriveUploadSection) => {
         if (!canEdit) {
-            showDriveToast('error', 'You do not have permission to upload IPO files.');
-            return;
+            throw new Error('You do not have permission to upload IPO files.');
         }
         if (!driveStatus?.isConnected) {
-            showDriveToast('error', driveStatus?.connectionMessage || 'Ask an Admin to reconnect Google Drive storage.');
-            return;
+            throw new Error(driveStatus?.connectionMessage || 'Ask an Admin to reconnect Google Drive storage.');
         }
-
-        setIsDriveUploading(true);
-        try {
-            const uploaded = await uploadIpoDriveFile(currentUser, ipo.id, file);
-            setDriveFiles(prev => [uploaded, ...prev]);
-            showDriveToast('success', `${uploaded.file_name} uploaded successfully.`);
-            refreshHistory();
-        } catch (error: any) {
-            showDriveToast('error', error.message || 'Unable to upload IPO file.');
-        } finally {
-            setIsDriveUploading(false);
-        }
+        const uploaded = await uploadIpoDriveFile(currentUser, ipo.id, file, uploadSection);
+        refreshHistory();
+        return uploaded;
     };
 
     const requestDriveFileDelete = (file: IpoDriveFile) => {
         if (!canDeleteDriveFiles) return;
+        setSectionModal(null);
         setDriveFilePendingDelete(file);
     };
 
@@ -476,8 +581,10 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         }
     };
 
+    const currentFundYear = String(new Date().getFullYear());
+
     // --- Subproject Filters & Pagination ---
-    const [spYearFilter, setSpYearFilter] = useState('All');
+    const [spYearFilter, setSpYearFilter] = useState(currentFundYear);
     const [spStatusFilter, setSpStatusFilter] = useState('All');
     
     const filteredSubprojects = useMemo(() => {
@@ -496,7 +603,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
     }, []);
 
     // --- Training Filters & Pagination ---
-    const [trYearFilter, setTrYearFilter] = useState('All');
+    const [trYearFilter, setTrYearFilter] = useState(currentFundYear);
     const [trStatusFilter, setTrStatusFilter] = useState('All');
 
     const filteredTrainings = useMemo(() => {
@@ -533,27 +640,30 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         histPagination.setItemsPerPage(5);
     }, []);
 
-    const galleryFiles = useMemo(() => driveFiles.filter(isIpoDriveImageFile), [driveFiles]);
-    const selectedGalleryFile = galleryIndex !== null ? galleryFiles[galleryIndex] : null;
-
-    useEffect(() => {
-        if (galleryIndex !== null && galleryIndex >= galleryFiles.length) {
-            setGalleryIndex(galleryFiles.length > 0 ? galleryFiles.length - 1 : null);
-        }
-    }, [galleryFiles.length, galleryIndex]);
-
-    useEffect(() => {
-        setGalleryImageFailed(false);
-    }, [galleryIndex]);
-
-    const showPreviousGalleryImage = () => {
-        if (galleryFiles.length === 0) return;
-        setGalleryIndex(current => current === null ? 0 : (current - 1 + galleryFiles.length) % galleryFiles.length);
+    const galleryFiles = useMemo(() => driveFiles.filter(file => getPersistedDriveUploadSection(file) === 'gallery'), [driveFiles]);
+    const documentFiles = useMemo(() => driveFiles.filter(file => getPersistedDriveUploadSection(file) === 'files'), [driveFiles]);
+    const currentFundYearSubprojects = useMemo(
+        () => [...(subprojects || [])]
+            .filter(project => project.fundingYear?.toString() === currentFundYear)
+            .sort((a, b) => new Date(b.startDate || b.created_at || 0).getTime() - new Date(a.startDate || a.created_at || 0).getTime()),
+        [currentFundYear, subprojects]
+    );
+    const subprojectPreview = useMemo(() => currentFundYearSubprojects.slice(0, 4), [currentFundYearSubprojects]);
+    const currentFundYearActivities = useMemo(
+        () => [...(trainings || [])]
+            .filter(activity => activity.fundingYear?.toString() === currentFundYear)
+            .sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime()),
+        [currentFundYear, trainings]
+    );
+    const trainingPreview = useMemo(() => currentFundYearActivities.slice(0, 4), [currentFundYearActivities]);
+    const closeSectionModal = useCallback(() => setSectionModal(null), []);
+    const selectSubprojectFromModal = (subproject: Subproject) => {
+        setSectionModal(null);
+        onSelectSubproject(subproject);
     };
-
-    const showNextGalleryImage = () => {
-        if (galleryFiles.length === 0) return;
-        setGalleryIndex(current => current === null ? 0 : (current + 1) % galleryFiles.length);
+    const selectActivityFromModal = (activity: Activity) => {
+        setSectionModal(null);
+        onSelectActivity(activity);
     };
 
     // Unique Years for Filters
@@ -597,7 +707,11 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         }, 0) || 0;
 
         // 3. Income Calculation
-        const totalIncome = (ipo.commodities || [])?.reduce((sum, c) => sum + toSafeNumber(c.averageIncome), 0) || 0;
+        const reportedIncomes = (ipo.commodities || [])
+            .map(commodity => toSafeNumber(commodity.averageIncome))
+            .filter(income => income > 0);
+        const totalIncome = reportedIncomes.reduce((sum, income) => sum + income, 0);
+        const averageIncome = reportedIncomes.length > 0 ? totalIncome / reportedIncomes.length : 0;
 
         return {
             completedSPCount: completedSubprojects.length,
@@ -605,9 +719,21 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
             totalInvestment,
             totalAllocation,
             totalArea,
-            totalIncome
+            totalIncome,
+            averageIncome
         };
     }, [subprojects, trainings, ipo.commodities]);
+
+    const summaryScope = useMemo(() => {
+        const linkedRecords = [...(subprojects || []), ...(trainings || [])];
+        const fundingYears = Array.from(new Set(linkedRecords.map(item => item.fundingYear).filter(Boolean))).sort((a, b) => Number(b) - Number(a));
+        const fundTypes = Array.from(new Set(linkedRecords.map(item => item.fundType).filter(Boolean)));
+
+        return {
+            fundingYear: fundingYears.length === 0 ? 'N/A' : fundingYears.length === 1 ? `FY ${fundingYears[0]}` : `${fundingYears.length} fund years`,
+            fundType: fundTypes.length === 0 ? 'N/A' : fundTypes.length === 1 ? String(fundTypes[0]) : `${fundTypes.length} fund types`
+        };
+    }, [subprojects, trainings]);
     
     useEffect(() => {
         // Reset form state if the viewed IPO changes or when exiting edit mode
@@ -1106,7 +1232,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
     // ... (rest of view mode)
     return (
-        <div className="detail-page">
+        <RecordDetailPage className="ipo-detail-page ipo-record-detail-page">
             {driveToast && (
                 <div className={`ipo-drive-toast ipo-drive-toast--${driveToast.type}`} role="status" aria-live="polite">
                     {driveToast.type === 'success' ? <Check aria-hidden="true" /> : <AlertCircle aria-hidden="true" />}
@@ -1114,47 +1240,6 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     <button type="button" onClick={() => setDriveToast(null)} aria-label="Dismiss message">
                         <X aria-hidden="true" />
                     </button>
-                </div>
-            )}
-            {previewDriveFile && (
-                <div className="dashboard-modal-backdrop" onClick={() => setPreviewDriveFile(null)}>
-                    <div className="dashboard-modal dashboard-modal--wide drive-preview-modal" onClick={e => e.stopPropagation()}>
-                        <div className="dashboard-modal__header">
-                            <div>
-                                <h3>{previewDriveFile.file_name}</h3>
-                                <p className="dashboard-modal__metric-subtext">
-                                    {formatFileSize(previewDriveFile.file_size)} - {previewDriveFile.mime_type || 'File preview'}
-                                </p>
-                            </div>
-                            <button type="button" onClick={() => setPreviewDriveFile(null)} className="dashboard-modal__close" aria-label="Close preview">
-                                <X aria-hidden="true" />
-                            </button>
-                        </div>
-                        <div className="drive-preview-modal__body">
-                            {canPreviewIpoDriveFile(previewDriveFile) ? (
-                                <iframe
-                                    src={getIpoDrivePreviewUrl(previewDriveFile)}
-                                    title={`Preview ${previewDriveFile.file_name}`}
-                                    className="drive-preview-modal__frame"
-                                    allow="autoplay"
-                                />
-                            ) : (
-                                <div className="drive-preview-modal__empty">
-                                    <FileText aria-hidden="true" />
-                                    <p>This file type cannot be previewed in 4KIS.</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="drive-preview-modal__footer">
-                            <p>If the preview does not load, open the file directly in Google Drive.</p>
-                            {previewDriveFile.web_view_link && (
-                                <a className="btn btn-secondary" href={previewDriveFile.web_view_link} target="_blank" rel="noreferrer">
-                                    <ExternalLink aria-hidden="true" />
-                                    Open in Drive
-                                </a>
-                            )}
-                        </div>
-                    </div>
                 </div>
             )}
             {driveFilePendingDelete && (
@@ -1186,148 +1271,392 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     </div>
                 </div>
             )}
-            {selectedGalleryFile && (
-                <div className="dashboard-modal-backdrop" onClick={() => setGalleryIndex(null)}>
-                    <div className="dashboard-modal dashboard-modal--wide ipo-gallery-modal" onClick={e => e.stopPropagation()}>
-                        <div className="dashboard-modal__header">
-                            <div>
-                                <h3>{selectedGalleryFile.file_name}</h3>
-                                <p className="dashboard-modal__metric-subtext">
-                                    {galleryIndex !== null ? `${galleryIndex + 1} of ${galleryFiles.length}` : 'Image preview'}
-                                </p>
-                            </div>
-                            <button type="button" onClick={() => setGalleryIndex(null)} className="dashboard-modal__close" aria-label="Close gallery">
-                                <X aria-hidden="true" />
-                            </button>
+            {sectionModal === 'subprojects' && (
+                <IpoSectionModal
+                    title="Linked Subprojects"
+                    description={ipo.name}
+                    count={filteredSubprojects.length}
+                    onClose={closeSectionModal}
+                >
+                    <div className="ipo-section-modal__toolbar">
+                        <div>
+                            <p className="detail-kicker">Filter linked records</p>
+                            <p className="detail-list-copy">Filters apply only to this IPO's accessible Subprojects.</p>
                         </div>
-                        <div className="ipo-gallery-modal__body">
-                            <button type="button" className="ipo-gallery-modal__nav ipo-gallery-modal__nav--prev" onClick={showPreviousGalleryImage} aria-label="Previous image">
-                                <ChevronLeft aria-hidden="true" />
-                            </button>
-                            {galleryImageFailed ? (
-                                <div className="drive-preview-modal__empty">
-                                    <ImageIcon aria-hidden="true" />
-                                    <p>This image preview could not be loaded inside 4KIS.</p>
-                                    {selectedGalleryFile.web_view_link && (
-                                        <a className="btn btn-secondary" href={selectedGalleryFile.web_view_link} target="_blank" rel="noreferrer">
-                                            <ExternalLink aria-hidden="true" />
-                                            Open in Drive
-                                        </a>
+                        <div className="ipo-section-modal__filters">
+                            <label>
+                                <span>Fund Year</span>
+                                <select
+                                    value={spYearFilter}
+                                    onChange={event => setSpYearFilter(event.target.value)}
+                                    className={filterSelectClasses}
+                                >
+                                    <option value="All">All Years</option>
+                                    {!spYears.some(year => String(year) === currentFundYear) && (
+                                        <option value={currentFundYear}>{currentFundYear}</option>
                                     )}
-                                </div>
-                            ) : (
-                                <img
-                                    src={getIpoDriveImageUrl(selectedGalleryFile, 1600)}
-                                    alt={selectedGalleryFile.file_name}
-                                    onError={() => setGalleryImageFailed(true)}
-                                />
-                            )}
-                            <button type="button" className="ipo-gallery-modal__nav ipo-gallery-modal__nav--next" onClick={showNextGalleryImage} aria-label="Next image">
-                                <ChevronRight aria-hidden="true" />
-                            </button>
+                                    {spYears.map(year => <option key={year} value={year}>{year}</option>)}
+                                </select>
+                            </label>
+                            <label>
+                                <span>Status</span>
+                                <select
+                                    value={spStatusFilter}
+                                    onChange={event => setSpStatusFilter(event.target.value)}
+                                    className={filterSelectClasses}
+                                >
+                                    <option value="All">All Statuses</option>
+                                    <option value="Proposed">Proposed</option>
+                                    <option value="Ongoing">Ongoing</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                </select>
+                            </label>
                         </div>
                     </div>
-                </div>
+
+                    {linkedDcfLoading && (
+                        <div className="ipo-linked-dcf-status" role="status">
+                            <Loader2 className="animate-spin" aria-hidden="true" />
+                            <span>Refreshing linked Subprojects...</span>
+                        </div>
+                    )}
+                    {linkedDcfError && (
+                        <div className="ipo-linked-dcf-status ipo-linked-dcf-status--warning" role="status">
+                            <AlertCircle aria-hidden="true" />
+                            <span>{linkedDcfError}</span>
+                        </div>
+                    )}
+
+                    {spPagination.paginatedData.length > 0 ? (
+                        <>
+                            <ul className="detail-list ipo-section-modal__list">
+                                {spPagination.paginatedData.map(project => (
+                                    <li key={project.id} className="detail-list-item">
+                                        <div className="ipo-subproject-preview__main">
+                                            <div className="min-w-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => selectSubprojectFromModal(project)}
+                                                    className="detail-list-title table-link text-left"
+                                                >
+                                                    {project.name}
+                                                </button>
+                                                <p className="detail-list-copy">{project.location || 'Location not recorded'}</p>
+                                            </div>
+                                            <span className={getStatusBadge(project.status)}>{project.status}</span>
+                                        </div>
+                                        <div className="detail-list-meta">
+                                            <span title={formatCurrency(calculateTotalBudget(project.details))}>
+                                                <span className="detail-list-meta__label">Budget:</span> {formatCurrency(calculateTotalBudget(project.details))}
+                                            </span>
+                                            <span><span className="detail-list-meta__label">Fund Year:</span> {project.fundingYear || 'N/A'}</span>
+                                            <span><span className="detail-list-meta__label">Timeline:</span> {formatDate(project.startDate)} to {formatDate(project.estimatedCompletionDate)}</span>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                            <PaginationControls
+                                currentPage={spPagination.currentPage}
+                                totalPages={spPagination.totalPages}
+                                onPageChange={spPagination.setCurrentPage}
+                                itemsPerPage={spPagination.itemsPerPage}
+                                onItemsPerPageChange={spPagination.setItemsPerPage}
+                                totalItems={filteredSubprojects.length}
+                            />
+                        </>
+                    ) : (
+                        <p className="detail-empty">No subprojects match the current filters.</p>
+                    )}
+                </IpoSectionModal>
             )}
-            <header className="detail-header">
-                <div className="detail-heading">
-                    <h1 className="detail-title">{ipo.name}</h1>
-                    <p className="detail-meta">{ipo.location}</p>
+            {sectionModal === 'activities' && (
+                <IpoSectionModal
+                    title="Linked Activities"
+                    description={ipo.name}
+                    count={filteredTrainings.length}
+                    onClose={closeSectionModal}
+                >
+                    <div className="ipo-section-modal__toolbar">
+                        <div>
+                            <p className="detail-kicker">Filter linked records</p>
+                            <p className="detail-list-copy">Filters apply only to this IPO&apos;s accessible Activities.</p>
+                        </div>
+                        <div className="ipo-section-modal__filters">
+                            <label>
+                                <span>Fund Year</span>
+                                <select
+                                    value={trYearFilter}
+                                    onChange={event => setTrYearFilter(event.target.value)}
+                                    className={filterSelectClasses}
+                                >
+                                    <option value="All">All Years</option>
+                                    {!trYears.some(year => String(year) === currentFundYear) && (
+                                        <option value={currentFundYear}>{currentFundYear}</option>
+                                    )}
+                                    {trYears.map(year => <option key={year} value={year}>{year}</option>)}
+                                </select>
+                            </label>
+                            <label>
+                                <span>Status</span>
+                                <select
+                                    value={trStatusFilter}
+                                    onChange={event => setTrStatusFilter(event.target.value)}
+                                    className={filterSelectClasses}
+                                >
+                                    <option value="All">All Statuses</option>
+                                    <option value="Proposed">Proposed</option>
+                                    <option value="Ongoing">Ongoing</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    {linkedDcfLoading && (
+                        <div className="ipo-linked-dcf-status" role="status">
+                            <Loader2 className="animate-spin" aria-hidden="true" />
+                            <span>Refreshing linked Activities...</span>
+                        </div>
+                    )}
+                    {linkedDcfError && (
+                        <div className="ipo-linked-dcf-status ipo-linked-dcf-status--warning" role="status">
+                            <AlertCircle aria-hidden="true" />
+                            <span>{linkedDcfError}</span>
+                        </div>
+                    )}
+
+                    {trPagination.paginatedData.length > 0 ? (
+                        <>
+                            <ul className="detail-list ipo-section-modal__list">
+                                {trPagination.paginatedData.map(activity => (
+                                    <li key={activity.id} className="detail-list-item">
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => selectActivityFromModal(activity)}
+                                                    className="detail-list-title table-link text-left"
+                                                >
+                                                    {activity.name}
+                                                </button>
+                                                <p className="detail-list-copy">{activity.component || 'Component not recorded'}</p>
+                                            </div>
+                                            <span className={getTrainingStatusBadge(activity.status)}>{activity.status}</span>
+                                        </div>
+                                        <div className="detail-list-meta">
+                                            <span><span className="detail-list-meta__label">Fund Year:</span> {activity.fundingYear || 'N/A'}</span>
+                                            <span><span className="detail-list-meta__label">Date:</span> {formatDate(activity.date)}</span>
+                                            <span><span className="detail-list-meta__label">Location:</span> {activity.location || 'Not recorded'}</span>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                            <PaginationControls
+                                currentPage={trPagination.currentPage}
+                                totalPages={trPagination.totalPages}
+                                onPageChange={trPagination.setCurrentPage}
+                                itemsPerPage={trPagination.itemsPerPage}
+                                onItemsPerPageChange={trPagination.setItemsPerPage}
+                                totalItems={filteredTrainings.length}
+                            />
+                        </>
+                    ) : (
+                        <p className="detail-empty">No activities match the current filters.</p>
+                    )}
+                </IpoSectionModal>
+            )}
+            {sectionModal === 'gallery' && (
+                <IpoSectionModal
+                    title="IPO Gallery"
+                    description={ipo.name}
+                    count={galleryFiles.length}
+                    onClose={closeSectionModal}
+                >
+                    <EntityGallery
+                        storageKey="ipo"
+                        files={galleryFiles}
+                        isLoading={isDriveLoading}
+                        canEdit={canEdit}
+                        canDelete={canDeleteDriveFiles}
+                        isConnected={!!driveStatus?.isConnected}
+                        getImageUrl={getIpoDriveImageUrl}
+                        uploadFile={uploadDriveFile}
+                        updateMetadata={(file, name, imageCaption) => updateIpoDriveFileMetadata(currentUser, file.id, name, imageCaption)}
+                        onFileAdded={file => setDriveFiles(current => [file, ...current])}
+                        onFileUpdated={file => setDriveFiles(current => current.map(item => item.id === file.id ? file : item))}
+                        onRequestDelete={requestDriveFileDelete}
+                        onRefresh={loadDriveFiles}
+                        onMessage={(message, hasErrors) => showDriveToast(hasErrors ? 'error' : 'success', message)}
+                        showUploader={false}
+                        view={galleryView}
+                        onViewChange={setGalleryView}
+                    />
+                </IpoSectionModal>
+            )}
+            {sectionModal === 'galleryUpload' && (
+                <DriveUploadModal
+                    section="gallery"
+                    title="Upload Gallery Images"
+                    description="Add field photos to the IPO Gallery. Images remain separate from IPO Files."
+                    canUpload={canEdit}
+                    isConnected={!!driveStatus?.isConnected}
+                    uploadFile={uploadDriveFile}
+                    onUploaded={file => setDriveFiles(current => [file, ...current])}
+                    onBatchComplete={(message, hasErrors) => showDriveToast(hasErrors ? 'error' : 'success', message)}
+                    onClose={closeSectionModal}
+                />
+            )}
+            {sectionModal === 'filesUpload' && (
+                <DriveUploadModal
+                    section="files"
+                    title="Add IPO Files"
+                    description="Upload supporting documents and images to IPO Files. These files do not appear in the Gallery."
+                    canUpload={canEdit}
+                    isConnected={!!driveStatus?.isConnected}
+                    uploadFile={uploadDriveFile}
+                    onUploaded={file => setDriveFiles(current => [file, ...current])}
+                    onBatchComplete={(message, hasErrors) => showDriveToast(hasErrors ? 'error' : 'success', message)}
+                    onClose={closeSectionModal}
+                />
+            )}
+            <button type="button" onClick={onBack} className="record-detail-back-link">
+                <ArrowLeft aria-hidden="true" />
+                Back to {previousPageName}
+            </button>
+
+            <header className="record-detail-header">
+                <div className="record-detail-header__main">
+                    <h1 className="record-detail-header__title">{ipo.name}</h1>
+                    <div className="record-detail-header__meta">
+                        <span className="ipo-detail-record-id">IPO-{ipo.id}</span>
+                        <span><MapPin aria-hidden="true" />{ipo.region}{ipo.location ? ` · ${ipo.location}` : ''}</span>
+                        <span><CalendarDays aria-hidden="true" />Registered {formatDate(ipo.registrationDate)}</span>
+                    </div>
                 </div>
-                <div className="detail-actions">
-                     {canEdit && (
-                         <button
-                            onClick={() => setIsEditing(true)}
-                            className="btn btn-primary"
-                        >
-                             <Edit3 className="btn-symbol" aria-hidden="true" />
+                <div className="record-detail-header__actions">
+                    {canEdit && (
+                        <button onClick={() => setIsEditing(true)} className="btn btn-secondary">
+                            <Edit3 className="btn-symbol" aria-hidden="true" />
                             Edit IPO
                         </button>
-                     )}
-                    <button
-                        onClick={onBack}
-                        className="btn btn-secondary"
-                    >
-                        <ArrowLeft className="btn-symbol" aria-hidden="true" />
-                        Back to {previousPageName}
-                    </button>
+                    )}
                 </div>
             </header>
 
-            <div className="detail-grid">
-                {/* Left Column */}
-                <div className="detail-main">
+            <RecordKpiGrid aria-label="IPO overview statistics">
+                <OverviewMetric
+                    label="Total Investment"
+                    value={formatCompactCurrency(overviewStats.totalInvestment)}
+                    fullValue={formatCurrency(overviewStats.totalInvestment)}
+                    note="Cumulative"
+                    icon={<Wallet aria-hidden="true" />}
+                />
+                <OverviewMetric
+                    label="Total Allocation"
+                    value={formatCompactCurrency(overviewStats.totalAllocation)}
+                    fullValue={formatCurrency(overviewStats.totalAllocation)}
+                    note={`${subprojects.length + trainings.length} linked records`}
+                    icon={<Coins aria-hidden="true" />}
+                />
+                <OverviewMetric
+                    label="Linked Markets"
+                    value={formatCompactNumber(ipoMarketSalesSummary.linkedMarketCount)}
+                    fullValue={ipoMarketSalesSummary.linkedMarketCount.toLocaleString()}
+                    note={ipoMarketSalesSummary.linkedMarketCount > 0 ? `${formatCompactCurrency(ipoMarketSalesSummary.totalSales)} recorded sales` : 'No linkages yet'}
+                    icon={<Store aria-hidden="true" />}
+                />
+                <OverviewMetric
+                    label="Total Area (Agri)"
+                    value={`${formatCompactNumber(overviewStats.totalArea)} ha`}
+                    fullValue={`${overviewStats.totalArea.toLocaleString()} ha`}
+                    note="Across crop commodities"
+                    icon={<Ruler aria-hidden="true" />}
+                />
+                <OverviewMetric
+                    label="Avg. Annual Income"
+                    value={overviewStats.averageIncome > 0 ? formatCompactCurrency(overviewStats.averageIncome) : '—'}
+                    fullValue={overviewStats.averageIncome > 0 ? formatCurrency(overviewStats.averageIncome) : 'No income reported'}
+                    note={overviewStats.averageIncome > 0 ? 'Per reported commodity' : 'Not reported'}
+                    icon={<TrendingUp aria-hidden="true" />}
+                />
+                <OverviewMetric
+                    label="Subprojects"
+                    value={formatCompactNumber(subprojects.length)}
+                    fullValue={subprojects.length.toLocaleString()}
+                    note={`${overviewStats.completedSPCount.toLocaleString()} completed`}
+                    icon={<Layers aria-hidden="true" />}
+                />
+            </RecordKpiGrid>
 
-                    {/* NEW: Overview Card (formerly Commodities + Stats) */}
-                    <div className="detail-card">
-                        <h3 className="detail-card-title">Overview</h3>
-                        
-                        {/* New Stats Grid */}
-                         <div className="detail-metric-grid">
-                            <OverviewMetric label="Total Investment" value={formatCompactCurrency(overviewStats.totalInvestment)} fullValue={formatCurrency(overviewStats.totalInvestment)} />
-                            <OverviewMetric label="Total Allocation" value={formatCompactCurrency(overviewStats.totalAllocation)} fullValue={formatCurrency(overviewStats.totalAllocation)} />
-                            <OverviewMetric label="Linked Markets" value={formatCompactNumber(ipoMarketSalesSummary.linkedMarketCount)} fullValue={ipoMarketSalesSummary.linkedMarketCount.toLocaleString()} />
-                            <OverviewMetric label="Total Sales from Market Linkage" value={formatCompactCurrency(ipoMarketSalesSummary.totalSales)} fullValue={formatCurrency(ipoMarketSalesSummary.totalSales)} />
-                            <OverviewMetric label="Total Area (Agri)" value={`${formatCompactNumber(overviewStats.totalArea)} ha`} fullValue={`${overviewStats.totalArea.toLocaleString()} ha`} />
-                            <OverviewMetric label="Avg. Annual Income" value={overviewStats.totalIncome > 0 ? formatCompactCurrency(overviewStats.totalIncome) : 'No Income'} fullValue={overviewStats.totalIncome > 0 ? formatCurrency(overviewStats.totalIncome) : 'No Income'} />
-                            <OverviewMetric label="Subprojects (Completed)" value={formatCompactNumber(overviewStats.completedSPCount)} fullValue={overviewStats.completedSPCount.toLocaleString()} />
-                            <OverviewMetric label="Trainings (Completed)" value={formatCompactNumber(overviewStats.completedTRCount)} fullValue={overviewStats.completedTRCount.toLocaleString()} />
-                        </div>
+            <RecordDetailGrid>
+                <RecordDetailMain>
+                    <IpoDetailPanel title="Level of Development" description="Annual maturity scoring based on the IPO's recorded assessments">
+                        {lodAssessments.length > 0 ? (
+                            <div className="ipo-lod-grid">
+                                {lodAssessments.map(assessment => {
+                                    const isCurrentYear = assessment.year === new Date().getFullYear();
+                                    const level = assessment.manual_level || assessment.computed_level || 'N/A';
+                                    return (
+                                        <button
+                                            key={assessment.id}
+                                            type="button"
+                                            onClick={() => onSelectLodYear?.(ipo, assessment.year)}
+                                            className={`detail-metric detail-metric--button ${isCurrentYear ? 'is-current' : ''}`}
+                                            title={`Open ${assessment.year} LOD assessment`}
+                                        >
+                                            <span className="detail-metric-label">{assessment.year}</span>
+                                            <span className="detail-metric-value">Level {level}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="detail-empty">No assessments available.</p>
+                        )}
+                    </IpoDetailPanel>
 
-                        <div className="mb-4">
-                            <h4 className="detail-section-title">Level of Development</h4>
-                            {lodAssessments.length > 0 ? (
-                                <div className="detail-metric-grid">
-                                    {lodAssessments.map(assessment => {
-                                        const isCurrentYear = assessment.year === new Date().getFullYear();
-                                        const level = assessment.manual_level || assessment.computed_level || 'N/A';
-                                        return (
-                                            <button
-                                                key={assessment.id}
-                                                type="button"
-                                                onClick={() => onSelectLodYear?.(ipo, assessment.year)}
-                                                className={`detail-metric detail-metric--button ${isCurrentYear ? 'is-current' : ''}`}
-                                                title={`Open ${assessment.year} LOD assessment`}
-                                            >
-                                                <span className="flex items-center justify-between gap-3">
-                                                    <span className="detail-metric-label">{assessment.year}</span>
-                                                    <span className="detail-metric-value mt-0 text-right">Level {level}</span>
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="detail-empty">No assessments available.</p>
-                            )}
-                        </div>
-                         <div>
-                            <h4 className="detail-section-title">Commodities</h4>
-                            {ipo.commodities && ipo.commodities.length > 0 ? (
-                                <ul className="detail-list">
-                                    {ipo.commodities.map((c, i) => (
-                                        <li key={i} className="detail-list-item flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="flex min-w-0 flex-col">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="detail-list-title break-words">{c.particular} <span className="detail-list-type">({c.type})</span></span>
-                                                    {c.isScad && <span className="status-badge status-badge--cyan status-badge--compact">SCAD</span>}
-                                                </div>
-                                                <div className="detail-list-meta">
-                                                    {(c.marketingPercentage || 0) > 0 && <span>Marketing: {formatFullNumber(c.marketingPercentage)}%</span>}
-                                                    {(c.foodSecurityPercentage || 0) > 0 && <span>Food Security: {formatFullNumber(c.foodSecurityPercentage)}%</span>}
-                                                    {(c.averageIncome || 0) > 0 && <span title={formatCurrency(c.averageIncome || 0)}>Income: {formatCurrency(c.averageIncome || 0)}</span>}
-                                                </div>
-                                            </div>
-                                            <span className="detail-list-value" title={`${formatFullNumber(c.value)} ${c.type === 'Livestock' ? 'heads' : 'hectares'}${c.yield ? ` | Yield: ${formatFullNumber(c.yield)} kg/ha` : ''}`}>
-                                                {formatFullNumber(c.value)} {c.type === 'Livestock' ? 'heads' : 'hectares'}
-                                                {c.yield ? ` | Yield: ${formatFullNumber(c.yield)} kg/ha` : ''}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : <p className="detail-empty">No commodities listed.</p>}
-                        </div>
-                    </div>
+                    <IpoDetailPanel title="Commodities" description="Registered production lines, coverage, and livelihood indicators">
+                        {ipo.commodities && ipo.commodities.length > 0 ? (
+                            <div className="data-table-scroll record-detail-table-scroll">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Commodity</th>
+                                            <th>Type</th>
+                                            <th className="data-table__numeric">Coverage</th>
+                                            <th className="data-table__numeric">Avg. Yield</th>
+                                            <th className="data-table__numeric">Marketing</th>
+                                            <th className="data-table__numeric">Food Security</th>
+                                            <th className="data-table__numeric">Avg. Income</th>
+                                            <th>SCAD</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {ipo.commodities.map((commodity, index) => (
+                                            <tr key={`${commodity.particular}-${index}`}>
+                                                <td className="data-table__primary">{commodity.particular}</td>
+                                                <td>{commodity.type}</td>
+                                                <td className="data-table__numeric">
+                                                    {formatFullNumber(commodity.value)} {commodity.type === 'Livestock' ? 'heads' : 'ha'}
+                                                </td>
+                                                <td className="data-table__numeric">
+                                                    {commodity.yield ? `${formatFullNumber(commodity.yield)} kg/ha` : 'N/A'}
+                                                </td>
+                                                <td className="data-table__numeric">{formatFullNumber(commodity.marketingPercentage || 0)}%</td>
+                                                <td className="data-table__numeric">{formatFullNumber(commodity.foodSecurityPercentage || 0)}%</td>
+                                                <td className="data-table__numeric" title={formatCurrency(commodity.averageIncome || 0)}>
+                                                    {formatCompactCurrency(commodity.averageIncome || 0)}
+                                                </td>
+                                                <td>{commodity.isScad ? 'Yes' : 'No'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : <p className="detail-empty">No commodities listed.</p>}
+                    </IpoDetailPanel>
 
                     {(linkedDcfLoading || linkedDcfError) && (
                         <div className={`ipo-linked-dcf-status ${linkedDcfError ? 'ipo-linked-dcf-status--warning' : ''}`} role="status">
@@ -1345,100 +1674,82 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         </div>
                     )}
 
-                    {/* Subprojects Card */}
-                    <CollapsibleDetailCard title="Subprojects" isOpen={expandedSections.subprojects} onToggle={() => toggleSection('subprojects')}>
-                         <div className="mb-4 flex justify-end">
-                            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                                <select 
-                                    value={spYearFilter} 
-                                    onChange={(e) => setSpYearFilter(e.target.value)} 
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Years</option>
-                                    {spYears.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                                <select 
-                                    value={spStatusFilter} 
-                                    onChange={(e) => setSpStatusFilter(e.target.value)} 
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Status</option>
-                                    <option value="Proposed">Proposed</option>
-                                    <option value="Ongoing">Ongoing</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        {spPagination.paginatedData.length > 0 ? (
+                    <IpoDetailPanel
+                        title="Subprojects"
+                        description={`Most recent FY ${currentFundYear} records`}
+                        footer={subprojects.length > 0 ? (
+                            <>
+                                <span>Showing {subprojectPreview.length} of {currentFundYearSubprojects.length.toLocaleString()} FY {currentFundYear} records</span>
+                                <button type="button" className="ipo-detail-view-all" onClick={() => setSectionModal('subprojects')}>
+                                    View all Subprojects
+                                    <ChevronRight aria-hidden="true" />
+                                </button>
+                            </>
+                        ) : null}
+                    >
+                        {subprojectPreview.length > 0 ? (
                             <>
                                 <ul className="detail-list">
-                                    {spPagination.paginatedData.map(p => (
-                                        <li key={p.id} className="detail-list-item">
-                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    {subprojectPreview.map(project => (
+                                        <li key={project.id} className="detail-list-item ipo-subproject-preview__item">
+                                            <div className="ipo-subproject-preview__main">
                                                 <div className="min-w-0">
-                                                    <button 
-                                                        onClick={() => onSelectSubproject(p)}
-                                                        className="detail-list-title text-left focus:outline-none focus:underline"
+                                                    <div className="ipo-subproject-preview__eyebrow">
+                                                        <span>{project.uid || `SP-${project.id}`}</span>
+                                                        <span className={getStatusBadge(project.status)}>{project.status}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onSelectSubproject(project)}
+                                                        className="detail-list-title table-link text-left"
                                                     >
-                                                        {p.name}
+                                                        {project.name}
                                                     </button>
-                                                    <p className="detail-list-copy">{p.location}</p>
+                                                    <p className="detail-list-copy ipo-subproject-preview__meta">
+                                                        <MapPin aria-hidden="true" />
+                                                        {project.location || 'Location not recorded'}
+                                                        <span aria-hidden="true">·</span>
+                                                        <CalendarDays aria-hidden="true" />
+                                                        {formatDate(project.startDate)} to {formatDate(project.estimatedCompletionDate)}
+                                                    </p>
                                                 </div>
-                                                <span className={`${getStatusBadge(p.status)} self-start flex-shrink-0`}>{p.status}</span>
-                                            </div>
-                                            <div className="detail-list-meta">
-                                                <span title={formatCurrency(calculateTotalBudget(p.details))}><span className="detail-list-meta__label">Budget:</span> {formatCompactCurrency(calculateTotalBudget(p.details))}</span>
-                                                <span><span className="detail-list-meta__label">Timeline:</span> {formatDate(p.startDate)} to {formatDate(p.estimatedCompletionDate)}</span>
+                                                <div className="ipo-subproject-preview__performance">
+                                                    <span>Physical <strong>{getSubprojectPhysicalRate(project)}%</strong></span>
+                                                    <span className="ipo-progress" aria-hidden="true">
+                                                        <span style={{ width: `${getSubprojectPhysicalRate(project)}%` }} />
+                                                    </span>
+                                                    <strong title={formatCurrency(calculateTotalBudget(project.details))}>
+                                                        {formatCompactCurrency(calculateTotalBudget(project.details))}
+                                                    </strong>
+                                                </div>
                                             </div>
                                         </li>
                                     ))}
                                 </ul>
-                                <PaginationControls 
-                                    currentPage={spPagination.currentPage}
-                                    totalPages={spPagination.totalPages}
-                                    onPageChange={spPagination.setCurrentPage}
-                                    itemsPerPage={spPagination.itemsPerPage}
-                                    onItemsPerPageChange={spPagination.setItemsPerPage}
-                                    totalItems={filteredSubprojects.length}
-                                />
                             </>
                         ) : (
-                            <p className="detail-empty">No subprojects match the current filters.</p>
+                            <p className="detail-empty">No FY {currentFundYear} subprojects are linked to this IPO.</p>
                         )}
-                    </CollapsibleDetailCard>
+                    </IpoDetailPanel>
 
-                    {/* Trainings Card */}
-                    <CollapsibleDetailCard title="Trainings" isOpen={expandedSections.trainings} onToggle={() => toggleSection('trainings')}>
-                         <div className="mb-4 flex justify-end">
-                             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                                <select 
-                                    value={trYearFilter} 
-                                    onChange={(e) => setTrYearFilter(e.target.value)} 
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Years</option>
-                                    {trYears.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                                <select 
-                                    value={trStatusFilter} 
-                                    onChange={(e) => setTrStatusFilter(e.target.value)} 
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Status</option>
-                                    <option value="Proposed">Proposed</option>
-                                    <option value="Ongoing">Ongoing</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                </select>
-                            </div>
-                        </div>
+                    <IpoDetailPanel
+                        title="Activities"
+                        description={`Most recent FY ${currentFundYear} linked activities`}
+                        footer={trainings.length > 0 ? (
+                            <>
+                                <span>Showing {trainingPreview.length} of {currentFundYearActivities.length.toLocaleString()} FY {currentFundYear} records</span>
+                                <button type="button" className="ipo-detail-view-all" onClick={() => setSectionModal('activities')}>
+                                    View all Activities
+                                    <ChevronRight aria-hidden="true" />
+                                </button>
+                            </>
+                        ) : null}
+                    >
 
-                        {trPagination.paginatedData.length > 0 ? (
+                        {trainingPreview.length > 0 ? (
                             <>
                                 <ul className="detail-list">
-                                    {trPagination.paginatedData.map(t => (
+                                    {trainingPreview.map(t => (
                                         <li key={t.id} className="detail-list-item">
                                             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                                 <div className="min-w-0">
@@ -1459,21 +1770,14 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                         </li>
                                     ))}
                                 </ul>
-                                <PaginationControls 
-                                    currentPage={trPagination.currentPage}
-                                    totalPages={trPagination.totalPages}
-                                    onPageChange={trPagination.setCurrentPage}
-                                    itemsPerPage={trPagination.itemsPerPage}
-                                    onItemsPerPageChange={trPagination.setItemsPerPage}
-                                    totalItems={filteredTrainings.length}
-                                />
                             </>
                         ) : (
-                            <p className="detail-empty">No trainings match the current filters.</p>
+                            <p className="detail-empty">No FY {currentFundYear} activities are linked to this IPO.</p>
                         )}
-                    </CollapsibleDetailCard>
+                    </IpoDetailPanel>
                     
-                    <CollapsibleDetailCard title="Monitoring Reports" isOpen={expandedSections.monitoringReports} onToggle={() => toggleSection('monitoringReports')}>
+                    <div className="ipo-detail-split-panels">
+                    <IpoDetailPanel title="Monitoring Reports" description="Latest field validation">
                         {monitoringMessage && <p className="drive-file-card__message" role="status">{monitoringMessage}</p>}
                         {isMonitoringLoading ? (
                             <div className="drive-file-card__loading">
@@ -1530,10 +1834,10 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         ) : (
                             <p className="detail-empty">No monitoring reports are linked to this IPO yet.</p>
                         )}
-                    </CollapsibleDetailCard>
+                    </IpoDetailPanel>
 
                     {/* Market Linkages Card (New) */}
-                    <CollapsibleDetailCard title="Market Linkages" isOpen={expandedSections.marketLinkages} onToggle={() => toggleSection('marketLinkages')}>
+                    <IpoDetailPanel title="Market Linkages" description="Buyers and offtakers">
                         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                             <OverviewMetric
                                 label="Linked Markets"
@@ -1681,159 +1985,102 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         ) : (
                             <p className="detail-empty">No marketing linkages established yet.</p>
                         )}
-                    </CollapsibleDetailCard>
+                    </IpoDetailPanel>
+                    </div>
 
                     {/* Gallery Card */}
-                    <CollapsibleDetailCard title="Gallery" isOpen={expandedSections.gallery} onToggle={() => toggleSection('gallery')}>
-                        {galleryFiles.length > 0 ? (
-                            <div className="ipo-gallery-grid">
-                                {galleryFiles.map((file, index) => (
-                                    <button
-                                        key={file.id}
-                                        type="button"
-                                        className="ipo-gallery-tile"
-                                        onClick={() => setGalleryIndex(index)}
-                                        title={`Preview ${file.file_name}`}
-                                    >
-                                        <img
-                                            src={getIpoDriveImageUrl(file, 420)}
-                                            alt={file.file_name}
-                                            loading="lazy"
-                                            onError={(event) => {
-                                                event.currentTarget.style.display = 'none';
-                                            }}
-                                        />
-                                        <span className="ipo-gallery-tile__fallback">
-                                            <ImageIcon aria-hidden="true" />
-                                        </span>
-                                        <span className="ipo-gallery-tile__caption">{file.file_name}</span>
+                    <IpoDetailPanel
+                        title="Gallery"
+                        description="Field photos and community activity"
+                        actions={(
+                            <>
+                                <GalleryViewToggle view={galleryView} onChange={setGalleryView} />
+                                <button type="button" className="btn btn-secondary btn-compact" onClick={loadDriveFiles} disabled={isDriveLoading}>
+                                    <RefreshCw className={isDriveLoading ? 'animate-spin' : ''} aria-hidden="true" />
+                                    Refresh
+                                </button>
+                                {canEdit && (
+                                    <button type="button" className="btn btn-secondary btn-compact" onClick={() => setSectionModal('galleryUpload')}>
+                                        <UploadCloud aria-hidden="true" />
+                                        Upload
                                     </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="detail-empty">No image files have been uploaded for this IPO yet.</p>
+                                )}
+                            </>
                         )}
-                    </CollapsibleDetailCard>
+                    >
+                        <EntityGallery
+                            storageKey="ipo"
+                            files={galleryFiles}
+                            isLoading={isDriveLoading}
+                            canEdit={canEdit}
+                            canDelete={canDeleteDriveFiles}
+                            isConnected={!!driveStatus?.isConnected}
+                            getImageUrl={getIpoDriveImageUrl}
+                            uploadFile={uploadDriveFile}
+                            updateMetadata={(file, name, imageCaption) => updateIpoDriveFileMetadata(currentUser, file.id, name, imageCaption)}
+                            onFileAdded={file => setDriveFiles(current => [file, ...current])}
+                            onFileUpdated={file => setDriveFiles(current => current.map(item => item.id === file.id ? file : item))}
+                            onRequestDelete={requestDriveFileDelete}
+                            onRefresh={loadDriveFiles}
+                            onMessage={(message, hasErrors) => showDriveToast(hasErrors ? 'error' : 'success', message)}
+                            showUploader={false}
+                            showToolbar={false}
+                            view={galleryView}
+                            onViewChange={setGalleryView}
+                            itemLimit={8}
+                            onViewAll={galleryFiles.length > 8 ? () => setSectionModal('gallery') : undefined}
+                        />
+                    </IpoDetailPanel>
 
                     {/* IPO Files Card */}
-                    <CollapsibleDetailCard title="IPO Files" isOpen={expandedSections.files} onToggle={() => toggleSection('files')}>
-                        <div className="drive-file-card__toolbar">
-                            <label
-                                htmlFor={`ipo-drive-upload-${ipo.id}`}
-                                className={`btn btn-primary ${(!canEdit || !driveStatus?.isConnected || isDriveUploading) ? 'is-disabled' : 'cursor-pointer'}`}
-                                title={!driveStatus?.isConnected ? 'Ask an Admin to reconnect Google Drive storage' : 'Upload IPO file'}
-                                aria-label={!driveStatus?.isConnected ? 'Ask an Admin to reconnect Google Drive storage' : 'Upload IPO file'}
-                            >
-                                {isDriveUploading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <UploadCloud aria-hidden="true" />}
-                                {isDriveUploading ? 'Uploading...' : 'Upload File'}
-                            </label>
-                            <input
-                                id={`ipo-drive-upload-${ipo.id}`}
-                                type="file"
-                                className="hidden"
-                                accept={IPO_DRIVE_FILE_ACCEPT}
-                                onChange={handleDriveFileUpload}
-                                disabled={!canEdit || !driveStatus?.isConnected || isDriveUploading}
-                            />
-                            <button type="button" className="btn btn-secondary" onClick={loadDriveFiles} disabled={isDriveLoading || isDriveUploading} title="Refresh IPO files" aria-label="Refresh IPO files">
-                                {isDriveLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <HardDrive aria-hidden="true" />}
-                                Refresh
-                            </button>
-                        </div>
-
-                        {isDriveLoading ? (
-                            <div className="drive-file-card__loading">
-                                <Loader2 className="animate-spin" aria-hidden="true" />
-                                <span>Loading IPO files...</span>
-                            </div>
-                        ) : driveFiles.length > 0 ? (
-                            <ul className="detail-list">
-                                {driveFiles.map(file => (
-                                    <li key={file.id} className="detail-list-item drive-file-card__item">
-                                        <div className="drive-file-card__file">
-                                            <FileText aria-hidden="true" />
-                                            <div className="min-w-0">
-                                                <p className="detail-list-title">{file.file_name}</p>
-                                                <p className="detail-list-copy">
-                                                    {formatFileSize(file.file_size)} - Uploaded by {file.uploaded_by_name || 'Unknown user'} - {formatDate(file.uploaded_at)}
-                                                    {file.folder_year ? ` - ${file.folder_year}` : ''}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="drive-file-card__actions">
-                                            {canPreviewIpoDriveFile(file) && (
-                                                <button
-                                                    type="button"
-                                                    className="table-action table-action--primary table-action--icon"
-                                                    onClick={() => setPreviewDriveFile(file)}
-                                                    title={`Preview ${file.file_name}`}
-                                                    aria-label={`Preview ${file.file_name}`}
-                                                >
-                                                    <Eye aria-hidden="true" />
-                                                </button>
-                                            )}
-                                            {file.web_view_link && (
-                                                <a className="table-action table-action--primary table-action--icon" href={file.web_view_link} target="_blank" rel="noreferrer" title={`Open ${file.file_name} in Drive`} aria-label={`Open ${file.file_name} in Drive`}>
-                                                    <ExternalLink aria-hidden="true" />
-                                                </a>
-                                            )}
-                                            {canDeleteDriveFiles && (
-                                                <button
-                                                    type="button"
-                                                    className="table-action table-action--danger table-action--icon"
-                                                    onClick={() => requestDriveFileDelete(file)}
-                                                    disabled={deletingDriveFileId === file.id}
-                                                    title={`Delete ${file.file_name}`}
-                                                    aria-label={`Delete ${file.file_name}`}
-                                                >
-                                                    {deletingDriveFileId === file.id ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="detail-empty">No files have been uploaded for this IPO yet.</p>
-                        )}
-                    </CollapsibleDetailCard>
-
-                    {/* History Card */}
-                    <CollapsibleDetailCard title="History" isOpen={expandedSections.history} onToggle={() => toggleSection('history')}>
-                        {histPagination.paginatedData.length > 0 ? (
+                    <IpoDetailPanel
+                        title="IPO Files"
+                        description="Supporting documents, separate from the Gallery"
+                        actions={(
                             <>
-                                <div className="detail-timeline">
-                                    <ul className="detail-timeline__list">
-                                        {histPagination.paginatedData.map((entry, index) => (
-                                            <li key={index} className="detail-timeline__item">
-                                                <span className="detail-timeline__marker" aria-hidden="true" />
-                                                <time className="detail-timeline__time">{formatDate(entry.date)}</time>
-                                                <p className="detail-list-title">{entry.event}</p>
-                                                <p className="detail-timeline__byline">by {entry.user}</p>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                                <PaginationControls 
-                                    currentPage={histPagination.currentPage}
-                                    totalPages={histPagination.totalPages}
-                                    onPageChange={histPagination.setCurrentPage}
-                                    itemsPerPage={histPagination.itemsPerPage}
-                                    onItemsPerPageChange={histPagination.setItemsPerPage}
-                                    totalItems={history.length}
-                                />
+                                <button type="button" className="btn btn-secondary btn-compact" onClick={loadDriveFiles} disabled={isDriveLoading}>
+                                    <RefreshCw aria-hidden="true" />
+                                    Refresh
+                                </button>
+                                {canEdit && (
+                                    <button type="button" className="btn btn-secondary btn-compact" onClick={() => setSectionModal('filesUpload')}>
+                                        <UploadCloud aria-hidden="true" />
+                                        Add files
+                                    </button>
+                                )}
                             </>
-                        ) : (
-                            <p className="detail-empty">No historical data available for this IPO.</p>
                         )}
-                    </CollapsibleDetailCard>
-                </div>
+                    >
+                        <EntityFilesList
+                            files={documentFiles}
+                            isLoading={isDriveLoading}
+                            canEdit={canEdit}
+                            canDelete={canDeleteDriveFiles}
+                            isConnected={!!driveStatus?.isConnected}
+                            uploadFile={uploadDriveFile}
+                            onFileAdded={file => setDriveFiles(current => [file, ...current])}
+                            onRequestDelete={requestDriveFileDelete}
+                            onRefresh={loadDriveFiles}
+                            onMessage={(message, hasErrors) => showDriveToast(hasErrors ? 'error' : 'success', message)}
+                            showUploader={false}
+                            showToolbar={false}
+                        />
+                    </IpoDetailPanel>
+                </RecordDetailMain>
 
                 {/* Right Column */}
-                <div className="detail-aside">
+                <RecordDetailAside>
                     {/* Profile Card */}
-                    <div className="detail-card">
-                        <h3 className="detail-card-title">IPO Profile</h3>
+                    <IpoDetailPanel
+                        title="IPO Profile"
+                        description="Registration and identification"
+                        actions={canEdit ? (
+                            <button type="button" className="btn btn-secondary btn-compact" onClick={() => setIsEditing(true)}>
+                                <Pencil aria-hidden="true" />
+                                Edit
+                            </button>
+                        ) : null}
+                    >
                         <dl className="detail-dl">
                             <DetailItem label="Indigenous Cultural Community" value={ipo.indigenousCulturalCommunity} />
                             <DetailItem label="Ancestral Domain No." value={ipo.ancestralDomainNo} />
@@ -1850,24 +2097,87 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                 </div>
                             } />
                         </dl>
-                    </div>
+                    </IpoDetailPanel>
 
                     {/* Membership Information Card */}
-                    <div className="detail-card">
-                        <h3 className="detail-card-title">Membership Information</h3>
-                        <dl className="detail-dl">
-                            <MembershipRow label="Total Members" value={ipo.totalMembers} />
-                            <MembershipRow label="IP Members" value={ipo.totalIpMembers} />
-                            <MembershipRow label="Male Members" value={ipo.totalMaleMembers} />
-                            <MembershipRow label="Female Members" value={ipo.totalFemaleMembers} />
-                            <MembershipRow label="Youth Members" value={ipo.totalYouthMembers} />
+                    <IpoDetailPanel
+                        title="Membership Information"
+                        description="Demographics snapshot"
+                        actions={canEdit ? (
+                            <button type="button" className="btn btn-secondary btn-compact" onClick={() => setIsEditing(true)}>
+                                <Pencil aria-hidden="true" />
+                                Edit
+                            </button>
+                        ) : null}
+                    >
+                        <div className="ipo-membership-overview">
+                            <div className="ipo-membership-stat">
+                                <span>Total Members</span>
+                                <strong>{formatFullNumber(ipo.totalMembers)}</strong>
+                            </div>
+                            <div className="ipo-membership-stat">
+                                <span>IP Members</span>
+                                <strong>{formatFullNumber(ipo.totalIpMembers)}</strong>
+                            </div>
+                        </div>
+                        <dl className="detail-dl ipo-membership-details">
+                            <MembershipRow label="Male" value={ipo.totalMaleMembers} />
+                            <MembershipRow label="Female" value={ipo.totalFemaleMembers} />
+                            <MembershipRow label="Youth" value={ipo.totalYouthMembers} />
                             <MembershipRow label="Senior Citizens" value={ipo.totalSeniorMembers} />
-                            <MembershipRow label="4Ps Beneficiaries" value={ipo.total4PsMembers} />
                         </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
+                        <div className="ipo-membership-progress">
+                            <div>
+                                <span>4Ps Beneficiaries</span>
+                                <strong>{formatFullNumber(ipo.total4PsMembers)} / {formatFullNumber(ipo.totalMembers)}</strong>
+                            </div>
+                            <span className="ipo-progress" aria-hidden="true">
+                                <span style={{ width: `${ipo.totalMembers > 0 ? Math.min(100, (ipo.total4PsMembers / ipo.totalMembers) * 100) : 0}%` }} />
+                            </span>
+                        </div>
+                    </IpoDetailPanel>
+
+                    <IpoDetailPanel title="Summary">
+                        <dl className="ipo-summary-list">
+                            <div><dt>Total budget</dt><dd>{formatCompactCurrency(overviewStats.totalAllocation)}</dd></div>
+                            <div><dt>Subprojects</dt><dd>{formatFullNumber(subprojects.length)}</dd></div>
+                            <div><dt>Trainings</dt><dd>{formatFullNumber(trainings.length)}</dd></div>
+                            <div><dt>Fund Year</dt><dd>{summaryScope.fundingYear}</dd></div>
+                            <div><dt>Fund Type</dt><dd>{summaryScope.fundType}</dd></div>
+                        </dl>
+                    </IpoDetailPanel>
+
+                    <IpoDetailPanel title="History" description="Recent activity">
+                        {histPagination.paginatedData.length > 0 ? (
+                            <>
+                                <div className="detail-timeline">
+                                    <ul className="detail-timeline__list">
+                                        {histPagination.paginatedData.map((entry, index) => (
+                                            <li key={index} className="detail-timeline__item">
+                                                <span className="detail-timeline__marker" aria-hidden="true" />
+                                                <time className="detail-timeline__time">{formatDate(entry.date)}</time>
+                                                <p className="detail-list-title">{entry.event}</p>
+                                                <p className="detail-timeline__byline">by {entry.user}</p>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <PaginationControls
+                                    currentPage={histPagination.currentPage}
+                                    totalPages={histPagination.totalPages}
+                                    onPageChange={histPagination.setCurrentPage}
+                                    itemsPerPage={histPagination.itemsPerPage}
+                                    onItemsPerPageChange={histPagination.setItemsPerPage}
+                                    totalItems={history.length}
+                                />
+                            </>
+                        ) : (
+                            <p className="detail-empty">No historical data available for this IPO.</p>
+                        )}
+                    </IpoDetailPanel>
+                </RecordDetailAside>
+            </RecordDetailGrid>
+        </RecordDetailPage>
     );
 };
 

@@ -89,10 +89,10 @@ The read-only pre-migration report is `docs/identity-data-quality-before.json`. 
 | --- | ---: | ---: |
 | IPOs | 4 | 4 |
 | Subprojects | 7 | 7 |
-| Activities | 4 | 4 |
+| Activities | 4 | 5 |
 | Marketing Partners | 2 | 2 |
-| Activity/IPO junction rows | 0 | 5 |
-| Activities with stored specific titles | 0 | 3 |
+| Activity/IPO junction rows | 0 | 6 |
+| Activities with stored specific titles | 0 | 4 |
 | Subprojects missing `ipo_id` | 0 | 0 |
 | Subproject linked-name mismatches | 0 | 0 |
 | Activities missing legacy linked IPO IDs | 1 | 0 |

@@ -1,6 +1,26 @@
 import { supabase } from '../supabaseClient';
 import { User } from '../constants';
 
+export type DriveUploadSection = 'gallery' | 'files';
+
+export interface DriveMediaFile {
+    id: number;
+    file_id: string;
+    file_name: string;
+    display_name?: string | null;
+    caption?: string | null;
+    upload_section: DriveUploadSection;
+    mime_type: string | null;
+    file_size: number | null;
+    web_view_link: string | null;
+    web_content_link: string | null;
+    preview_url?: string | null;
+    preview_supported?: boolean | null;
+    uploaded_by: number | null;
+    uploaded_by_name: string | null;
+    uploaded_at: string;
+}
+
 export interface GoogleDriveStatus {
     isConfigured: boolean;
     isConnected: boolean;
@@ -26,6 +46,9 @@ export interface IpoDriveFile {
     operating_unit_folder_id?: string | null;
     file_id: string;
     file_name: string;
+    display_name?: string | null;
+    caption?: string | null;
+    upload_section: DriveUploadSection;
     mime_type: string | null;
     file_size: number | null;
     web_view_link: string | null;
@@ -55,6 +78,9 @@ export interface SubprojectDriveFile {
     ipo_folder_id?: string | null;
     file_id: string;
     file_name: string;
+    display_name?: string | null;
+    caption?: string | null;
+    upload_section: DriveUploadSection;
     mime_type: string | null;
     file_size: number | null;
     web_view_link: string | null;
@@ -85,6 +111,9 @@ export interface ActivityDriveFile {
     component_folder_id?: string | null;
     file_id: string;
     file_name: string;
+    display_name?: string | null;
+    caption?: string | null;
+    upload_section: DriveUploadSection;
     mime_type: string | null;
     file_size: number | null;
     web_view_link: string | null;
@@ -100,17 +129,34 @@ export interface ActivityDriveFile {
 
 export const ALLOWED_IPO_DRIVE_FILE_TYPES = [
     'application/pdf',
+    'application/msword',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'image/gif',
     'image/jpeg',
     'image/png',
     'image/webp'
 ];
 
-export const IPO_DRIVE_FILE_ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,application/pdf,image/png,image/jpeg,image/webp,image/gif';
+export const IPO_DRIVE_FILE_ACCEPT = [
+    '.pdf',
+    '.doc',
+    '.docx',
+    '.ppt',
+    '.pptx',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.webp',
+    '.gif',
+    ...ALLOWED_IPO_DRIVE_FILE_TYPES
+].join(',');
 export const SUBPROJECT_DRIVE_FILE_ACCEPT = IPO_DRIVE_FILE_ACCEPT;
 export const ACTIVITY_DRIVE_FILE_ACCEPT = IPO_DRIVE_FILE_ACCEPT;
+export const DRIVE_GALLERY_IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif';
 
-const ALLOWED_IPO_DRIVE_EXTENSIONS = ['.gif', '.jpeg', '.jpg', '.pdf', '.png', '.webp'];
+const ALLOWED_IPO_DRIVE_EXTENSIONS = ['.doc', '.docx', '.gif', '.jpeg', '.jpg', '.pdf', '.png', '.ppt', '.pptx', '.webp'];
 const IMAGE_DRIVE_MIME_TYPES = ['image/gif', 'image/jpeg', 'image/png', 'image/webp'];
 const IMAGE_DRIVE_EXTENSIONS = ['.gif', '.jpeg', '.jpg', '.png', '.webp'];
 
@@ -124,9 +170,23 @@ export const isAllowedIpoDriveFile = (file: File) => {
 export const isAllowedSubprojectDriveFile = isAllowedIpoDriveFile;
 export const isAllowedActivityDriveFile = isAllowedIpoDriveFile;
 
+export const isAllowedDriveGalleryImage = (file: File) => {
+    const mimeType = file.type?.toLowerCase();
+    if (mimeType && IMAGE_DRIVE_MIME_TYPES.includes(mimeType)) return true;
+    const name = file.name.toLowerCase();
+    return IMAGE_DRIVE_EXTENSIONS.some(extension => name.endsWith(extension));
+};
+
+export const getDriveFileDisplayName = (file: Pick<DriveMediaFile, 'display_name' | 'file_name'>) => {
+    return file.display_name?.trim() || file.file_name;
+};
+
 export const canPreviewIpoDriveFile = (file: Pick<IpoDriveFile, 'mime_type' | 'file_name' | 'preview_supported'>) => {
     if (file.preview_supported === false) return false;
     const mimeType = file.mime_type?.toLowerCase() || '';
+    const isOfficeDocument = /(?:msword|wordprocessingml|ms-powerpoint|presentationml)/.test(mimeType)
+        || /\.(?:docx?|pptx?)$/i.test(file.file_name);
+    if (isOfficeDocument) return file.preview_supported === true;
     if (ALLOWED_IPO_DRIVE_FILE_TYPES.includes(mimeType)) return true;
     const name = file.file_name.toLowerCase();
     return ALLOWED_IPO_DRIVE_EXTENSIONS.some(extension => name.endsWith(extension));
@@ -249,14 +309,22 @@ export const listIpoDriveFiles = async (currentUser: User | null, ipoId: number)
     return (await readFunctionResult(data, error)).files;
 };
 
-export const uploadIpoDriveFile = async (currentUser: User | null, ipoId: number, file: File) => {
+export const uploadIpoDriveFile = async (currentUser: User | null, ipoId: number, file: File, uploadSection: DriveUploadSection = 'files') => {
     const formData = new FormData();
     formData.append('user_id', String(currentUserPayload(currentUser).user_id));
     formData.append('ipo_id', String(ipoId));
+    formData.append('upload_section', uploadSection);
     formData.append('file', file);
 
     const { data, error } = await requireSupabase().functions.invoke<{ file: IpoDriveFile }>('ipo-drive-file-upload', {
         body: formData
+    });
+    return (await readFunctionResult(data, error)).file;
+};
+
+export const updateIpoDriveFileMetadata = async (currentUser: User | null, fileRowId: number, displayName: string, caption: string) => {
+    const { data, error } = await requireSupabase().functions.invoke<{ file: IpoDriveFile }>('ipo-drive-file-update', {
+        body: { ...currentUserPayload(currentUser), file_row_id: fileRowId, display_name: displayName, caption }
     });
     return (await readFunctionResult(data, error)).file;
 };
@@ -275,14 +343,22 @@ export const listSubprojectDriveFiles = async (currentUser: User | null, subproj
     return (await readFunctionResult(data, error)).files;
 };
 
-export const uploadSubprojectDriveFile = async (currentUser: User | null, subprojectId: number, file: File) => {
+export const uploadSubprojectDriveFile = async (currentUser: User | null, subprojectId: number, file: File, uploadSection: DriveUploadSection = 'files') => {
     const formData = new FormData();
     formData.append('user_id', String(currentUserPayload(currentUser).user_id));
     formData.append('subproject_id', String(subprojectId));
+    formData.append('upload_section', uploadSection);
     formData.append('file', file);
 
     const { data, error } = await requireSupabase().functions.invoke<{ file: SubprojectDriveFile }>('subproject-drive-file-upload', {
         body: formData
+    });
+    return (await readFunctionResult(data, error)).file;
+};
+
+export const updateSubprojectDriveFileMetadata = async (currentUser: User | null, fileRowId: number, displayName: string, caption: string) => {
+    const { data, error } = await requireSupabase().functions.invoke<{ file: SubprojectDriveFile }>('subproject-drive-file-update', {
+        body: { ...currentUserPayload(currentUser), file_row_id: fileRowId, display_name: displayName, caption }
     });
     return (await readFunctionResult(data, error)).file;
 };
@@ -301,14 +377,22 @@ export const listActivityDriveFiles = async (currentUser: User | null, activityI
     return (await readFunctionResult(data, error)).files;
 };
 
-export const uploadActivityDriveFile = async (currentUser: User | null, activityId: number, file: File) => {
+export const uploadActivityDriveFile = async (currentUser: User | null, activityId: number, file: File, uploadSection: DriveUploadSection = 'files') => {
     const formData = new FormData();
     formData.append('user_id', String(currentUserPayload(currentUser).user_id));
     formData.append('activity_id', String(activityId));
+    formData.append('upload_section', uploadSection);
     formData.append('file', file);
 
     const { data, error } = await requireSupabase().functions.invoke<{ file: ActivityDriveFile }>('activity-drive-file-upload', {
         body: formData
+    });
+    return (await readFunctionResult(data, error)).file;
+};
+
+export const updateActivityDriveFileMetadata = async (currentUser: User | null, fileRowId: number, displayName: string, caption: string) => {
+    const { data, error } = await requireSupabase().functions.invoke<{ file: ActivityDriveFile }>('activity-drive-file-update', {
+        body: { ...currentUserPayload(currentUser), file_row_id: fileRowId, display_name: displayName, caption }
     });
     return (await readFunctionResult(data, error)).file;
 };

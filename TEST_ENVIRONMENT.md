@@ -12,6 +12,21 @@ The app uses the main build's source history, but its Vercel and Supabase resour
 
 Historical incremental migrations from the production repository are retained under `supabase/migrations_legacy/` for reference. They are not applied after the consolidated test baseline.
 
+## Current main-build synchronization
+
+The July 29, 2026 synchronization is based directly on production repository commit:
+
+- `d8952898a068e1b77cd75f9b94ce14cc391a80a8` — `Polish detail gallery and files`
+
+The shared Gallery/File components, record-detail layout primitives, and global styling are unchanged from that main-build commit. The only intentional code differences are the isolated test-environment artifacts and the Activity Title/immutable entity-ID feature under test.
+
+The test Supabase project also includes the main build's additive Drive migrations:
+
+- `202607230001_drive_media_sections.sql`
+- `202607230002_drive_folder_registration_race_fix.sql`
+
+All Drive Edge Functions are deployed separately to the test Supabase project. Production credentials, rows, authentication users, and Drive tokens are not copied.
+
 ## Synthetic test data
 
 `supabase/migrations/202607150002_test_seed_data.sql` provides a repeatable, synthetic fixture across all 53 public tables. It does not contain production records, production users, or live Google Drive tokens.

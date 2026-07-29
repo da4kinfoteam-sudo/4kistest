@@ -64,6 +64,7 @@ function MonthPicker({
     onYearBackward,
     onYearForward,
     variant,
+    defaultYear,
     className,
     ...props
 }: React.HTMLAttributes<HTMLDivElement> & MonthCalProps) {
@@ -81,7 +82,7 @@ function MonthPicker({
                         minDate={minDate}
                         maxDate={maxDate}
                         disabledDates={disabledDates}
-                        defaultYear={props.defaultYear}
+                        defaultYear={defaultYear}
                     ></MonthCal>
                 </div>
             </div>
@@ -106,6 +107,8 @@ function MonthCal({ selectedMonth, onMonthSelect, callbacks, variant, minDate, m
                 <div className="month-picker__year">{callbacks?.yearLabel ? callbacks?.yearLabel(menuYear) : menuYear}</div>
                 <div className="month-picker__nav-group">
                     <button
+                        type="button"
+                        aria-label="Previous year"
                         onClick={() => {
                             setMenuYear(menuYear - 1);
                             if (onYearBackward) onYearBackward();
@@ -118,6 +121,8 @@ function MonthCal({ selectedMonth, onMonthSelect, callbacks, variant, minDate, m
                         <ChevronLeft className="btn-symbol" />
                     </button>
                     <button
+                        type="button"
+                        aria-label="Next year"
                         onClick={() => {
                             setMenuYear(menuYear + 1);
                             if (onYearForward) onYearForward();
@@ -143,6 +148,8 @@ function MonthCal({ selectedMonth, onMonthSelect, callbacks, variant, minDate, m
                                             className="month-picker__cell"
                                         >
                                             <button
+                                                type="button"
+                                                aria-label={`${m.name} ${menuYear}`}
                                                 onClick={() => {
                                                     setMonth(m.number);
                                                     setYear(menuYear);

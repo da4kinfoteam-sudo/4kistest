@@ -28,22 +28,59 @@ import {
     summarizeBudgetAdjustments,
     writeBudgetItemAdjustmentHistory
 } from '../lib/budgetLineAdjustments';
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Edit3, ExternalLink, Eye, FileText, HardDrive, ImageIcon, Info, Loader2, Pencil, Plus, Trash2, UploadCloud, X } from 'lucide-react';
 import {
-    canPreviewSubprojectDriveFile,
+    Banknote,
+    CalendarDays,
+    CheckCircle2,
+    Edit3,
+    Info,
+    Landmark,
+    Layers,
+    Loader2,
+    MapPin,
+    PackageCheck,
+    Pencil,
+    Plus,
+    RefreshCw,
+    Sprout,
+    Trash2,
+    UploadCloud,
+    Wallet,
+    X
+} from 'lucide-react';
+import {
     deleteSubprojectDriveFile,
     formatFileSize,
     getGoogleDriveStatus,
     getSubprojectDriveImageUrl,
-    getSubprojectDrivePreviewUrl,
     GoogleDriveStatus,
-    isAllowedSubprojectDriveFile,
-    isSubprojectDriveImageFile,
     listSubprojectDriveFiles,
-    SUBPROJECT_DRIVE_FILE_ACCEPT,
     SubprojectDriveFile,
-    uploadSubprojectDriveFile
+    uploadSubprojectDriveFile,
+    updateSubprojectDriveFileMetadata,
+    DriveUploadSection
 } from '../lib/googleDriveStorage';
+import {
+    DriveUploadModal,
+    EntityFilesList,
+    EntityGallery,
+    GalleryViewMode,
+    GalleryViewToggle,
+    getPersistedDriveUploadSection
+} from './ui/DriveMediaSections';
+import {
+    RecordBackLink,
+    RecordDetailAside,
+    RecordDetailGrid,
+    RecordDetailMain,
+    RecordDetailPage,
+    RecordHeader,
+    RecordKpiCard,
+    RecordKpiGrid,
+    RecordPanel,
+    formatRecordMetricCurrency,
+    formatRecordMetricNumber
+} from './ui/RecordDetailLayout';
 
 interface SubprojectDetailProps {
     subproject: Subproject;
@@ -117,28 +154,6 @@ const budgetItemFieldLabels: Record<string, string> = {
     numberOfUnits: 'Number of Units'
 };
 
-type SubprojectDetailSectionKey = 'commodities' | 'budget' | 'accomplishment' | 'gallery' | 'files';
-
-const CollapsibleDetailCard: React.FC<{
-    title: string;
-    isOpen: boolean;
-    onToggle: () => void;
-    children: React.ReactNode;
-}> = ({ title, isOpen, onToggle, children }) => (
-    <section className="detail-card detail-card--collapsible">
-        <button
-            type="button"
-            className="detail-card__toggle-header"
-            onClick={onToggle}
-            aria-expanded={isOpen}
-        >
-            <span className="detail-card-title mb-0">{title}</span>
-            <ChevronDown className={`detail-card__collapse-icon ${isOpen ? 'is-open' : ''}`} aria-hidden="true" />
-        </button>
-        {isOpen && <div className="detail-card__collapsible-body">{children}</div>}
-    </section>
-);
-
 const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, onBack, previousPageName, onUpdateSubproject, particularTypes, uacsCodes, commodityCategories, refCommodities, refLivestock }) => {
     const { currentUser } = useAuth();
     const { canEdit } = useUserAccess('Subprojects');
@@ -193,20 +208,11 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
     const [driveFiles, setDriveFiles] = useState<SubprojectDriveFile[]>([]);
     const [isDriveLoading, setIsDriveLoading] = useState(true);
-    const [isDriveUploading, setIsDriveUploading] = useState(false);
     const [deletingDriveFileId, setDeletingDriveFileId] = useState<number | null>(null);
     const [driveMessage, setDriveMessage] = useState<string | null>(null);
-    const [previewDriveFile, setPreviewDriveFile] = useState<SubprojectDriveFile | null>(null);
     const [driveFilePendingDelete, setDriveFilePendingDelete] = useState<SubprojectDriveFile | null>(null);
-    const [expandedSections, setExpandedSections] = useState<Record<SubprojectDetailSectionKey, boolean>>({
-        commodities: false,
-        budget: false,
-        accomplishment: true,
-        gallery: false,
-        files: false
-    });
-    const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
-    const [galleryImageFailed, setGalleryImageFailed] = useState(false);
+    const [uploadModal, setUploadModal] = useState<'gallery' | 'files' | null>(null);
+    const [galleryView, setGalleryView] = useState<GalleryViewMode>('thumbnail');
 
     const isUserRole = currentUser?.role === 'User';
 
@@ -335,10 +341,6 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
         setBudgetItemFormMessage(null);
     };
 
-    const toggleSection = (section: SubprojectDetailSectionKey) => {
-        setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-    };
-
     // Helper for Funding Year selection range
     const yearOptions = useMemo(() => {
         const currentYear = new Date().getFullYear();
@@ -424,43 +426,20 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
         loadDriveFiles();
     }, [loadDriveFiles]);
 
-    const handleDriveFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-
-        if (!isAllowedSubprojectDriveFile(file)) {
-            setDriveMessage('Only PDF and image files are allowed. Please upload a PDF, PNG, JPG, WEBP, or GIF file.');
-            return;
-        }
+    const uploadDriveFile = async (file: File, uploadSection: DriveUploadSection) => {
         if (!canEdit) {
-            setDriveMessage('You do not have permission to upload Subproject files.');
-            return;
+            throw new Error('You do not have permission to upload Subproject files.');
         }
         if (!driveStatus?.isConnected) {
-            setDriveMessage(driveStatus?.connectionMessage || 'Ask an Admin to reconnect Google Drive storage.');
-            return;
+            throw new Error(driveStatus?.connectionMessage || 'Ask an Admin to reconnect Google Drive storage.');
         }
         if (!subproject.operatingUnit) {
-            setDriveMessage('This subproject needs an operating unit before files can be uploaded.');
-            return;
+            throw new Error('This subproject needs an operating unit before files can be uploaded.');
         }
         if (!subproject.indigenousPeopleOrganization) {
-            setDriveMessage('This subproject needs a linked IPO before files can be uploaded.');
-            return;
+            throw new Error('This subproject needs a linked IPO before files can be uploaded.');
         }
-
-        setIsDriveUploading(true);
-        setDriveMessage(null);
-        try {
-            const uploaded = await uploadSubprojectDriveFile(currentUser, subproject.id, file);
-            setDriveFiles(prev => [uploaded, ...prev]);
-            setDriveMessage(`${uploaded.file_name} uploaded successfully.`);
-        } catch (error: any) {
-            setDriveMessage(error.message || 'Unable to upload Subproject file.');
-        } finally {
-            setIsDriveUploading(false);
-        }
+        return uploadSubprojectDriveFile(currentUser, subproject.id, file, uploadSection);
     };
 
     const requestDriveFileDelete = (file: SubprojectDriveFile) => {
@@ -485,28 +464,8 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
         }
     };
 
-    const galleryFiles = useMemo(() => driveFiles.filter(isSubprojectDriveImageFile), [driveFiles]);
-    const selectedGalleryFile = galleryIndex !== null ? galleryFiles[galleryIndex] : null;
-
-    useEffect(() => {
-        if (galleryIndex !== null && galleryIndex >= galleryFiles.length) {
-            setGalleryIndex(galleryFiles.length > 0 ? galleryFiles.length - 1 : null);
-        }
-    }, [galleryFiles.length, galleryIndex]);
-
-    useEffect(() => {
-        setGalleryImageFailed(false);
-    }, [galleryIndex]);
-
-    const showPreviousGalleryImage = () => {
-        if (galleryFiles.length === 0) return;
-        setGalleryIndex(current => current === null ? 0 : (current - 1 + galleryFiles.length) % galleryFiles.length);
-    };
-
-    const showNextGalleryImage = () => {
-        if (galleryFiles.length === 0) return;
-        setGalleryIndex(current => current === null ? 0 : (current + 1) % galleryFiles.length);
-    };
+    const galleryFiles = useMemo(() => driveFiles.filter(file => getPersistedDriveUploadSection(file) === 'gallery'), [driveFiles]);
+    const documentFiles = useMemo(() => driveFiles.filter(file => getPersistedDriveUploadSection(file) === 'files'), [driveFiles]);
 
     const projectCompletionStats = useMemo(() => {
         const rollup = resolveSubprojectCompletionRollup(subproject.details);
@@ -530,6 +489,23 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     const totalBudget = useMemo(() => {
        return detailItems.reduce((acc, item) => acc + (isBudgetLineExcludedFromTargets(item) ? 0 : getBudgetLineAmount(item)), 0);
     }, [detailItems]);
+    const actualObligationTotal = useMemo(
+        () => subproject.details.reduce((total, item) => total + getActualObligationSummary(item).amount, 0),
+        [subproject.details]
+    );
+    const actualDisbursementTotal = useMemo(
+        () => subproject.details.reduce((total, item) => total + getActualDisbursementSummary(item).amount, 0),
+        [subproject.details]
+    );
+    const deliveredItemCount = useMemo(
+        () => subproject.details.filter(item => !!item.actualDeliveryDate).length,
+        [subproject.details]
+    );
+    const linkedIpo = useMemo(
+        () => ipos.find(ipo => Number(ipo.id) === Number(subproject.ipo_id))
+            || ipos.find(ipo => ipo.name === subproject.indigenousPeopleOrganization),
+        [ipos, subproject.indigenousPeopleOrganization, subproject.ipo_id]
+    );
 
     const calculateTotalBudget = (details: SubprojectDetailType[]) => {
         return details.reduce((total, item) => total + (isBudgetLineExcludedFromTargets(item) ? 0 : getBudgetLineAmount(item)), 0);
@@ -2070,48 +2046,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     }
 
     return (
-        <div className="detail-page">
-            {previewDriveFile && (
-                <div className="dashboard-modal-backdrop" onClick={() => setPreviewDriveFile(null)}>
-                    <div className="dashboard-modal dashboard-modal--wide drive-preview-modal" onClick={e => e.stopPropagation()}>
-                        <div className="dashboard-modal__header">
-                            <div>
-                                <h3>{previewDriveFile.file_name}</h3>
-                                <p className="dashboard-modal__metric-subtext">
-                                    {formatFileSize(previewDriveFile.file_size)} - {previewDriveFile.mime_type || 'File preview'}
-                                </p>
-                            </div>
-                            <button type="button" onClick={() => setPreviewDriveFile(null)} className="dashboard-modal__close" aria-label="Close preview">
-                                <X aria-hidden="true" />
-                            </button>
-                        </div>
-                        <div className="drive-preview-modal__body">
-                            {canPreviewSubprojectDriveFile(previewDriveFile) ? (
-                                <iframe
-                                    src={getSubprojectDrivePreviewUrl(previewDriveFile)}
-                                    title={`Preview ${previewDriveFile.file_name}`}
-                                    className="drive-preview-modal__frame"
-                                    allow="autoplay"
-                                />
-                            ) : (
-                                <div className="drive-preview-modal__empty">
-                                    <FileText aria-hidden="true" />
-                                    <p>This file type cannot be previewed in 4KIS.</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="drive-preview-modal__footer">
-                            <p>If the preview does not load, open the file directly in Google Drive.</p>
-                            {previewDriveFile.web_view_link && (
-                                <a className="btn btn-secondary" href={previewDriveFile.web_view_link} target="_blank" rel="noreferrer">
-                                    <ExternalLink aria-hidden="true" />
-                                    Open in Drive
-                                </a>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+        <RecordDetailPage className="subproject-record-detail-page">
             {driveFilePendingDelete && (
                 <div className="dashboard-modal-backdrop" onClick={() => !deletingDriveFileId && setDriveFilePendingDelete(null)}>
                     <div className="dashboard-modal dashboard-modal--compact" onClick={e => e.stopPropagation()}>
@@ -2141,84 +2076,65 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                     </div>
                 </div>
             )}
-            {selectedGalleryFile && (
-                <div className="dashboard-modal-backdrop" onClick={() => setGalleryIndex(null)}>
-                    <div className="dashboard-modal dashboard-modal--wide ipo-gallery-modal" onClick={e => e.stopPropagation()}>
-                        <div className="dashboard-modal__header">
-                            <div>
-                                <h3>{selectedGalleryFile.file_name}</h3>
-                                <p className="dashboard-modal__metric-subtext">
-                                    {galleryIndex !== null ? `${galleryIndex + 1} of ${galleryFiles.length}` : 'Image preview'}
-                                </p>
-                            </div>
-                            <button type="button" onClick={() => setGalleryIndex(null)} className="dashboard-modal__close" aria-label="Close gallery">
-                                <X aria-hidden="true" />
-                            </button>
-                        </div>
-                        <div className="ipo-gallery-modal__body">
-                            <button type="button" className="ipo-gallery-modal__nav ipo-gallery-modal__nav--prev" onClick={showPreviousGalleryImage} aria-label="Previous image">
-                                <ChevronLeft aria-hidden="true" />
-                            </button>
-                            {galleryImageFailed ? (
-                                <div className="drive-preview-modal__empty">
-                                    <ImageIcon aria-hidden="true" />
-                                    <p>This image could not be loaded in 4KIS.</p>
-                                    {selectedGalleryFile.web_view_link && (
-                                        <a className="btn btn-secondary" href={selectedGalleryFile.web_view_link} target="_blank" rel="noreferrer">
-                                            <ExternalLink aria-hidden="true" />
-                                            Open in Drive
-                                        </a>
-                                    )}
-                                </div>
-                            ) : (
-                                <img
-                                    src={getSubprojectDriveImageUrl(selectedGalleryFile, 1600)}
-                                    alt={selectedGalleryFile.file_name}
-                                    onError={() => setGalleryImageFailed(true)}
-                                />
-                            )}
-                            <button type="button" className="ipo-gallery-modal__nav ipo-gallery-modal__nav--next" onClick={showNextGalleryImage} aria-label="Next image">
-                                <ChevronRight aria-hidden="true" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {uploadModal && (
+                <DriveUploadModal
+                    section={uploadModal}
+                    title={uploadModal === 'gallery' ? 'Upload Gallery Images' : 'Add Subproject Files'}
+                    description={uploadModal === 'gallery'
+                        ? 'Add field photos to the Subproject Gallery.'
+                        : 'Upload supporting documents. These files do not appear in the Gallery.'}
+                    canUpload={canEdit}
+                    isConnected={!!driveStatus?.isConnected}
+                    uploadFile={uploadDriveFile}
+                    onUploaded={file => setDriveFiles(current => [file, ...current])}
+                    onBatchComplete={(message) => setDriveMessage(message)}
+                    onClose={() => setUploadModal(null)}
+                />
             )}
-             <header className="detail-header">
-                <div className="detail-heading">
-                    <h1 className="detail-title">{subproject.name}</h1>
-                    <p className="detail-meta">{subproject.location}</p>
-                </div>
-                <div className="detail-actions">
-                    {/* Granular Buttons - Prepare for individual role toggles */}
-                    {(canEdit || canEditFinancial || canEditPhysical || canEditAccomplishment) && (
+            <RecordBackLink onClick={onBack}>Back to {previousPageName}</RecordBackLink>
+
+            <RecordHeader
+                title={subproject.name}
+                metadata={
+                    <>
+                        <span className="ipo-detail-record-id">{subproject.uid || `SP-${subproject.id}`}</span>
+                        <span className={getStatusBadge(subproject.status)}>{subproject.status}</span>
+                        <span><MapPin aria-hidden="true" />{subproject.location || 'Location not recorded'}</span>
+                        <span><CalendarDays aria-hidden="true" />Target {formatMonthYear(subproject.estimatedCompletionDate)}</span>
+                    </>
+                }
+                actions={(canEdit || canEditFinancial || canEditPhysical || canEditAccomplishment) ? (
                         <button onClick={() => handlePolicyEditMode('accomplishment')} disabled={!canEditAccomplishment} className={`btn btn-primary btn-responsive ${!canEditAccomplishment ? 'is-disabled' : ''}`} title={canEditAccomplishment ? 'Edit Accomplishment' : accomplishmentDecision.message}>
                             <CheckCircle2 className="btn-symbol" aria-hidden="true" />
                             <span className="btn-text">Edit Accomplishment</span>
                         </button>
-                    )}
-                    <button onClick={onBack} className="btn btn-secondary btn-responsive" title={`Back to ${previousPageName}`}>
-                        <ArrowLeft className="btn-symbol" aria-hidden="true" />
-                        <span className="btn-text">Back to {previousPageName}</span>
-                    </button>
-                </div>
-            </header>
+                    ) : null}
+            />
+
+            <RecordKpiGrid aria-label="Subproject overview statistics">
+                <RecordKpiCard label="Total Budget" value={formatRecordMetricCurrency(totalBudget)} title={formatCurrency(totalBudget)} note="Active target budget" icon={<Wallet />} />
+                <RecordKpiCard label="Obligated" value={formatRecordMetricCurrency(actualObligationTotal)} title={formatCurrency(actualObligationTotal)} note={`${totalBudget > 0 ? Math.round((actualObligationTotal / totalBudget) * 100) : 0}% of budget`} icon={<Landmark />} />
+                <RecordKpiCard label="Disbursed" value={formatRecordMetricCurrency(actualDisbursementTotal)} title={formatCurrency(actualDisbursementTotal)} note={`${totalBudget > 0 ? Math.round((actualDisbursementTotal / totalBudget) * 100) : 0}% of budget`} icon={<Banknote />} />
+                <RecordKpiCard label="Physical" value={projectCompletionStats.text} note="Items delivered" icon={<PackageCheck />} />
+                <RecordKpiCard label="Commodities" value={formatRecordMetricNumber((subproject.subprojectCommodities || []).length)} title={(subproject.subprojectCommodities || []).length.toLocaleString()} note="Target production lines" icon={<Sprout />} />
+                <RecordKpiCard label="Deliveries" value={formatRecordMetricNumber(deliveredItemCount)} title={deliveredItemCount.toLocaleString()} note={`${subproject.details.length.toLocaleString()} budget items`} icon={<Layers />} />
+            </RecordKpiGrid>
 
             {/* Main Content Grid */}
-            <div className="detail-grid">
+            <RecordDetailGrid>
                 {/* Left Column */}
-                <div className="detail-main">
-                     <div className="detail-card">
-                        <div className="flex justify-between items-start mb-4">
-                            <h3 className="detail-card-title mb-0">Project Details</h3>
-                            {(canEdit || canEditProjectDetails) && (
+                <RecordDetailMain>
+                     <RecordPanel
+                        title="Project Details"
+                        description="Implementation schedule and project classification"
+                        actions={(canEdit || canEditProjectDetails) ? (
                                 <button onClick={() => handlePolicyEditMode('details')} disabled={!canEditProjectDetails} className={`table-action table-action--primary ${!canEditProjectDetails ? 'is-disabled' : ''}`} title={canEditProjectDetails ? 'Edit Details' : detailsDecision.message}>
                                     <Edit3 className="btn-symbol" aria-hidden="true" />
                                     Edit Details
                                 </button>
-                            )}
-                        </div>
-                         <div className="detail-dl">
+                            ) : null}
+                     >
+                         <dl className="detail-dl record-detail-dl--three">
                             <DetailItem label="Status" value={<span className={getStatusBadge(subproject.status)}>{subproject.status}</span>} />
                             <DetailItem label="UID" value={subproject.uid} />
                             <DetailItem label="Operating Unit" value={subproject.operatingUnit || 'N/A'} />
@@ -2229,7 +2145,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                             <DetailItem label="Funding Year" value={subproject.fundingYear?.toString()} />
                             <DetailItem label="Fund Type" value={subproject.fundType} />
                             <DetailItem label="Tier" value={subproject.tier} />
-                         </div>
+                         </dl>
 
                          {/* Completion Progress Bar */}
                          <div className="detail-progress">
@@ -2244,51 +2160,63 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                  ></div>
                              </div>
                          </div>
-
-                         <div className="detail-subsection">
-                             <h4 className="detail-section-title">Remarks</h4>
-                             <p className="detail-note">{subproject.remarks || 'No remarks provided.'}</p>
-                         </div>
-                     </div>
+                     </RecordPanel>
 
                      {/* New Target Commodities Section */}
-                     <CollapsibleDetailCard title="Target Commodities" isOpen={expandedSections.commodities} onToggle={() => toggleSection('commodities')}>
-                        <div className="flex justify-end mb-4">
-                            {(canEdit || canEditCommodity) && (
+                     <RecordPanel
+                        title="Target Commodities"
+                        description="Production lines with coverage and yield"
+                        actions={(canEdit || canEditCommodity) ? (
                                 <button onClick={() => handlePolicyEditMode('commodity')} disabled={!canEditCommodity} className={`table-action table-action--primary ${!canEditCommodity ? 'is-disabled' : ''}`} title={canEditCommodity ? 'Edit Commodities' : commodityDecision.message}>
                                     <Edit3 className="btn-symbol" aria-hidden="true" />
                                     Edit Commodity
                                 </button>
-                            )}
-                        </div>
+                            ) : null}
+                     >
                          {subproject.subprojectCommodities && subproject.subprojectCommodities.length > 0 ? (
-                            <ul className="detail-list">
-                                {subproject.subprojectCommodities.map((c, idx) => (
-                                    <li key={idx} className="detail-list-item flex justify-between items-center">
-                                        <div>
-                                            <span className="detail-list-name">{c.name}</span>
-                                            <span className="detail-list-copy">({c.typeName || 'N/A'})</span>
-                                        </div>
-                                        <span className="detail-list-copy">
-                                            {c.typeName === 'Livestock' ? 'Heads' : 'Area'}: {c.area} {c.typeName === 'Crop' && `| Yield: ${c.averageYield} kg`}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
+                            <div className="data-table-scroll record-detail-table-scroll">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Commodity</th>
+                                            <th>Kind</th>
+                                            <th className="data-table__numeric">Coverage</th>
+                                            <th className="data-table__numeric">Target Yield</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {subproject.subprojectCommodities.map((commodity, index) => (
+                                            <tr key={`${commodity.name}-${index}`}>
+                                                <td className="data-table__primary">{commodity.name}</td>
+                                                <td>{commodity.typeName || 'N/A'}</td>
+                                                <td className="data-table__numeric">
+                                                    {commodity.area?.toLocaleString() || '0'} {commodity.typeName === 'Livestock' ? 'heads' : 'ha'}
+                                                </td>
+                                                <td className="data-table__numeric">
+                                                    {commodity.typeName === 'Livestock'
+                                                        ? 'N/A'
+                                                        : `${commodity.averageYield?.toLocaleString() || '0'} kg`}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         ) : (
                             <p className="detail-empty">No commodities recorded.</p>
                         )}
-                     </CollapsibleDetailCard>
+                     </RecordPanel>
 
-                     <CollapsibleDetailCard title="Budget Breakdown" isOpen={expandedSections.budget} onToggle={() => toggleSection('budget')}>
-                        <div className="flex justify-end mb-4">
-                            {(canEdit || canEditBudget) && (
+                     <RecordPanel
+                        title="Budget Breakdown"
+                        description="Target financial schedule and expense lines"
+                        actions={(canEdit || canEditBudget) ? (
                                 <button onClick={() => handlePolicyEditMode('budget')} disabled={!canEditBudget} className={`table-action table-action--primary ${!canEditBudget ? 'is-disabled' : ''}`} title={canEditBudget ? 'Edit Budget' : budgetDecision.message}>
                                     <Edit3 className="btn-symbol" aria-hidden="true" />
                                     Edit Budget
                                 </button>
-                            )}
-                        </div>
+                            ) : null}
+                     >
                         <div className="data-table-scroll">
                            <table className="data-table">
                                 <thead>
@@ -2346,18 +2274,19 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                 </tfoot>
                             </table>
                         </div>
-                    </CollapsibleDetailCard>
+                    </RecordPanel>
 
                     {/* NEW: Accomplishment Report Section (Read-Only) */}
-                    <CollapsibleDetailCard title="Accomplishment Report" isOpen={expandedSections.accomplishment} onToggle={() => toggleSection('accomplishment')}>
-                        <div className="flex justify-end mb-4">
-                            {(canEdit || canEditFinancial || canEditPhysical || canEditAccomplishment) && (
+                    <RecordPanel
+                        title="Accomplishment Report"
+                        description="Physical, financial, and production outcomes"
+                        actions={(canEdit || canEditFinancial || canEditPhysical || canEditAccomplishment) ? (
                                 <button onClick={() => handlePolicyEditMode('accomplishment')} disabled={!canEditAccomplishment} className={`table-action table-action--primary ${!canEditAccomplishment ? 'is-disabled' : ''}`} title={canEditAccomplishment ? 'Edit Accomplishment' : accomplishmentDecision.message}>
                                     <CheckCircle2 className="btn-symbol" aria-hidden="true" />
                                     Edit Accomplishment
                                 </button>
-                            )}
-                        </div>
+                            ) : null}
+                    >
                         <div className="detail-stack">
                             <div>
                                 <h4 className="detail-section-title">Item Delivery Status</h4>
@@ -2494,153 +2423,119 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                  )}
                             </div>
                         </div>
-                    </CollapsibleDetailCard>
+                    </RecordPanel>
 
-                    <CollapsibleDetailCard title="Gallery" isOpen={expandedSections.gallery} onToggle={() => toggleSection('gallery')}>
-                        {galleryFiles.length > 0 ? (
-                            <div className="ipo-gallery-grid">
-                                {galleryFiles.map((file, index) => (
-                                    <button
-                                        key={file.id}
-                                        type="button"
-                                        className="ipo-gallery-tile"
-                                        onClick={() => setGalleryIndex(index)}
-                                        title={`Preview ${file.file_name}`}
-                                    >
-                                        <img
-                                            src={getSubprojectDriveImageUrl(file, 420)}
-                                            alt={file.file_name}
-                                            loading="lazy"
-                                            onError={(event) => {
-                                                event.currentTarget.style.display = 'none';
-                                            }}
-                                        />
-                                        <span className="ipo-gallery-tile__fallback">
-                                            <ImageIcon aria-hidden="true" />
-                                        </span>
-                                        <span className="ipo-gallery-tile__caption">{file.file_name}</span>
+                    <RecordPanel
+                        title="Gallery"
+                        description="Field photos and project documentation"
+                        actions={
+                            <>
+                                <GalleryViewToggle view={galleryView} onChange={setGalleryView} />
+                                <button type="button" className="btn btn-secondary btn-compact" onClick={loadDriveFiles}>
+                                    <RefreshCw aria-hidden="true" />
+                                    Refresh
+                                </button>
+                                {canEdit && (
+                                    <button type="button" className="btn btn-secondary btn-compact" onClick={() => setUploadModal('gallery')}>
+                                        <UploadCloud aria-hidden="true" />
+                                        Upload
                                     </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="detail-empty">No image files have been uploaded for this subproject yet.</p>
-                        )}
-                    </CollapsibleDetailCard>
+                                )}
+                            </>
+                        }
+                    >
+                        <EntityGallery
+                            storageKey="subproject"
+                            files={galleryFiles}
+                            isLoading={isDriveLoading}
+                            canEdit={canEdit}
+                            canDelete={canDeleteDriveFiles}
+                            isConnected={!!driveStatus?.isConnected}
+                            getImageUrl={getSubprojectDriveImageUrl}
+                            uploadFile={uploadDriveFile}
+                            updateMetadata={(file, name, imageCaption) => updateSubprojectDriveFileMetadata(currentUser, file.id, name, imageCaption)}
+                            onFileAdded={file => setDriveFiles(current => [file, ...current])}
+                            onFileUpdated={file => setDriveFiles(current => current.map(item => item.id === file.id ? file : item))}
+                            onRequestDelete={requestDriveFileDelete}
+                            onRefresh={loadDriveFiles}
+                            onMessage={(message) => setDriveMessage(message)}
+                            showUploader={false}
+                            showToolbar={false}
+                            view={galleryView}
+                            onViewChange={setGalleryView}
+                        />
+                    </RecordPanel>
 
-                    <CollapsibleDetailCard title="Subproject Files" isOpen={expandedSections.files} onToggle={() => toggleSection('files')}>
-                        <div className="drive-file-card__header">
-                            <div>
-                                <p className="drive-file-card__copy">PDF and image documentation is stored by upload year under this subproject's Google Drive folder.</p>
-                            </div>
-                            <span className={`status-badge ${driveStatus?.isConnected ? 'status-badge--completed' : driveStatus?.tokenStatus === 'expired' ? 'status-badge--cancelled' : 'status-badge--neutral'}`}>
-                                <HardDrive aria-hidden="true" />
-                                {driveStatus?.isConnected ? 'Drive connected' : driveStatus?.tokenStatus === 'expired' ? 'Reconnect required' : 'Drive not connected'}
-                            </span>
-                        </div>
-
-                        {driveMessage && <p className="drive-file-card__message" role="status">{driveMessage}</p>}
-
-                        <div className="drive-file-card__toolbar">
-                            <label
-                                htmlFor={`subproject-drive-upload-${subproject.id}`}
-                                className={`btn btn-primary ${(!canEdit || !driveStatus?.isConnected || isDriveUploading) ? 'is-disabled' : 'cursor-pointer'}`}
-                                title={!driveStatus?.isConnected ? 'Ask an Admin to reconnect Google Drive storage' : 'Upload Subproject file'}
-                            >
-                                {isDriveUploading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <UploadCloud aria-hidden="true" />}
-                                {isDriveUploading ? 'Uploading...' : 'Upload File'}
-                            </label>
-                            <input
-                                id={`subproject-drive-upload-${subproject.id}`}
-                                type="file"
-                                className="hidden"
-                                accept={SUBPROJECT_DRIVE_FILE_ACCEPT}
-                                onChange={handleDriveFileUpload}
-                                disabled={!canEdit || !driveStatus?.isConnected || isDriveUploading}
-                            />
-                            <button type="button" className="btn btn-secondary" onClick={loadDriveFiles} disabled={isDriveLoading || isDriveUploading}>
-                                {isDriveLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <HardDrive aria-hidden="true" />}
-                                Refresh
+                    <RecordPanel
+                        title="Subproject Files"
+                        description="Supporting documents, separate from the Gallery"
+                        actions={canEdit ? (
+                            <button type="button" className="btn btn-secondary btn-compact" onClick={() => setUploadModal('files')}>
+                                <UploadCloud aria-hidden="true" />
+                                Add Files
                             </button>
-                        </div>
+                        ) : null}
+                    >
+                        {driveMessage && <p className="drive-file-card__message" role="status">{driveMessage}</p>}
+                        <EntityFilesList
+                            files={documentFiles}
+                            isLoading={isDriveLoading}
+                            canEdit={canEdit}
+                            canDelete={canDeleteDriveFiles}
+                            isConnected={!!driveStatus?.isConnected}
+                            uploadFile={uploadDriveFile}
+                            onFileAdded={file => setDriveFiles(current => [file, ...current])}
+                            onRequestDelete={requestDriveFileDelete}
+                            onRefresh={loadDriveFiles}
+                            onMessage={(message) => setDriveMessage(message)}
+                            showUploader={false}
+                            showToolbar={false}
+                        />
+                    </RecordPanel>
 
-                        {isDriveLoading ? (
-                            <div className="drive-file-card__loading">
-                                <Loader2 className="animate-spin" aria-hidden="true" />
-                                <span>Loading Subproject files...</span>
-                            </div>
-                        ) : driveFiles.length > 0 ? (
-                            <ul className="detail-list">
-                                {driveFiles.map(file => (
-                                    <li key={file.id} className="detail-list-item drive-file-card__item">
-                                        <div className="drive-file-card__file">
-                                            <FileText aria-hidden="true" />
-                                            <div className="min-w-0">
-                                                <p className="detail-list-title">{file.file_name}</p>
-                                                <p className="detail-list-copy">
-                                                    {formatFileSize(file.file_size)} - Uploaded by {file.uploaded_by_name || 'Unknown user'} - {formatDate(file.uploaded_at)}
-                                                    {file.folder_year ? ` - ${file.folder_year}` : ''}
-                                                </p>
-                                                <p className="detail-list-copy">
-                                                    Subprojects / {file.folder_year || 'Year'} / {file.operating_unit || 'Operating Unit'} / {file.ipo_name || 'IPO'} / {file.subproject_name || 'Subproject'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="drive-file-card__actions">
-                                            {canPreviewSubprojectDriveFile(file) && (
-                                                <button
-                                                    type="button"
-                                                    className="table-action table-action--primary"
-                                                    onClick={() => setPreviewDriveFile(file)}
-                                                >
-                                                    <Eye aria-hidden="true" />
-                                                    Preview
-                                                </button>
-                                            )}
-                                            {file.web_view_link && (
-                                                <a className="table-action table-action--primary" href={file.web_view_link} target="_blank" rel="noreferrer">
-                                                    <ExternalLink aria-hidden="true" />
-                                                    Open
-                                                </a>
-                                            )}
-                                            {canDeleteDriveFiles && (
-                                                <button
-                                                    type="button"
-                                                    className="table-action table-action--danger"
-                                                    onClick={() => requestDriveFileDelete(file)}
-                                                    disabled={deletingDriveFileId === file.id}
-                                                >
-                                                    {deletingDriveFileId === file.id ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
-                                                    Delete
-                                                </button>
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="detail-empty">No files have been uploaded for this subproject yet.</p>
-                        )}
-                    </CollapsibleDetailCard>
-
-                </div>
+                </RecordDetailMain>
                  {/* Right Column */}
-                <div className="detail-aside">
-                     <div className="detail-card">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="detail-card-title mb-0">History</h3>
-                            {subproject.history && subproject.history.length > 5 && (
+                <RecordDetailAside>
+                    <RecordPanel title="Summary">
+                        <dl className="ipo-summary-list">
+                            <div><dt>Total budget</dt><dd>{formatCurrency(totalBudget)}</dd></div>
+                            <div><dt>Physical completion</dt><dd>{projectCompletionStats.text}</dd></div>
+                            <div><dt>Budget items</dt><dd>{subproject.details.length}</dd></div>
+                            <div><dt>Fund Year</dt><dd>{subproject.fundingYear || 'N/A'}</dd></div>
+                            <div><dt>Fund Type</dt><dd>{subproject.fundType || 'N/A'}</dd></div>
+                        </dl>
+                    </RecordPanel>
+
+                    <RecordPanel title="Linked IPO" description="Recipient Indigenous Peoples Organization">
+                        <dl className="detail-dl">
+                            <DetailItem label="IPO Name" value={subproject.indigenousPeopleOrganization} />
+                            <DetailItem label="Region" value={linkedIpo?.region || subproject.operatingUnit || 'N/A'} />
+                            <DetailItem label="Location" value={linkedIpo?.location || subproject.location || 'N/A'} />
+                            <DetailItem label="Contact Person" value={linkedIpo?.contactPerson || 'N/A'} />
+                        </dl>
+                    </RecordPanel>
+
+                    <RecordPanel title="Remarks">
+                        <p className="detail-note">{subproject.remarks || 'No remarks provided.'}</p>
+                    </RecordPanel>
+
+                    <RecordPanel
+                        title="History"
+                        description="Recent activity"
+                        actions={subproject.history && subproject.history.length > 5 ? (
                                 <select
                                     value={historyLimit}
                                     onChange={(e) => setHistoryLimit(Number(e.target.value))}
-                                    className="form-control"
+                                    className="form-control data-table-select"
+                                    aria-label="History items shown"
                                 >
                                     <option value={5}>5</option>
                                     <option value={10}>10</option>
                                     <option value={20}>20</option>
                                     <option value={subproject.history.length}>All</option>
                                 </select>
-                            )}
-                        </div>
+                            ) : null}
+                    >
                         {subproject.history && subproject.history.length > 0 ? (
                             <div className="detail-timeline">
                                 <ul className="detail-timeline__list">
@@ -2657,9 +2552,9 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                         ) : (
                             <p className="detail-empty">No historical data available.</p>
                         )}
-                    </div>
-                </div>
-            </div>
+                    </RecordPanel>
+                </RecordDetailAside>
+            </RecordDetailGrid>
             {/* Budget Item Date Confirmation Modal */}
             {confirmBudgetItemDate && (
                 <ConfirmDialog
@@ -2689,7 +2584,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                     </section>
                 </div>
             )}
-        </div>
+        </RecordDetailPage>
     );
 };
 

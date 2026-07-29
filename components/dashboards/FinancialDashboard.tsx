@@ -1,7 +1,7 @@
 // Author: 4K
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ArrowLeftRight, ArrowRight, Banknote, Ban, ChevronLeft, ChevronRight,
+    ArrowLeftRight, ArrowRight, Banknote, Ban, ChevronDown, ChevronLeft, ChevronRight,
     CirclePercent, ClipboardCheck, Download, Gauge, PiggyBank, Scale, Wallet,
 } from 'lucide-react';
 import {
@@ -17,8 +17,11 @@ import {
     collectFinancialLineItems, FINANCIAL_COMPONENTS,
     FinancialAggregationFilters, FinancialLineItem,
 } from '../../lib/financialAggregation';
+import {
+    buildFinancialGeographicHierarchy, FinancialGeographicLevel,
+    flattenFinancialHierarchy,
+} from '../../lib/financialBreakdownHierarchy';
 import { generateFinancialPowerPoint } from '../../lib/financialPowerPoint';
-import { parseLocation } from '../LocationPicker';
 
 declare const PptxGenJS: any;
 
@@ -39,7 +42,7 @@ interface FinancialDashboardProps {
 }
 
 type AdjustmentType = 'Savings' | 'Realignment' | 'Cancelled';
-type BreakdownView = 'component' | 'operatingUnit' | 'province';
+type BreakdownView = 'component' | 'operatingUnit' | FinancialGeographicLevel;
 type Bucket = { label: string; allocation: number; obligation: number; disbursement: number };
 type AdjustmentRow = { id: string; type: AdjustmentType; component: string; source: string; amount: number; reason: string };
 
@@ -150,13 +153,16 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     data, selectedYearProp, selectedOuProp, selectedTierProp, selectedFundTypeProp,
 }) => {
     const { currentUser } = useAuth();
-    const canViewMatrix = currentUser?.role === 'Administrator' || currentUser?.role === 'Management';
+    const canViewMatrix = currentUser?.role === 'Super Admin'
+        || currentUser?.role === 'Administrator'
+        || currentUser?.role === 'Management';
     const selectedYear = selectedYearProp || new Date().getFullYear().toString();
     const selectedOu = selectedOuProp || (canViewMatrix ? 'All' : (currentUser?.operatingUnit || 'All'));
     const selectedTier = selectedTierProp || 'Tier 1';
     const selectedFundType = selectedFundTypeProp || 'Current';
     const [view, setView] = useState<BreakdownView>('component');
     const [breakdownPage, setBreakdownPage] = useState(1);
+    const [expandedBreakdownRows, setExpandedBreakdownRows] = useState<Set<string>>(new Set());
     const [adjustmentPage, setAdjustmentPage] = useState(1);
     const [isPowerPointExporting, setIsPowerPointExporting] = useState(false);
     const [powerPointExportMessage, setPowerPointExportMessage] = useState<string | null>(null);
@@ -189,9 +195,10 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     const ouRows = useMemo(() => aggregate(items, item => item.operatingUnit || 'Unspecified')
         .filter(row => row.allocation || row.obligation || row.disbursement)
         .sort((a, b) => b.allocation - a.allocation || a.label.localeCompare(b.label)), [items]);
-    const provinceRows = useMemo(() => aggregate(items, item => parseLocation(item.location || '').province || 'Unspecified')
-        .filter(row => row.allocation || row.obligation || row.disbursement)
-        .sort((a, b) => a.label === 'Unspecified' ? 1 : b.label === 'Unspecified' ? -1 : b.allocation - a.allocation), [items]);
+    const isGeographicView = view !== 'component' && view !== 'operatingUnit';
+    const geographicRows = useMemo(() => isGeographicView
+        ? buildFinancialGeographicHierarchy(items, data.ipos || [], view)
+        : [], [data.ipos, isGeographicView, items, view]);
 
     const monthly = useMemo(() => {
         let cumulativeObligation = 0, cumulativeDisbursement = 0;
@@ -221,13 +228,17 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     const savingsChart = useMemo(() => adjustmentChart('Savings'), [items]);
     const realignmentChart = useMemo(() => adjustmentChart('Realignment'), [items]);
 
-    const breakdownRows = view === 'component' ? componentRows : view === 'operatingUnit' ? ouRows : provinceRows;
+    const breakdownRows = view === 'component' ? componentRows : view === 'operatingUnit' ? ouRows : geographicRows;
     const breakdownPages = Math.max(1, Math.ceil(breakdownRows.length / PAGE_SIZE));
     const adjustmentPages = Math.max(1, Math.ceil(adjustmentRows.length / PAGE_SIZE));
     const shownBreakdown = breakdownRows.slice((breakdownPage - 1) * PAGE_SIZE, breakdownPage * PAGE_SIZE);
+    const shownGeographicRows = useMemo(() => isGeographicView
+        ? flattenFinancialHierarchy(shownBreakdown as typeof geographicRows, expandedBreakdownRows)
+        : [], [expandedBreakdownRows, geographicRows, isGeographicView, shownBreakdown]);
     const shownAdjustments = adjustmentRows.slice((adjustmentPage - 1) * PAGE_SIZE, adjustmentPage * PAGE_SIZE);
 
     useEffect(() => setBreakdownPage(1), [view, filters]);
+    useEffect(() => setExpandedBreakdownRows(new Set()), [view, filters]);
     useEffect(() => setBreakdownPage(page => Math.min(page, breakdownPages)), [breakdownPages]);
     useEffect(() => setAdjustmentPage(page => Math.min(page, adjustmentPages)), [adjustmentPages]);
 
@@ -236,6 +247,14 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     const unobligated = totals.allocation - totals.obligation;
     const undisbursed = totals.obligation - totals.disbursement;
     const totalAdjustments = totals.savings + totals.realignment + totals.cancelled;
+    const toggleBreakdownRow = (key: string) => {
+        setExpandedBreakdownRows(current => {
+            const next = new Set(current);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     const exportPptx = async () => {
         if (isPowerPointExporting) return;
@@ -328,12 +347,37 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
             </ComposedChart></ResponsiveContainer></div>
         </section>
 
-        <section className="fd-panel fd-fixed-table"><SectionHeader title="Financial Breakdown" action={<div className="fd-segmented">
+        <section className="fd-panel fd-fixed-table"><SectionHeader title="Financial Breakdown" action={<div className="fd-segmented fd-segmented--breakdown" aria-label="Financial breakdown view">
             <button type="button" className={view === 'component' ? 'active' : ''} onClick={() => setView('component')}>Component</button>
             {canViewMatrix && <button type="button" className={view === 'operatingUnit' ? 'active' : ''} onClick={() => setView('operatingUnit')}>Operating Unit</button>}
             <button type="button" className={view === 'province' ? 'active' : ''} onClick={() => setView('province')}>Province</button>
-        </div>} /><div className="fd-table-scroll fd-table-scroll--fixed"><table className="fd-table"><thead><tr><th>{view === 'component' ? 'Component' : view === 'operatingUnit' ? 'Operating Unit' : 'Province'}</th><th>Allocation</th><th>Obligated</th><th>Disbursed</th><th>Obligation Rate</th><th>Disbursement Efficiency</th></tr></thead>
-            <tbody>{shownBreakdown.length ? shownBreakdown.map(row => <tr key={row.label}><td><strong>{row.label}</strong></td><td>{money(row.allocation)}</td><td>{money(row.obligation)}</td><td>{money(row.disbursement)}</td><td className="fd-rate">{percent(rate(row.obligation, row.allocation))}</td><td className="fd-rate">{percent(rate(row.disbursement, row.obligation))}</td></tr>) : <tr><td colSpan={6}><div className="fd-empty">No financial records for this view</div></td></tr>}</tbody>
+            <button type="button" className={view === 'municipality' ? 'active' : ''} onClick={() => setView('municipality')}>Municipality</button>
+            <button type="button" className={view === 'ancestralDomain' ? 'active' : ''} onClick={() => setView('ancestralDomain')}>Ancestral Domain</button>
+            <button type="button" className={view === 'ipo' ? 'active' : ''} onClick={() => setView('ipo')}>IPO</button>
+        </div>} /><div className="fd-table-scroll fd-table-scroll--fixed"><table className={`fd-table fd-breakdown-table${isGeographicView ? ' fd-breakdown-table--geographic' : ''}`}><thead><tr>
+            {isGeographicView
+                ? <><th>OU</th><th>{view === 'ancestralDomain' ? 'Ancestral Domain' : view === 'ipo' ? 'IPO' : view[0].toUpperCase() + view.slice(1)}</th></>
+                : <th>{view === 'component' ? 'Component' : 'Operating Unit'}</th>}
+            <th>Allocation</th><th>Obligated</th><th>Disbursed</th><th>Obligation Rate</th><th>Disbursement Efficiency</th></tr></thead>
+            <tbody>{isGeographicView
+                ? (shownGeographicRows.length ? shownGeographicRows.map(({ node, depth }) => {
+                    const isExpanded = expandedBreakdownRows.has(node.key);
+                    const hasChildren = node.children.length > 0;
+                    return <tr key={node.key} className={depth > 0 ? 'fd-hierarchy-row fd-hierarchy-row--child' : 'fd-hierarchy-row'}>
+                        <td><strong>{node.operatingUnit}</strong></td>
+                        <td>
+                            <span className="fd-hierarchy-label" style={{ '--fd-hierarchy-depth': depth } as React.CSSProperties}>
+                                {hasChildren ? <button type="button" className="fd-hierarchy-toggle" onClick={() => toggleBreakdownRow(node.key)} aria-expanded={isExpanded} aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.label}`}>
+                                    {isExpanded ? <ChevronDown /> : <ChevronRight />}
+                                </button> : <span className="fd-hierarchy-toggle-spacer" />}
+                                <span><strong>{node.label}</strong>{depth > 0 && <small>{node.level === 'ancestralDomain' ? 'Ancestral Domain' : node.level === 'ipo' ? 'IPO' : node.level[0].toUpperCase() + node.level.slice(1)}</small>}</span>
+                            </span>
+                        </td>
+                        <td>{money(node.allocation)}</td><td>{money(node.obligation)}</td><td>{money(node.disbursement)}</td>
+                        <td className="fd-rate">{percent(rate(node.obligation, node.allocation))}</td><td className="fd-rate">{percent(rate(node.disbursement, node.obligation))}</td>
+                    </tr>;
+                }) : <tr><td colSpan={7}><div className="fd-empty">No financial records for this view</div></td></tr>)
+                : (shownBreakdown.length ? (shownBreakdown as Bucket[]).map(row => <tr key={row.label}><td><strong>{row.label}</strong></td><td>{money(row.allocation)}</td><td>{money(row.obligation)}</td><td>{money(row.disbursement)}</td><td className="fd-rate">{percent(rate(row.obligation, row.allocation))}</td><td className="fd-rate">{percent(rate(row.disbursement, row.obligation))}</td></tr>) : <tr><td colSpan={6}><div className="fd-empty">No financial records for this view</div></td></tr>)}</tbody>
         </table></div><Pager page={breakdownPage} pages={breakdownPages} setPage={setBreakdownPage} /></section>
 
         <section className="fd-panel fd-fixed-table"><SectionHeader title="Budget Adjustment Register" action={<span className="fd-muted">{adjustmentRows.length} items</span>} /><div className="fd-table-scroll fd-table-scroll--fixed"><table className="fd-table fd-adjustment-table"><thead><tr><th>Type</th><th>Component</th><th>Financial Item</th><th>Amount</th><th>Reason</th></tr></thead>
