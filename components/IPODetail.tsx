@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Activity, ActivityMonitoringAction, ActivityMonitoringReport, IPO, Subproject, Training, Commodity, CommodityNeed, referenceCommodityTypes, MarketingPartner, MarketLinkage, LodAssessment } from '../constants';
 import { formatMarketQuantityTotals, getIpoMarketSalesRows, summarizeIpoMarketSales } from '../lib/marketSalesAggregation';
+import { getActivityDisplayTitle } from '../lib/entityIdentity';
 import LocationPicker, { parseLocation } from './LocationPicker';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserAccess } from './mainfunctions/TableHooks';
@@ -606,7 +607,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
     const currentFundYear = String(new Date().getFullYear());
     const ipoLinkages = useMemo(() => {
-        return getIpoMarketSalesRows(marketingPartners, ipo.name);
+        return getIpoMarketSalesRows(marketingPartners, ipo);
     }, [marketingPartners, ipo.name]);
     const ipoMarketSalesSummary = useMemo(() => summarizeIpoMarketSales(ipoLinkages), [ipoLinkages]);
 
@@ -1853,7 +1854,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                             return (
                                             <tr key={activity.id}>
                                                 <td><TruncatedTableCell value={activity.uid || activity.id} /></td>
-                                                <td className="data-table__primary"><button type="button" className="table-link" title={activity.name} onClick={() => onSelectActivity(activity)}>{activity.name}</button></td>
+                                                <td className="data-table__primary"><button type="button" className="table-link" title={getActivityDisplayTitle(activity, [], [ipo])} onClick={() => onSelectActivity(activity)}>{getActivityDisplayTitle(activity, [], [ipo])}</button></td>
                                                 <td><TruncatedTableCell value={activity.component || 'Not recorded'} /></td>
                                                 <td title={activity.type}>{activity.type}</td>
                                                 <td title={String(activity.fundingYear || 'N/A')}>{activity.fundingYear || 'N/A'}</td>
@@ -1913,7 +1914,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                                         }
                                                     }}
                                                 >
-                                                    <td className="data-table__primary"><TruncatedTableCell value={activity?.name || 'Activity ' + report.activity_id} /></td>
+                                                    <td className="data-table__primary"><TruncatedTableCell value={activity ? getActivityDisplayTitle(activity, [], [ipo]) : 'Activity ' + report.activity_id} /></td>
                                                     <td><TruncatedTableCell value={activity?.component || 'Not recorded'} /></td>
                                                     <td title={formatDate(activity?.date)}>{formatDate(activity?.date)}</td>
                                                     <td title={report.status}>{report.status}</td>

@@ -15,6 +15,7 @@
     "test:financial-obligation-sync": "node --experimental-strip-types scripts/run-financial-obligation-sync-check.mjs",
     "test:drive-folder-identity": "node --experimental-strip-types scripts/run-drive-folder-identity-check.mjs",
     "test:signed-obligations": "node --experimental-strip-types scripts/run-signed-obligation-check.mjs",
+    "test:identity": "node scripts/verify-identity-helpers.mjs",
     "audit:ui": "node scripts/ui-consistency-audit.mjs",
     "audit:legacy-ui": "node scripts/legacy-ui-inventory.mjs"
   },

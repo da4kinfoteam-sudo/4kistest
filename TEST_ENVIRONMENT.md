@@ -14,18 +14,20 @@ Historical incremental migrations from the production repository are retained un
 
 ## Current main-build synchronization
 
-The July 29, 2026 synchronization is based directly on production repository commit:
+The August 24, 2026 synchronization is based directly on production repository commit:
 
-- `d8952898a068e1b77cd75f9b94ce14cc391a80a8` — `Polish detail gallery and files`
+- `364ea3f` - `Expand IPO commodity profiles`
 
-The shared Gallery/File components, record-detail layout primitives, and global styling are unchanged from that main-build commit. The only intentional code differences are the isolated test-environment artifacts and the Activity Title/immutable entity-ID feature under test.
+The test repository includes all production application changes through that commit. The intentional differences are the isolated test-environment artifacts and the Activity Title/immutable entity-ID feature under test. Activity relationships resolve by entity ID first and use legacy names only as fallback, while the UI continues to display activity and IPO names normally.
 
-The test Supabase project also includes the main build's additive Drive migrations:
+The repository retains the test baseline and identity migrations alongside the main build's additive migrations. The August 24 source sync did not apply new migrations or redeploy Edge Functions to the test backend.
+
+Previously applied Drive migrations include:
 
 - `202607230001_drive_media_sections.sql`
 - `202607230002_drive_folder_registration_race_fix.sql`
 
-All Drive Edge Functions are deployed separately to the test Supabase project. Production credentials, rows, authentication users, and Drive tokens are not copied.
+Production credentials, rows, authentication users, and Drive tokens are not copied.
 
 ## Synthetic test data
 

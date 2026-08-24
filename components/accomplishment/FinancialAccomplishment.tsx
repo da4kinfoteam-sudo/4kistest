@@ -21,6 +21,7 @@ import {
  replaceFinancialObligationRecords,
  type FinancialObligationEntityType,
 } from '../../lib/financialObligationSync';
+import { getActivityDisplayTitle } from '../../lib/entityIdentity';
 
 interface Props {
  subprojects: Subproject[];
@@ -548,7 +549,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  uacsCode: e.uacsCode,
  objectType: e.objectType || 'MOOE',
  expenseParticular: e.expenseParticular || 'Unspecified',
- sourceName: act.name || `${act.type} (${act.component})`,
+ sourceName: getActivityDisplayTitle(act) || `${act.type} (${act.component})`,
  targetObligationMonth: e.obligationMonth,
  targetObligationAmount: getBudgetLineAmount(e),
  targetDisbursementMonth: e.disbursementMonth,
