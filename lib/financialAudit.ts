@@ -1,5 +1,6 @@
 import type { FinancialAggregationFilters, FinancialAggregationInput, FinancialLineItem } from './financialAggregation';
 import { collectFinancialLineItems } from './financialAggregation';
+import { hasActualObligationRecords } from './financialObligationUtils';
 
 export type FinancialAuditSeverity = 'High' | 'Warning' | 'Info';
 
@@ -19,6 +20,7 @@ export type FinancialAuditIssueType =
     | 'Missing budget ceiling'
     | 'Excluded line with target amount'
     | 'Cancelled line with actuals'
+    | 'Negative actual obligation adjustment'
     | 'Realignment/savings line missing reason'
     | 'Line missing original budget snapshot';
 
@@ -285,6 +287,10 @@ export const buildFinancialAudit = (
 
         const actualObligation = getActualObligationTotal(item);
         const actualDisbursement = getActualDisbursementTotal(item);
+        const hasObligationRecords = hasActualObligationRecords(item.line);
+        const negativeObligationAdjustment = item.line.obligations?.length
+            ? item.line.obligations.reduce((sum, entry) => Math.min(toNumber(entry.amount), 0) + sum, 0)
+            : Math.min(toNumber(item.line.actualObligationAmount), 0);
         const recordYear = formatYear(item.recordYear);
         const metrics = {
             targetAllocation,
@@ -315,14 +321,26 @@ export const buildFinancialAudit = (
             );
         }
 
-        if (item.lineTag === 'Cancelled' && (actualObligation > 0 || actualDisbursement > 0)) {
+        if (item.lineTag === 'Cancelled' && (hasObligationRecords || actualDisbursement > 0)) {
             addIssue(
                 item,
                 'Cancelled line with actuals',
                 'Warning',
-                Math.max(actualObligation, actualDisbursement),
+                Math.max(Math.abs(actualObligation), actualDisbursement),
                 ['Financial Accomplishment', 'Budget Utilization', 'Monthly Matrix'],
                 'Review whether actual accomplishment should remain encoded on a cancelled budget line.',
+                metrics
+            );
+        }
+
+        if (negativeObligationAdjustment < 0) {
+            addIssue(
+                item,
+                'Negative actual obligation adjustment',
+                'Info',
+                Math.abs(negativeObligationAdjustment),
+                ['Financial Accomplishment', 'Financial Dashboard', 'Budget Utilization', 'Monthly Matrix'],
+                'Verify the recorded adjustment reason and supporting obligation reversal documentation.',
                 metrics
             );
         }
@@ -352,7 +370,7 @@ export const buildFinancialAudit = (
         }
 
         if (targetAllocation <= 0) {
-            if (actualDisbursement > actualObligation && actualObligation > 0) {
+            if (actualDisbursement > actualObligation && (hasObligationRecords || actualDisbursement > 0)) {
                 addIssue(
                     item,
                     'Disbursement greater than obligation',
@@ -369,7 +387,7 @@ export const buildFinancialAudit = (
                     item,
                     'Actual greater than allocation',
                     'High',
-                    Math.max(actualObligation, actualDisbursement),
+                    Math.max(Math.abs(actualObligation), actualDisbursement),
                     ['Financial Dashboard', 'Budget Utilization', 'Monthly Matrix'],
                     'Review actual financial entries because actual totals exceed the target allocation.',
                     metrics
@@ -458,7 +476,7 @@ export const buildFinancialAudit = (
             );
         }
 
-        if (schedule.targetObligationDue > 0 && actualObligation <= 0) {
+        if (schedule.targetObligationDue > 0 && !hasObligationRecords) {
             addIssue(
                 item,
                 'Missing due actual obligation',
@@ -482,7 +500,7 @@ export const buildFinancialAudit = (
             );
         }
 
-        if (actualDisbursement > actualObligation && actualObligation > 0) {
+        if (actualDisbursement > actualObligation && (hasObligationRecords || actualDisbursement > 0)) {
             addIssue(
                 item,
                 'Disbursement greater than obligation',

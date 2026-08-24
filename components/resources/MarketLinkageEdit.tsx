@@ -4,7 +4,6 @@ import { IPO, MarketLinkage, MarketingPartner, marketLinkageUnits, philippineReg
 import { getMarketLinkageUnit } from '../../lib/marketSalesAggregation';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../supabaseClient';
-import { resolveIpoByIdOrName } from '../../lib/entityIdentity';
 
 interface MarketLinkageEditProps {
     partner: MarketingPartner;
@@ -22,7 +21,6 @@ const commonInputClasses = "form-control";
 const createBlankLinkage = (): MarketLinkage => ({
     id: '',
     region: '',
-    ipoId: null,
     ipoName: '',
     commodityNeedId: null,
     commodityName: '',
@@ -73,8 +71,7 @@ const MarketLinkageEdit: React.FC<MarketLinkageEditProps> = ({ partner, ipos, on
             alert('Add at least one company commodity need before creating a market linkage.');
             return;
         }
-        const selectedIpo = resolveIpoByIdOrName(ipos, tempLinkage.ipoId, tempLinkage.ipoName);
-        if (!tempLinkage.region || !selectedIpo) {
+        if (!tempLinkage.region || !tempLinkage.ipoName) {
             alert('Region and IPO are required.');
             return;
         }
@@ -86,8 +83,6 @@ const MarketLinkageEdit: React.FC<MarketLinkageEditProps> = ({ partner, ipos, on
         const newLinkage: MarketLinkage = {
             ...tempLinkage,
             id: tempLinkage.id || Date.now(),
-            ipoId: selectedIpo.id,
-            ipoName: selectedIpo.name,
             unitOfMeasure: selectedUnit,
         };
         const marketingLinkages = [...(partner.marketingLinkages || []), newLinkage];
@@ -131,7 +126,6 @@ const MarketLinkageEdit: React.FC<MarketLinkageEditProps> = ({ partner, ipos, on
                     <h1 className="detail-title">Add Market Linkage</h1>
                     <p className="detail-meta">{partner.companyName} | {partner.uid}</p>
                 </div>
-                <button onClick={onBack} className="btn btn-secondary">Back to Profile</button>
             </header>
 
             <form onSubmit={handleSave} className="form-card form-stack form-stack--spacious">
@@ -145,23 +139,16 @@ const MarketLinkageEdit: React.FC<MarketLinkageEditProps> = ({ partner, ipos, on
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="form-label form-label--compact">Region</label>
-                            <select value={tempLinkage.region} onChange={e => setTempLinkage({ ...tempLinkage, region: e.target.value, ipoId: null, ipoName: '' })} className={commonInputClasses}>
+                            <select value={tempLinkage.region} onChange={e => setTempLinkage({ ...tempLinkage, region: e.target.value, ipoName: '' })} className={commonInputClasses}>
                                 <option value="">Select Region</option>
                                 {philippineRegions.map(region => <option key={region} value={region}>{region}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className="form-label form-label--compact">IPO</label>
-                            <select value={tempLinkage.ipoId ? String(tempLinkage.ipoId) : ''} onChange={e => {
-                                const selectedIpo = iposInLinkageRegion.find(ipo => String(ipo.id) === e.target.value);
-                                setTempLinkage({
-                                    ...tempLinkage,
-                                    ipoId: selectedIpo?.id || null,
-                                    ipoName: selectedIpo?.name || '',
-                                });
-                            }} disabled={!tempLinkage.region} className={commonInputClasses}>
+                            <select value={tempLinkage.ipoName} onChange={e => setTempLinkage({ ...tempLinkage, ipoName: e.target.value })} disabled={!tempLinkage.region} className={commonInputClasses}>
                                 <option value="">Select IPO</option>
-                                {iposInLinkageRegion.map(ipo => <option key={ipo.id} value={String(ipo.id)}>{ipo.name}</option>)}
+                                {iposInLinkageRegion.map(ipo => <option key={ipo.id} value={ipo.name}>{ipo.name}</option>)}
                             </select>
                         </div>
                         <div>

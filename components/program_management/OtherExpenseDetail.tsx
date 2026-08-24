@@ -1,6 +1,7 @@
 // Author: 4K
 import React, { useState, useEffect, useMemo } from 'react';
 import { MonthYearPicker } from '../ui/MonthYearPicker';
+import { getActualObligationValidationError } from '../../lib/financialObligationUtils';
 import { OtherProgramExpense, operatingUnits, fundTypes, tiers, objectTypes, ObjectType } from '../../constants';
 import { formatCurrency } from '../reports/ReportUtils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,10 +12,10 @@ import { normalizePolicyMonth, useDcfPolicyGuard } from '../../hooks/useDcfPolic
 import { supabase } from '../../supabaseClient';
 import { ObligationsEditor } from '../accomplishment/ObligationsEditor';
 import { createDisbursementsFromMonthlyFields, summarizeDisbursements } from '../../lib/disbursementUtils';
+import { replaceFinancialObligationRecords } from '../../lib/financialObligationSync';
 
 interface OtherExpenseDetailProps {
     item: OtherProgramExpense;
-    onBack: () => void;
     uacsCodes: { [key: string]: { [key: string]: { [key: string]: string } } };
     onUpdate: (item: OtherProgramExpense) => void;
 }
@@ -30,7 +31,7 @@ const DetailItem: React.FC<{ label: string; value?: string | number | React.Reac
 
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, uacsCodes, onUpdate }) => {
+const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, uacsCodes, onUpdate }) => {
     const { currentUser } = useAuth();
     const { canEdit } = useUserAccess('Program Management');
     const { logAction } = useLogAction();
@@ -152,7 +153,7 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                     obligations: mappedObligations,
                     actualObligationAmount: totalAmount
                 }));
-            } else if (item && (!item.obligations || item.obligations.length === 0) && (item.actualObligationAmount || 0) > 0) {
+            } else if (item && (!item.obligations || item.obligations.length === 0) && Number(item.actualObligationAmount) !== 0) {
                 const virtualObligations = [{
                     id: Date.now(),
                     date: item.actualObligationDate || '',
@@ -286,6 +287,14 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (editMode === 'accomplishment') {
+            const obligationError = getActualObligationValidationError(formData.obligations || []);
+            if (obligationError) {
+                alert(obligationError);
+                return;
+            }
+        }
+
         const action = editMode === 'details' ? 'editDetails' : 'editFinancialAccomplishment';
         const decision = editMode === 'details' ? detailsDecision : accomplishmentDecision;
         const allowed = await ensureDecisionAllowed(decision, {
@@ -357,39 +366,14 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                 const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.id);
                 if (updateError) throw updateError;
 
-                // Sync obligations to centralized table
                 const entityType = 'other_program_expense';
                 const parentId = item.id;
-
-                console.log("Syncing obligations to centralized table...", { entityType, parentId, count: obligations?.length });
-
-                // Delete old
-                const { error: deleteError } = await supabase.from('financial_obligations')
-                    .delete()
-                    .eq('entity_type', entityType)
-                    .eq('parent_id', parentId);
-
-                if (deleteError) {
-                    console.error("Error deleting old obligations:", deleteError);
-                    // Continue as it might still succeed
-                }
-
-                // Insert new
-                if (obligations && obligations.length > 0) {
-                    const syncPayload = obligations.map((o: any) => ({
-                        entity_type: entityType,
-                        parent_id: parentId,
-                        obligation_date: o.date,
-                        amount: Number(o.amount) || 0,
-                        remarks: o.remarks || ''
-                    }));
-
-                    const { error: insertError } = await supabase.from('financial_obligations').insert(syncPayload);
-                    if (insertError) {
-                        console.error("Critical RLS Error or Insert Error in financial_obligations:", insertError);
-                        throw new Error(`Failed to sync obligations: ${insertError.message}. This might be a database permission (RLS) issue.`);
-                    }
-                }
+                await replaceFinancialObligationRecords({
+                    entityType,
+                    parentId,
+                    itemId: null,
+                    records: obligations || [],
+                });
 
                 const { error: disbursementDeleteError } = await supabase.from('financial_disbursements')
                     .delete()
@@ -726,12 +710,6 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, onBack, u
                             </span>
                         </button>
                     )}
-                    <button onClick={onBack} className="btn btn-secondary btn-responsive">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="btn-symbol" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                        <span className="btn-text">
-                        Back
-                        </span>
-                    </button>
                 </div>
             </header>
 

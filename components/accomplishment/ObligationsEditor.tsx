@@ -63,6 +63,18 @@ export const ObligationsEditor: React.FC<ObligationsEditorProps> = ({ obligation
                                 placeholder="0.00"
                                 disabled={readOnly}
                                 emptyWhenZero={!ob.date}
+                                allowNegative
+                            />
+                        </div>
+                        <div className="budget-record-row__remarks">
+                            <input
+                                type="text"
+                                value={ob.remarks || ''}
+                                onChange={(event) => handleUpdate(ob.id, 'remarks', event.target.value)}
+                                className="form-control form-control--compact"
+                                placeholder={Number(ob.amount) < 0 ? 'Reason required for adjustment' : 'Remarks (optional)'}
+                                disabled={readOnly}
+                                aria-label={`Obligation ${idx + 1} remarks`}
                             />
                         </div>
                         {!readOnly && (

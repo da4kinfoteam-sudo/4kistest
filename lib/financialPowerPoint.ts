@@ -62,7 +62,7 @@ const compactMoney = (amount: number) => {
     return `PHP ${Math.ceil(amount).toLocaleString('en-PH')}`;
 };
 
-const rate = (value: number, base: number) => base > 0 ? (value / base) * 100 : 0;
+const rate = (value: number, base: number) => base !== 0 ? (value / base) * 100 : 0;
 const percent = (value: number) => `${value.toFixed(1)}%`;
 const sanitizeFileSegment = (value: string) => value.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'All';
 
@@ -319,9 +319,9 @@ export const generateFinancialPowerPoint = async (input: FinancialPowerPointInpu
     const disbursementPoints: Array<{ x: number; y: number }> = [];
     input.monthlyRows.forEach((row, index) => {
         const baseX = chartX + (index * slotW) + (slotW * 0.16);
-        const obligationH = (row.obligation / trendMax) * (chartH - 0.2);
+        const obligationH = (Math.max(row.obligation, 0) / trendMax) * (chartH - 0.2);
         const disbursementH = (row.disbursement / trendMax) * (chartH - 0.2);
-        const obligationY = chartY + chartH - ((row.cumulativeObligation / trendMax) * (chartH - 0.2));
+        const obligationY = chartY + chartH - ((Math.max(row.cumulativeObligation, 0) / trendMax) * (chartH - 0.2));
         const disbursementY = chartY + chartH - ((row.cumulativeDisbursement / trendMax) * (chartH - 0.2));
         trendSlide.addShape(pptx.ShapeType.rect, { x: baseX, y: chartY + chartH - obligationH, w: slotW * 0.22, h: Math.max(obligationH, 0.01), fill: { color: '60A5FA' }, line: { color: '60A5FA', transparency: 100 } });
         trendSlide.addShape(pptx.ShapeType.rect, { x: baseX + (slotW * 0.27), y: chartY + chartH - disbursementH, w: slotW * 0.22, h: Math.max(disbursementH, 0.01), fill: { color: '22C55E' }, line: { color: '22C55E', transparency: 100 } });

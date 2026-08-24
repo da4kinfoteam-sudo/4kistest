@@ -1,7 +1,7 @@
 import type { Activity, OtherProgramExpense, OfficeRequirement, StaffingRequirement, Subproject } from '../constants';
 import { getBudgetLineTag, isRecordOrLineExcludedFromTargets } from './budgetLineAdjustments';
 import { normalizeStaffingExpenses } from './staffingExpenseIdentity';
-import { getActivityDisplayTitle } from './entityIdentity';
+import { bucketActualObligationRecords, hasActualObligationRecords, sumActualObligationRecords } from './financialObligationUtils';
 
 type YearFilter = string | 'All';
 
@@ -237,12 +237,10 @@ export const getActualObligationsByMonth = (
     const monthly = createMonthlyArray();
 
     if (line.obligations && line.obligations.length > 0) {
-        line.obligations.forEach(obligation => {
-            if (!matchesActualYear(obligation.date, options.fallbackYear, options.year)) return;
-            const month = getActualMonthIndex(obligation.date, options.fallbackDate);
-            monthly[month] += toNumber(obligation.amount);
-        });
-        return monthly;
+        return bucketActualObligationRecords(
+            line.obligations.filter(obligation => matchesActualYear(obligation.date, options.fallbackYear, options.year)),
+            obligation => getActualMonthIndex(obligation.date || undefined, options.fallbackDate)
+        );
     }
 
     if (!matchesActualYear(line.actualObligationDate, options.fallbackYear, options.year)) return monthly;
@@ -292,10 +290,7 @@ export const getActualObligationTotalInWindow = (
     isDateIncluded: (date?: string) => boolean
 ) => {
     if (line.obligations && line.obligations.length > 0) {
-        return line.obligations.reduce((sum, obligation) => {
-            if (!isDateIncluded(obligation.date)) return sum;
-            return sum + toNumber(obligation.amount);
-        }, 0);
+        return sumActualObligationRecords(line.obligations, obligation => isDateIncluded(obligation.date));
     }
 
     return isDateIncluded(line.actualObligationDate) ? toNumber(line.actualObligationAmount) : 0;
@@ -365,7 +360,9 @@ const addLineItem = (
     const obligationByMonth = includeActual ? getActualObligationsByMonth(line, { year: actualYear, fallbackYear, fallbackDate: targetDate }) : createMonthlyArray();
     const disbursementByMonth = includeActual ? getActualDisbursementsByMonth(line, { year: actualYear, fallbackYear, fallbackDate: disbursementTargetDate }) : createMonthlyArray();
 
-    if (alloc === 0 && obli === 0 && disb === 0 && (!filters.includeTaggedExclusions || excludedTargetAllocation === 0)) return;
+    if (alloc === 0 && obli === 0 && disb === 0
+        && !hasActualObligationRecords(line)
+        && (!filters.includeTaggedExclusions || excludedTargetAllocation === 0)) return;
 
     items.push({
         recordId: record.id,
@@ -429,7 +426,7 @@ export const collectFinancialLineItems = (
                 sourceType: activity.type === 'Training' ? 'training' : 'activity',
                 component: activity.component,
                 packageType: activity.component === 'Program Management' ? 'Activities' : undefined,
-                activityName: getActivityDisplayTitle(activity),
+                activityName: activity.name,
                 operatingUnit: activity.operatingUnit,
                 location: activity.location,
                 ipoIds: (activity.participating_ipo_ids || []).map(Number).filter(Number.isFinite),
@@ -495,10 +492,10 @@ export const getActualObligationTotal = (
     options: { year: YearFilter; fallbackYear?: string | number }
 ) => {
     if (line.obligations && line.obligations.length > 0) {
-        return line.obligations.reduce((sum, obligation) => {
-            if (!matchesActualYear(obligation.date, options.fallbackYear, options.year)) return sum;
-            return sum + toNumber(obligation.amount);
-        }, 0);
+        return sumActualObligationRecords(
+            line.obligations,
+            obligation => matchesActualYear(obligation.date, options.fallbackYear, options.year)
+        );
     }
 
     if (!matchesActualYear(line.actualObligationDate, options.fallbackYear, options.year)) return 0;

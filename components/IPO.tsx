@@ -13,7 +13,9 @@ import { fetchAll } from '../hooks/useSupabaseTable';
 import useLocalStorageState from '../hooks/useLocalStorageState';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader as CanonicalSortableTableHeader } from './ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
-import { getActivityIpoIds, getSubprojectIpoId } from '../lib/entityIdentity';
+import { getLodEffectiveState } from '../lib/lodScoring';
+import { subscribeToLodDataChanges } from '../lib/lodDataSync';
+import { commodityCapacityToFormValue, getCommodityCapacityValues } from '../lib/commodityProfile';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -77,14 +79,14 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
     const [otherRegisteringBody, setOtherRegisteringBody] = useState('');
     const [editingIpo, setEditingIpo] = useState<IPO | null>(null); 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [latestLevels, setLatestLevels] = useState<Record<number, number>>({});
+    const [latestLevels, setLatestLevels] = useState<Record<number, LodAssessment>>({});
 
     useEffect(() => {
         const fetchLevels = async () => {
             if (!supabase) return;
             const { data, error } = await supabase
                 .from('lod_assessments')
-                .select('ipo_id, year, manual_level, computed_level')
+                .select('*')
                 .order('year', { ascending: false });
             
             if (error) {
@@ -92,15 +94,22 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                 return;
             }
 
-            const levels: Record<number, number> = {};
-            data?.forEach((assessment: any) => {
+            const levels: Record<number, LodAssessment> = {};
+            data?.forEach((assessment: LodAssessment) => {
                 if (!levels[assessment.ipo_id]) {
-                    levels[assessment.ipo_id] = assessment.manual_level || assessment.computed_level || 0;
+                    levels[assessment.ipo_id] = assessment;
                 }
             });
             setLatestLevels(levels);
         };
         fetchLevels();
+        const unsubscribe = subscribeToLodDataChanges(fetchLevels);
+        const refreshOnFocus = () => fetchLevels();
+        window.addEventListener('focus', refreshOnFocus);
+        return () => {
+            unsubscribe();
+            window.removeEventListener('focus', refreshOnFocus);
+        };
     }, [ipos]);
     const [ipoToDelete, setIpoToDelete] = useState<IPO | null>(null);
     const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
@@ -136,6 +145,9 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         value: '',
         yield: '',
         isScad: false,
+        potentialExpansionArea: '',
+        numberOfFarmers: '',
+        numberOfTrees: '',
         marketingPercentage: '',
         foodSecurityPercentage: '',
         averageIncome: ''
@@ -183,54 +195,50 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
 
     // Calculate derived data from activities
     const calculateTotalInvestment = useMemo(() => {
-        const investmentMap = new Map<number, number>();
+        const investmentMap = new Map<string, number>();
 
         // Calculate from subprojects
         (subprojects || []).forEach(sp => {
             if (sp.status === 'Completed') {
                 const budget = (sp.details || []).reduce((total, item) => total + (item.pricePerUnit * item.numberOfUnits), 0);
-                const ipoId = getSubprojectIpoId(sp, ipos);
-                if (!ipoId) return;
-                const currentInvestment = investmentMap.get(Number(ipoId)) || 0;
-                investmentMap.set(Number(ipoId), currentInvestment + budget);
+                const currentInvestment = investmentMap.get(sp.indigenousPeopleOrganization) || 0;
+                investmentMap.set(sp.indigenousPeopleOrganization, currentInvestment + budget);
             }
         });
 
         // Calculate from trainings (filtered from activities)
         (activities || []).filter(a => a.type === 'Training' && a.status === 'Completed').forEach(t => {
             const cost = (t.expenses || []).reduce((s, e) => s + e.amount, 0);
-            getActivityIpoIds(t, ipos).forEach(ipoId => {
-                const currentInvestment = investmentMap.get(ipoId) || 0;
-                investmentMap.set(ipoId, currentInvestment + cost);
+            (t.participatingIpos || []).forEach(ipoName => {
+                const currentInvestment = investmentMap.get(ipoName) || 0;
+                investmentMap.set(ipoName, currentInvestment + cost);
             });
         });
 
-        return (ipoId: number) => investmentMap.get(Number(ipoId)) || 0;
-    }, [subprojects, activities, ipos]);
+        return (ipoName: string) => investmentMap.get(ipoName) || 0;
+    }, [subprojects, activities]);
 
     const calculateTotalAllocation = useMemo(() => {
-        const allocationMap = new Map<number, number>();
+        const allocationMap = new Map<string, number>();
 
         // Calculate from subprojects (regardless of status)
         (subprojects || []).forEach(sp => {
             const budget = (sp.details || []).reduce((total, item) => total + (item.pricePerUnit * item.numberOfUnits), 0);
-            const ipoId = getSubprojectIpoId(sp, ipos);
-            if (!ipoId) return;
-            const currentAllocation = allocationMap.get(Number(ipoId)) || 0;
-            allocationMap.set(Number(ipoId), currentAllocation + budget);
+            const currentAllocation = allocationMap.get(sp.indigenousPeopleOrganization) || 0;
+            allocationMap.set(sp.indigenousPeopleOrganization, currentAllocation + budget);
         });
 
         // Calculate from trainings (regardless of status)
         (activities || []).filter(a => a.type === 'Training').forEach(t => {
             const cost = (t.expenses || []).reduce((s, e) => s + e.amount, 0);
-            getActivityIpoIds(t, ipos).forEach(ipoId => {
-                const currentAllocation = allocationMap.get(ipoId) || 0;
-                allocationMap.set(ipoId, currentAllocation + cost);
+            (t.participatingIpos || []).forEach(ipoName => {
+                const currentAllocation = allocationMap.get(ipoName) || 0;
+                allocationMap.set(ipoName, currentAllocation + cost);
             });
         });
 
-        return (ipoId: number) => allocationMap.get(Number(ipoId)) || 0;
-    }, [subprojects, activities, ipos]);
+        return (ipoName: string) => allocationMap.get(ipoName) || 0;
+    }, [subprojects, activities]);
 
     useEffect(() => {
         // Logic kept for "Add" mode or internal updates, though Edit button is removed from list
@@ -296,16 +304,16 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
 
         // New Filters
         if (flagFilter.withSubprojects) {
-            const iposWithSP = new Set((subprojects || []).map(sp => getSubprojectIpoId(sp, ipos)).filter(Boolean).map(Number));
-            filteredIpos = filteredIpos.filter(ipo => iposWithSP.has(Number(ipo.id)));
+            const iposWithSP = new Set((subprojects || []).map(sp => sp.indigenousPeopleOrganization));
+            filteredIpos = filteredIpos.filter(ipo => iposWithSP.has(ipo.name));
         }
 
         if (flagFilter.withTrainings) {
-            const iposWithTr = new Set<number>();
+            const iposWithTr = new Set();
             (activities || []).filter(a => a.type === 'Training').forEach(t => {
-                getActivityIpoIds(t, ipos).forEach(ipoId => iposWithTr.add(ipoId));
+                (t.participatingIpos || []).forEach(p => iposWithTr.add(p));
             });
-            filteredIpos = filteredIpos.filter(ipo => iposWithTr.has(Number(ipo.id)));
+            filteredIpos = filteredIpos.filter(ipo => iposWithTr.has(ipo.name));
         }
 
         const commodityFilters = ipoColumnFilters.commodities || [];
@@ -314,7 +322,10 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         }
         const levelFilters = ipoColumnFilters.levelOfDevelopment || [];
         if (levelFilters.length > 0) {
-            filteredIpos = filteredIpos.filter(ipo => levelFilters.includes(String(latestLevels[ipo.id] || ipo.levelOfDevelopment || '')));
+            filteredIpos = filteredIpos.filter(ipo => {
+                const state = getLodEffectiveState(latestLevels[ipo.id]);
+                return levelFilters.includes(state.level ? String(state.level) : state.label);
+            });
         }
 
         if (searchTerm) {
@@ -338,8 +349,8 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                 let bValue: any;
 
                 if (sortConfig.key === 'totalInvested') {
-                    aValue = calculateTotalInvestment(Number(a.id));
-                    bValue = calculateTotalInvestment(Number(b.id));
+                    aValue = calculateTotalInvestment(a.name);
+                    bValue = calculateTotalInvestment(b.name);
                 } else {
                     aValue = a[sortConfig.key as keyof IPO];
                     bValue = b[sortConfig.key as keyof IPO];
@@ -472,16 +483,19 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             const { checked } = e.target as HTMLInputElement;
             setCurrentCommodity(prev => ({ ...prev, [name]: checked }));
         } else if (name === 'type') {
-            setCurrentCommodity({ 
+            setCurrentCommodity(previous => ({
                 type: value, 
                 particular: '', 
                 value: '', 
                 yield: '', 
                 isScad: false, 
+                potentialExpansionArea: '',
+                numberOfFarmers: previous.numberOfFarmers,
+                numberOfTrees: '',
                 marketingPercentage: '', 
                 foodSecurityPercentage: '', 
                 averageIncome: ''
-            });
+            }));
         } else {
             if (name === 'marketingPercentage' || name === 'foodSecurityPercentage') {
                 const numValue = parseFloat(value);
@@ -505,11 +519,21 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             alert(`Please fill out all commodity fields including ${isAnimal ? 'Number of Heads' : 'Area and Yield'}.`);
             return;
         }
+        let capacityFields: Pick<Commodity, 'potentialExpansionArea' | 'numberOfFarmers' | 'numberOfTrees'>;
+        try {
+            capacityFields = getCommodityCapacityValues(currentCommodity.type, currentCommodity);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Invalid commodity capacity value.');
+            return;
+        }
+        const existingCommodity = editingCommodityIndex !== null ? formData.commodities[editingCommodityIndex] : undefined;
         const newCommodity: Commodity = {
+            ...existingCommodity,
             type: currentCommodity.type,
             particular: currentCommodity.particular,
             value: parseFloat(currentCommodity.value),
             yield: isAnimal ? undefined : parseFloat(currentCommodity.yield),
+            ...capacityFields,
             isScad: currentCommodity.isScad,
             marketingPercentage: currentCommodity.marketingPercentage ? parseFloat(currentCommodity.marketingPercentage) : undefined,
             foodSecurityPercentage: currentCommodity.foodSecurityPercentage ? parseFloat(currentCommodity.foodSecurityPercentage) : undefined,
@@ -530,6 +554,7 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
 
         setCurrentCommodity({ 
             type: '', particular: '', value: '', yield: '', isScad: false, 
+            potentialExpansionArea: '', numberOfFarmers: '', numberOfTrees: '',
             marketingPercentage: '', foodSecurityPercentage: '', averageIncome: '' 
         });
     };
@@ -542,6 +567,9 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             value: String(commodity.value),
             yield: commodity.yield ? String(commodity.yield) : '',
             isScad: commodity.isScad || false,
+            potentialExpansionArea: commodityCapacityToFormValue(commodity.potentialExpansionArea),
+            numberOfFarmers: commodityCapacityToFormValue(commodity.numberOfFarmers),
+            numberOfTrees: commodityCapacityToFormValue(commodity.numberOfTrees),
             marketingPercentage: commodity.marketingPercentage ? String(commodity.marketingPercentage) : '',
             foodSecurityPercentage: commodity.foodSecurityPercentage ? String(commodity.foodSecurityPercentage) : '',
             averageIncome: commodity.averageIncome ? String(commodity.averageIncome) : ''
@@ -553,6 +581,7 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         setEditingCommodityIndex(null);
         setCurrentCommodity({ 
             type: '', particular: '', value: '', yield: '', isScad: false, 
+            potentialExpansionArea: '', numberOfFarmers: '', numberOfTrees: '',
             marketingPercentage: '', foodSecurityPercentage: '', averageIncome: '' 
         });
     };
@@ -839,7 +868,7 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
         { key: 'region', label: 'Location', values: Array.from(new Set(ipos.map(ipo => ipo.region).filter(Boolean))).sort() },
         { key: 'flags', label: 'Flags', values: ['Women-Led', 'GIDA', 'ELCAC', 'SCAD', 'With Subprojects', 'With Trainings'] },
         { key: 'commodities', label: 'Commodities', values: Array.from(new Set(ipos.flatMap(ipo => (ipo.commodities || []).map(commodity => commodity.particular)).filter(Boolean))).sort() },
-        { key: 'levelOfDevelopment', label: 'Level of Development', values: ['1', '2', '3', '4', '5'] }
+        { key: 'levelOfDevelopment', label: 'Level of Development', values: ['1', '2', '3', '4', '5', 'Dropped', 'Incomplete', 'For Assessment'] }
     ];
     const selectedFlagNames = [
         flagFilter.womenLed && 'Women-Led',
@@ -926,7 +955,12 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                                     <td><TruncatedTableCell value={ipo.location} /></td>
                                     <td><TruncatedTableCell className="status-badge status-badge--compact status-badge--info" value={flagPreview} fullText={flags.join(', ') || 'No flags'} /></td>
                                     <td><TruncatedTableCell value={commodityPreview} fullText={commodities.join(', ') || 'No commodities'} /></td>
-                                    <td><span className="data-table-level">{latestLevels[ipo.id] || ipo.levelOfDevelopment || '—'}</span></td>
+                                    <td>
+                                        {(() => {
+                                            const state = getLodEffectiveState(latestLevels[ipo.id]);
+                                            return <span className={`data-table-level lod-table-state--${state.kind}`}>{state.label}</span>;
+                                        })()}
+                                    </td>
                                 </tr>;
                             })}
                             {paginatedIpos.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 7 : 6}>No IPOs match the current filters.</td></tr>}
@@ -1035,6 +1069,9 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                                         {commodity.isScad && <span className="status-badge status-badge--compact status-badge--cyan">SCAD</span>}
                                     </div>
                                     <div className="form-repeat-card__meta form-repeat-card__meta--inline">
+                                        {commodity.type === 'Crop' && commodity.potentialExpansionArea !== undefined && <span>Expansion: {commodity.potentialExpansionArea.toLocaleString()} ha</span>}
+                                        {commodity.numberOfFarmers !== undefined && <span>Farmers: {commodity.numberOfFarmers.toLocaleString()}</span>}
+                                        {commodity.type === 'Crop' && commodity.numberOfTrees !== undefined && <span>Trees: {commodity.numberOfTrees.toLocaleString()}</span>}
                                         {(commodity.marketingPercentage || 0) > 0 && <span>Mktg: {commodity.marketingPercentage}%</span>}
                                         {(commodity.foodSecurityPercentage || 0) > 0 && <span>FS: {commodity.foodSecurityPercentage}%</span>}
                                         {(commodity.averageIncome || 0) > 0 && <span>Inc: ₱{commodity.averageIncome?.toLocaleString()}</span>}
@@ -1079,6 +1116,26 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                             )}
                         </div>
                     </div>
+                    {currentCommodity.type && (
+                        <div className="commodity-capacity-fields form-divider">
+                            {currentCommodity.type === 'Crop' && (
+                                <div>
+                                    <label className="form-label">Potential Expansion Area (ha)</label>
+                                    <input type="number" name="potentialExpansionArea" value={currentCommodity.potentialExpansionArea} onChange={handleCommodityChange} min="0" step="any" className="form-control form-control--compact" />
+                                </div>
+                            )}
+                            <div>
+                                <label className="form-label">Number of Farmers</label>
+                                <input type="number" name="numberOfFarmers" value={currentCommodity.numberOfFarmers} onChange={handleCommodityChange} min="0" step="1" className="form-control form-control--compact" />
+                            </div>
+                            {currentCommodity.type === 'Crop' && (
+                                <div>
+                                    <label className="form-label">Number of Trees</label>
+                                    <input type="number" name="numberOfTrees" value={currentCommodity.numberOfTrees} onChange={handleCommodityChange} min="0" step="1" className="form-control form-control--compact" />
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div className="form-grid form-grid--four form-grid--compact form-grid--align-end form-divider">
                         <div>
                             <label className="form-label">Marketing %</label>

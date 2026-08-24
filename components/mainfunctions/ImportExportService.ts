@@ -1,7 +1,7 @@
 // Author: 4K
 import React from 'react';
 import { 
-    Subproject, Activity, IPO, OfficeRequirement, StaffingRequirement, OtherProgramExpense,
+    Subproject, Activity, IPO, Commodity, OfficeRequirement, StaffingRequirement, OtherProgramExpense,
     SubprojectDetail, ActivityExpense, fundTypes, tiers, objectTypes, ObjectType, philippineRegions, operatingUnits, Tier, FundType
 } from '../../constants';
 import { parseLocation } from '../LocationPicker';
@@ -9,8 +9,7 @@ import { supabase } from '../../supabaseClient';
 import { parseOfficeRequirementRow } from '../program_management/OfficeRequirementsTab';
 import { parseStaffingRequirementRow } from '../program_management/StaffingRequirementsTab';
 import { parseOtherExpenseRow } from '../program_management/OtherExpensesTab';
-import { getActivityDisplayTitle, resolveIpoByIdOrName } from '../../lib/entityIdentity';
-import { replaceManyActivityIpoRelationships, resolveSelectedIpoIds } from '../../lib/activityIpoRelationships';
+import { normalizeImportedCommodity } from '../../lib/commodityProfile';
 
 declare const XLSX: any;
 
@@ -136,6 +135,9 @@ export const downloadSubprojectsReport = (subprojects: Subproject[]) => {
         'Tier': s.tier,
         Budget: calculateTotalBudget(s.details),
         'End Date': s.estimatedCompletionDate,
+        'Actual Male Beneficiaries': s.actualMaleBeneficiaries ?? '',
+        'Actual Female Beneficiaries': s.actualFemaleBeneficiaries ?? '',
+        'Actual 4Ps Beneficiaries': s.actualFourPsBeneficiaries ?? '',
         'Operating Unit': s.operatingUnit
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -147,7 +149,7 @@ export const downloadSubprojectsReport = (subprojects: Subproject[]) => {
 export const downloadSubprojectsTemplate = () => {
     const headers = [
         'uid', 'name', 'indigenousPeopleOrganization', 'status', 'packageType', 
-        'estimatedCompletionDate', 'actualCompletionDate', 'fundingYear', 'fundType', 'tier', 'operatingUnit', 'remarks',
+        'estimatedCompletionDate', 'actualCompletionDate', 'actualMaleBeneficiaries', 'actualFemaleBeneficiaries', 'actualFourPsBeneficiaries', 'fundingYear', 'fundType', 'tier', 'operatingUnit', 'remarks',
         'detail_type', 'detail_particulars', 'detail_deliveryDate', 'detail_unitOfMeasure', 'detail_pricePerUnit', 'detail_numberOfUnits', 
         'detail_uacsCode', 'detail_obligationMonth', 'detail_disbursementMonth'
     ];
@@ -161,6 +163,9 @@ export const downloadSubprojectsTemplate = () => {
             packageType: 'Package 1',
             estimatedCompletionDate: 'June 2024',
             actualCompletionDate: '',
+            actualMaleBeneficiaries: '',
+            actualFemaleBeneficiaries: '',
+            actualFourPsBeneficiaries: '',
             fundingYear: 2024,
             fundType: 'Current',
             tier: 'Tier 1',
@@ -187,6 +192,9 @@ export const downloadSubprojectsTemplate = () => {
         ["packageType", "Package 1, Package 2, etc."],
         ["estimatedCompletionDate", "Month Year (e.g., June 2024)"],
         ["actualCompletionDate", "Month Year (Optional)"],
+        ["actualMaleBeneficiaries", "Optional nonnegative whole number. Leave blank when not reported."],
+        ["actualFemaleBeneficiaries", "Optional nonnegative whole number. Leave blank when not reported."],
+        ["actualFourPsBeneficiaries", "Optional nonnegative whole number. Leave blank when not reported."],
         ["fundingYear", "Year (e.g., 2024)"],
         ["fundType", "Current, Continuing, or Insertion"],
         ["tier", "Tier 1 or Tier 2"],
@@ -261,7 +269,7 @@ export const handleSubprojectsUpload = (
                     
                     // Lookup IPO for Location
                     const ipoName = String(row.indigenousPeopleOrganization || '').trim();
-                    const matchedIpo = resolveIpoByIdOrName(ipos, undefined, ipoName);
+                    const matchedIpo = ipos.find(i => i.name === ipoName);
                     const locationString = matchedIpo ? matchedIpo.location : '';
 
                     // Prioritize row.operatingUnit from Excel with resolution
@@ -280,6 +288,9 @@ export const handleSubprojectsUpload = (
                         startDate: `${row.fundingYear || new Date().getFullYear()}-01-01`, // Default since start date is removed
                         estimatedCompletionDate: parseMonthToDate(row.estimatedCompletionDate),
                         actualCompletionDate: row.actualCompletionDate ? parseMonthToDate(row.actualCompletionDate) : undefined,
+                        actualMaleBeneficiaries: row.actualMaleBeneficiaries === '' || row.actualMaleBeneficiaries == null ? null : Math.max(0, Math.trunc(Number(row.actualMaleBeneficiaries))),
+                        actualFemaleBeneficiaries: row.actualFemaleBeneficiaries === '' || row.actualFemaleBeneficiaries == null ? null : Math.max(0, Math.trunc(Number(row.actualFemaleBeneficiaries))),
+                        actualFourPsBeneficiaries: row.actualFourPsBeneficiaries === '' || row.actualFourPsBeneficiaries == null ? null : Math.max(0, Math.trunc(Number(row.actualFourPsBeneficiaries))),
                         fundingYear: Number(row.fundingYear),
                         fundType: row.fundType,
                         tier: resolveTier(row.tier),
@@ -393,8 +404,7 @@ export const downloadActivitiesReport = (activities: Activity[]) => {
         'UID': a.uid || '',
         'Type': a.type,
         'Component': a.component,
-        'Activity Type': a.name,
-        'Activity Title': getActivityDisplayTitle(a),
+        'Activity Name': a.name,
         'Date': a.date,
         'Location': a.location,
         'Male Participants': a.participantsMale,
@@ -418,7 +428,7 @@ export const downloadActivitiesReport = (activities: Activity[]) => {
 
 export const downloadActivitiesTemplate = () => {
     const headers = [
-        'uid', 'type', 'component', 'name', 'activity_title', 'date', 'province', 'municipality', 'facilitator', 'description',
+        'uid', 'type', 'component', 'name', 'date', 'province', 'municipality', 'facilitator', 'description',
         'participatingIpos', 'participantsMale', 'participantsFemale',
         'fundingYear', 'fundType', 'tier', 'operatingUnit',
         'expense_uacsCode', 'expense_obligationMonth', 'expense_disbursementMonth', 'expense_amount'
@@ -429,7 +439,6 @@ export const downloadActivitiesTemplate = () => {
             type: 'Training',
             component: 'Social Preparation',
             name: 'Basic Leadership Training',
-            activity_title: 'Basic Leadership Training for the 2024 Officers',
             date: '2024-03-15',
             province: 'Rizal',
             municipality: 'Tanay',
@@ -451,8 +460,6 @@ export const downloadActivitiesTemplate = () => {
 
     const instructions = [
         ["Column", "Description"],
-        ["name", "Configured generic Activity Type or the legacy Training name."],
-        ["activity_title", "Required specific title for this Activity occurrence."],
         ["participatingIpos", "Names of IPOs. Separate multiple IPOs with a semicolon (;). Example: 'IPO One; IPO Two'"],
         ["province", "Province name."],
         ["municipality", "City or Municipality name."],
@@ -528,11 +535,8 @@ export const handleActivitiesUpload = (
 
                 if (!groupedData.has(uid)) {
                     // Removed required check for province and municipality
-                    const activityTitle = String(
-                        row.activity_title || (row.type === 'Training' ? row.name : '')
-                    ).trim();
-                    if (!row.type || !row.component || !row.name || !activityTitle || !row.date) {
-                        throw new Error(`Row ${rowNum} (UID: ${uid}): Missing required common fields (type, component, name, activity_title, date).`);
+                    if (!row.type || !row.component || !row.name || !row.date) {
+                        throw new Error(`Row ${rowNum} (UID: ${uid}): Missing required common fields (type, component, name, date).`);
                     }
 
                     const municipality = String(row.municipality || '').trim();
@@ -550,12 +554,10 @@ export const handleActivitiesUpload = (
                             type: row.type,
                             component: row.component as any,
                             name: String(row.name),
-                            activity_title: activityTitle,
                             date: String(row.date),
                             description: String(row.description || ''),
                             location: locationString,
                             participatingIpos: rowParticipatingIpos, // Use row's IPOs for initial entry
-                            participating_ipo_ids: resolveSelectedIpoIds(rowParticipatingIpos, ipos),
                             participantsMale: Number(row.participantsMale) || 0,
                             participantsFemale: Number(row.participantsFemale) || 0,
                             fundingYear: Number(row.fundingYear) || undefined,
@@ -619,7 +621,6 @@ export const handleActivitiesUpload = (
             groupedData.forEach((group) => {
                 newActivities.push({
                     ...group.common,
-                    participating_ipo_ids: resolveSelectedIpoIds(group.common.participatingIpos || [], ipos),
                     expenses: group.expenses,
                 });
             });
@@ -634,18 +635,7 @@ export const handleActivitiesUpload = (
                         console.error("Error inserting activities:", error);
                         alert(`Error inserting data: ${error.message}`);
                     } else if (data) {
-                        const createdActivities = (data as Activity[]).map(created => ({
-                            ...created,
-                            participating_ipo_ids: resolveSelectedIpoIds(created.participatingIpos || [], ipos),
-                        }));
-                        await replaceManyActivityIpoRelationships(
-                            createdActivities.map(created => ({
-                                id: Number(created.id),
-                                ipoIds: created.participating_ipo_ids || [],
-                            })),
-                            currentUser?.fullName || currentUser?.email
-                        );
-                        setActivities(prev => [...prev, ...createdActivities]);
+                        setActivities(prev => [...prev, ...(data as Activity[])]);
                         alert(`${data.length} activities imported successfully!`);
                     }
                 } else {
@@ -718,7 +708,7 @@ export const downloadIposTemplate = () => {
         contactPerson: 'Juan Dela Cruz',
         contactNumber: '09171234567',
         registrationDate: '2023-01-15',
-        commodities: '[{"type":"Crop","particular":"Rice Seeds","value":50,"isScad":true}]',
+        commodities: '[{"type":"Crop","particular":"Rice Seeds","value":50,"potentialExpansionArea":12.5,"numberOfFarmers":40,"numberOfTrees":1200,"isScad":true}]',
         levelOfDevelopment: 2
     }];
 
@@ -739,7 +729,7 @@ export const downloadIposTemplate = () => {
         ["contactPerson", "Name of the contact person."],
         ["contactNumber", "Contact phone number."],
         ["registrationDate", "Date in YYYY-MM-DD format."],
-        ["commodities", `A JSON string for commodities. Format: '[{"type":"Type","particular":"Name","value":Number,"isScad":boolean}]'. Example: '[{"type":"Livestock","particular":"Goats","value":100,"isScad":false}]'. Use '[]' for none.`],
+        ["commodities", `A JSON array for commodities. Crop entries may optionally include potentialExpansionArea, numberOfFarmers, and numberOfTrees. Livestock entries may optionally include numberOfFarmers only. Omit optional properties when blank. Example: '[{"type":"Crop","particular":"Rice Seeds","value":50,"potentialExpansionArea":12.5,"numberOfFarmers":40,"numberOfTrees":1200,"isScad":true}]'. Use '[]' for none.`],
         ["levelOfDevelopment", "A number from 1 to 5."]
     ];
 
@@ -782,12 +772,22 @@ export const handleIposUpload = (
                     throw new Error(`Row ${index + 2} is missing required fields (name, region, province, municipality).`);
                 }
 
-                let commodities: any[];
+                let commodities: Commodity[];
                 try {
-                    commodities = typeof row.commodities === 'string' ? JSON.parse(row.commodities) : [];
-                } catch {
-                    console.warn(`Row ${index + 2}: Invalid JSON in 'commodities' column. Defaulting to empty.`);
-                    commodities = [];
+                    const parsedCommodities = typeof row.commodities === 'string' ? JSON.parse(row.commodities) : [];
+                    if (!Array.isArray(parsedCommodities)) {
+                        throw new Error('Commodities must be a JSON array.');
+                    }
+                    commodities = parsedCommodities.map((commodity, commodityIndex) => {
+                        try {
+                            return normalizeImportedCommodity(commodity);
+                        } catch (error) {
+                            const message = error instanceof Error ? error.message : 'Invalid commodity.';
+                            throw new Error(`Commodity ${commodityIndex + 1}: ${message}`);
+                        }
+                    });
+                } catch (error) {
+                    throw new Error(`Row ${index + 2}: Invalid commodities data${error instanceof Error ? ` (${error.message})` : ''}.`);
                 }
 
                 let locationString = '';

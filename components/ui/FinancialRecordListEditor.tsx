@@ -18,6 +18,7 @@ interface FinancialRecordListEditorProps<T extends FinancialRecord> {
     readOnly?: boolean;
     hideHeaderAddButton?: boolean;
     validateMonthChange?: (month: string) => boolean | Promise<boolean>;
+    allowNegative?: boolean;
 }
 
 export function FinancialRecordListEditor<T extends FinancialRecord>({
@@ -28,6 +29,7 @@ export function FinancialRecordListEditor<T extends FinancialRecord>({
     readOnly = false,
     hideHeaderAddButton = false,
     validateMonthChange,
+    allowNegative = false,
 }: FinancialRecordListEditorProps<T>) {
     const addRecord = () => {
         if (readOnly) return;
@@ -63,7 +65,7 @@ export function FinancialRecordListEditor<T extends FinancialRecord>({
                     {records.map(record => <article key={record.id} className="financial-record-editor__item">
                         <div className="form-grid">
                             <label className="form-field"><span className="form-label form-label--compact">Month</span><MonthYearPicker value={record.date} onChange={value => updateRecord(record.id, { date: value } as Partial<T>)} disabled={readOnly} className="form-control form-control--compact" allowClear /></label>
-                            <label className="form-field"><span className="form-label form-label--compact">Amount</span><FormattedAmountInput value={Number(record.amount) || 0} onValueChange={value => updateRecord(record.id, { amount: value } as Partial<T>)} disabled={readOnly} emptyWhenZero placeholder="0.00" className="form-control form-control--compact financial-record-editor__amount" /></label>
+                            <label className="form-field"><span className="form-label form-label--compact">Amount</span><FormattedAmountInput value={Number(record.amount) || 0} onValueChange={value => updateRecord(record.id, { amount: value } as Partial<T>)} disabled={readOnly} emptyWhenZero allowNegative={allowNegative} placeholder="0.00" className="form-control form-control--compact financial-record-editor__amount" /></label>
                             <label className="form-field form-field--full"><span className="form-label form-label--compact">Remarks (Optional)</span><input type="text" value={record.remarks || ''} onChange={event => updateRecord(record.id, { remarks: event.target.value } as Partial<T>)} disabled={readOnly} placeholder="e.g. 1st tranche, final payment..." className="form-control form-control--compact" /></label>
                         </div>
                         {!readOnly && <button type="button" onClick={() => removeRecord(record.id)} className="table-action table-action--delete" aria-label={`Remove ${noun} record`}><Trash2 className="btn-symbol" /></button>}

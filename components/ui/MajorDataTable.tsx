@@ -143,6 +143,7 @@ interface MajorTableToolbarProps extends React.HTMLAttributes<HTMLDivElement> {
     searchPlaceholder?: string;
     activeFilterCount?: number;
     onOpenFilters: () => void;
+    filterActions?: React.ReactNode;
     actions?: React.ReactNode;
 }
 
@@ -152,6 +153,7 @@ export const MajorTableToolbar: React.FC<MajorTableToolbarProps> = ({
     searchPlaceholder = 'Search records...',
     activeFilterCount = 0,
     onOpenFilters,
+    filterActions,
     actions,
     className,
     ...props
@@ -168,6 +170,7 @@ export const MajorTableToolbar: React.FC<MajorTableToolbarProps> = ({
                 <span>Filter</span>
                 {activeFilterCount > 0 && <span className="major-table-filter-button__count" aria-label={`${activeFilterCount} active column filters`}>{activeFilterCount}</span>}
             </button>
+            {filterActions}
         </div>
         {actions && <div className="major-table-toolbar__actions">{actions}</div>}
     </div>

@@ -12,7 +12,7 @@ interface Props {
 }
 
 export const ObligationListEditor: React.FC<Props> = ({ obligations = [], onChange, readOnly = false, hideHeaderAddButton = false, validateMonthChange }) => {
-    return <FinancialRecordListEditor records={obligations} onChange={onChange} noun="obligation" totalLabel="Total Obligated Amount" readOnly={readOnly} hideHeaderAddButton={hideHeaderAddButton} validateMonthChange={validateMonthChange} />;
+    return <FinancialRecordListEditor records={obligations} onChange={onChange} noun="obligation" totalLabel="Total Obligated Amount" readOnly={readOnly} hideHeaderAddButton={hideHeaderAddButton} validateMonthChange={validateMonthChange} allowNegative />;
 };
 
 // --- End of ObligationListEditor.tsx ---

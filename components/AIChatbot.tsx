@@ -8,7 +8,6 @@ import {
     filterYears, fundTypes, tiers, operatingUnits
 } from '../constants';
 import { useAuth } from '../contexts/AuthContext';
-import { getActivityDisplayTitle, getActivityIpoIds, getSubprojectIpoId } from '../lib/entityIdentity';
 
 interface AIChatbotProps {
     subprojects: Subproject[];
@@ -493,7 +492,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                  // Joint Query Logic: Check if this IPO has any matching subprojects
                  // If the IPO itself doesn't match the keywords (e.g. "Coffee"), check if it has a subproject that does.
                  // We use filteredSubprojects because it already contains subprojects matching the keywords (and other filters).
-                 const hasMatchingSubproject = filteredSubprojects.some(sp => Number(getSubprojectIpoId(sp, ipos)) === Number(i.id));
+                 const hasMatchingSubproject = filteredSubprojects.some(sp => sp.indigenousPeopleOrganization === i.name);
 
                  if (!selfMatch && !hasMatchingSubproject) return false;
             }
@@ -556,7 +555,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                 context.subprojects_list = filteredSubprojects.slice(0, maxItems).map(s => ({ name: s.name, budget: calculateBudget([s], 'sp'), status: s.status }));
             }
             if (q.includes('training')) {
-                context.trainings_list = filteredTrainings.slice(0, maxItems).map(t => ({ name: getActivityDisplayTitle(t, [], ipos), budget: calculateBudget([t], 'act'), status: t.status }));
+                context.trainings_list = filteredTrainings.slice(0, maxItems).map(t => ({ name: t.name, budget: calculateBudget([t], 'act'), status: t.status }));
             }
         }
 
@@ -795,10 +794,9 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
 
             const totalAllocation = Object.values(componentAllocation).reduce((a, b) => a + b, 0);
             
-            const iposWithTargetSP = new Set(fSubprojects.map(s => getSubprojectIpoId(s, ipos)).filter(Boolean)).size;
-            const iposWithTargetTrainings = new Set(fTrainings.flatMap(t => getActivityIpoIds(t, ipos))).size;
-            const targetSubprojectIpoIds = new Set(fSubprojects.map(s => getSubprojectIpoId(s, ipos)).filter(Boolean).map(Number));
-            const adsWithTargetSP = new Set(fIPOs.filter(i => targetSubprojectIpoIds.has(Number(i.id))).map(i => i.ancestralDomainNo)).size;
+            const iposWithTargetSP = new Set(fSubprojects.map(s => s.indigenousPeopleOrganization)).size;
+            const iposWithTargetTrainings = new Set(fTrainings.map(t => t.participatingIpos).flat()).size;
+            const adsWithTargetSP = new Set(fIPOs.filter(i => fSubprojects.some(s => s.indigenousPeopleOrganization === i.name)).map(i => i.ancestralDomainNo)).size;
 
             const isExceeded = ceiling > 0 && totalAllocation > ceiling;
 
@@ -965,10 +963,9 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
             const completedSPs = fSubprojects.filter(s => s.actualCompletionDate);
             const completedTrainings = fTrainings.filter(t => t.actualDate);
             
-            const completedSubprojectIpoIds = new Set(completedSPs.map(s => getSubprojectIpoId(s, ipos)).filter(Boolean).map(Number));
-            const iposWithCompletedSP = completedSubprojectIpoIds.size;
-            const iposWithCompletedTrainings = new Set(completedTrainings.flatMap(t => getActivityIpoIds(t, ipos))).size;
-            const adsWithCompletedSP = new Set(fIPOs.filter(i => completedSubprojectIpoIds.has(Number(i.id))).map(i => i.ancestralDomainNo)).size;
+            const iposWithCompletedSP = new Set(completedSPs.map(s => s.indigenousPeopleOrganization)).size;
+            const iposWithCompletedTrainings = new Set(completedTrainings.map(t => t.participatingIpos).flat()).size;
+            const adsWithCompletedSP = new Set(fIPOs.filter(i => completedSPs.some(s => s.indigenousPeopleOrganization === i.name)).map(i => i.ancestralDomainNo)).size;
 
             return (
                 <div className="ai-insight ai-insight--info">
@@ -982,7 +979,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                             </div>
                         </div>
                         <div className="ai-insight__metric"><div className="ai-insight__label">Total Disbursed</div><div className="ai-insight__value">₱{totalDisbursed.toLocaleString()}</div><div className="ai-insight__comparison is-success">
-                                {totalObligated > 0 ? ((totalDisbursed / totalObligated) * 100).toFixed(1) : 0}% vs Obligated
+                                {totalObligated !== 0 ? ((totalDisbursed / totalObligated) * 100).toFixed(1) : 0}% vs Obligated
                             </div>
                         </div>
                     </div>
@@ -1004,7 +1001,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         <div className="ai-insight__label">Obligation per Component</div>
                         {Object.entries(componentObligated).map(([name, amt]) => (
                             <div key={name} className="ai-insight__breakdown-row">
-                                <span>{name}</span><span><strong>₱{(amt / 1000000).toFixed(2)}M</strong><small>{totalObligated > 0 ? ((amt / totalObligated) * 100).toFixed(1) : 0}%</small></span>
+                                <span>{name}</span><span><strong>₱{(amt / 1000000).toFixed(2)}M</strong><small>{totalObligated !== 0 ? ((amt / totalObligated) * 100).toFixed(1) : 0}%</small></span>
                             </div>
                         ))}
                     </div>

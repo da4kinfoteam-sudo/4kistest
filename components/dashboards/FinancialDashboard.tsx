@@ -67,7 +67,7 @@ const compactMoney = (amount: number) => {
     return `₱${Math.ceil(amount).toLocaleString('en-PH')}`;
 };
 
-const rate = (value: number, base: number) => base > 0 ? (value / base) * 100 : 0;
+const rate = (value: number, base: number) => base !== 0 ? (value / base) * 100 : 0;
 const percent = (value: number) => `${value.toFixed(1)}%`;
 
 const adjustmentType = (item: FinancialLineItem): AdjustmentType | null => {
@@ -262,7 +262,7 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
             setPowerPointExportMessage('PowerPoint export library is still loading. Please try again in a moment.');
             return;
         }
-        if (totals.allocation === 0 && totals.obligation === 0 && totals.disbursement === 0 && totalAdjustments === 0) {
+        if (items.length === 0 && totalAdjustments === 0) {
             setPowerPointExportMessage('No financial dashboard data is available for the current filter selection.');
             return;
         }
@@ -324,7 +324,7 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
             <table className="fd-table fd-component-table"><thead><tr><th>Component</th><th>Performance</th><th>Allocation</th><th>Obligated</th><th>Disbursed</th><th>Obligation Rate</th><th>Disbursement Efficiency</th></tr></thead>
                 <tbody>{componentRows.map(row => { const max = Math.max(row.allocation, row.obligation, row.disbursement, 1); return <tr key={row.label}>
                     <td><span className="fd-component"><i style={{ background: COMPONENT_COLORS[row.label] }} /><strong>{row.label}</strong></span></td>
-                    <td><span className="fd-inline-bars"><i style={{ width: `${row.allocation / max * 100}%` }} /><i style={{ width: `${row.obligation / max * 100}%` }} /><i style={{ width: `${row.disbursement / max * 100}%` }} /></span></td>
+                    <td><span className="fd-inline-bars"><i style={{ width: `${Math.max(row.allocation, 0) / max * 100}%` }} /><i style={{ width: `${Math.max(row.obligation, 0) / max * 100}%` }} /><i style={{ width: `${Math.max(row.disbursement, 0) / max * 100}%` }} /></span></td>
                     <td>{money(row.allocation)}</td><td>{money(row.obligation)}</td><td>{money(row.disbursement)}</td>
                     <td className="fd-rate">{percent(rate(row.obligation, row.allocation))}</td><td className="fd-rate">{percent(rate(row.disbursement, row.obligation))}</td>
                 </tr>; })}</tbody>

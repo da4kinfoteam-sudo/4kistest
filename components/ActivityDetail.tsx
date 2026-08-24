@@ -46,7 +46,6 @@ import {
     getPersistedDriveUploadSection
 } from './ui/DriveMediaSections';
 import {
-    RecordBackLink,
     RecordDetailAside,
     RecordDetailGrid,
     RecordDetailMain,
@@ -58,13 +57,10 @@ import {
     formatRecordMetricCurrency,
     formatRecordMetricNumber
 } from './ui/RecordDetailLayout';
-import { getActivityDisplayTitle, resolveActivityIpos } from '../lib/entityIdentity';
 
 interface ActivityDetailProps {
     activity: Activity;
     ipos: IPO[];
-    onBack: () => void;
-    previousPageName: string;
     onUpdateActivity: (updatedActivity: Activity) => void;
     uacsCodes: { [key: string]: { [key: string]: { [key: string]: string } } };
     referenceActivities?: ReferenceActivity[];
@@ -119,7 +115,7 @@ const MonitoringPreviewLine: React.FC<{ label: string; value?: string | null }> 
     </div>
 );
 
-export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, onBack, previousPageName, onSelectIpo, onEdit, uacsCodes, referenceActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], onOpenMonitoringReport }) => {
+export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, onSelectIpo, onEdit, uacsCodes, referenceActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], onOpenMonitoringReport }) => {
     const { currentUser } = useAuth();
     const { canEdit } = useUserAccess('Activities');
     const { canEdit: canEditFinancial } = useUserAccess('Accomplishment - Financial');
@@ -214,7 +210,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
             moduleKey: 'activities',
             item: activity,
             itemId: activity.id,
-            itemName: getActivityDisplayTitle(activity, referenceActivities, ipos),
+            itemName: activity.name,
             status: activity.status,
             action: mode === 'details' ? 'editDetails' : mode === 'expenses' ? 'editBudget' : physicalAccomplishmentDecision.allowed ? 'editPhysicalAccomplishment' : 'editFinancialAccomplishment',
             entityType: 'activity',
@@ -245,10 +241,30 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
         !!monitoringReference?.id &&
         String(activity.reference_activity_id) === String(monitoringReference.id);
 
-    const participatingIpos = useMemo(
-        () => resolveActivityIpos(activity, ipos),
-        [activity, ipos]
-    );
+    const participatingIpos = useMemo(() => {
+        const byId = new Map<number, IPO>(ipos.map(ipo => [Number(ipo.id), ipo]));
+        const byName = new Map<string, IPO>(ipos.map(ipo => [ipo.name, ipo]));
+        const resolved: IPO[] = [];
+        const seen = new Set<number>();
+
+        (activity.participating_ipo_ids || []).forEach(id => {
+            const ipo = byId.get(Number(id));
+            if (ipo && !seen.has(ipo.id)) {
+                resolved.push(ipo);
+                seen.add(ipo.id);
+            }
+        });
+
+        (activity.participatingIpos || []).forEach(name => {
+            const ipo = byName.get(name);
+            if (ipo && !seen.has(ipo.id)) {
+                resolved.push(ipo);
+                seen.add(ipo.id);
+            }
+        });
+
+        return resolved;
+    }, [activity.participatingIpos, activity.participating_ipo_ids, ipos]);
 
     const loadDriveFiles = useCallback(async () => {
         if (!currentUser?.id || !activity.id) return;
@@ -417,10 +433,9 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                 />
             )}
 
-            <RecordBackLink onClick={onBack}>Back to {previousPageName}</RecordBackLink>
 
             <RecordHeader
-                title={getActivityDisplayTitle(activity, referenceActivities, ipos)}
+                title={activity.name}
                 metadata={
                     <>
                         <span className="ipo-detail-record-id">{activity.uid || `ACT-${activity.id}`}</span>
@@ -648,8 +663,8 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                                             <td className="data-table__primary">{exp.expenseParticular}</td>
                                                             <td>{formatMonthYear(obligationSummary.date)}</td>
                                                             <td>{formatMonthYear(disbursementSummary.date)}</td>
-                                                            <td className="data-table__numeric data-table__positive">
-                                                                {obligationSummary.amount > 0 ? formatCurrency(obligationSummary.amount) : '-'}
+                                                            <td className={`data-table__numeric ${obligationSummary.amount < 0 ? 'data-table__adjustment' : 'data-table__positive'}`}>
+                                                                {(exp.obligations?.length || 0) > 0 || obligationSummary.amount !== 0 ? formatCurrency(obligationSummary.amount) : '-'}
                                                             </td>
                                                             <td className="data-table__numeric data-table__positive">
                                                                 {disbursementSummary.amount > 0 ? formatCurrency(disbursementSummary.amount) : '-'}

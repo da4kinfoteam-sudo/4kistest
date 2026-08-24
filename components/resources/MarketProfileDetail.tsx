@@ -9,7 +9,6 @@ import { DataTablePagination } from '../ui/enterprise';
 interface MarketProfileDetailProps {
     partner: MarketingPartner;
     ipos: IPO[];
-    onBack: () => void;
     onEditDetails: () => void;
     onAddLinkage: () => void;
     onSelectLinkage: (linkageKey: string | number) => void;
@@ -18,7 +17,7 @@ interface MarketProfileDetailProps {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos, onBack, onEditDetails, onAddLinkage, onSelectLinkage, commodityCategories }) => {
+const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos, onEditDetails, onAddLinkage, onSelectLinkage, commodityCategories }) => {
     const { canEdit } = useUserAccess('Marketing Database');
     
     // Filter and Sort IPOs by Region Proximity (Potential)
@@ -96,9 +95,6 @@ const MarketProfileDetail: React.FC<MarketProfileDetailProps> = ({ partner, ipos
         <div className="detail-page animate-fadeIn">
             <header className="detail-header">
                 <div className="detail-heading">
-                    <button onClick={onBack} className="btn btn-secondary btn-icon" aria-label="Back to marketing partners">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                    </button>
                     <div>
                         <h1 className="detail-title">{partner.companyName}</h1>
                         <p className="detail-meta">Marketing Partner Profile | {partner.uid}</p>

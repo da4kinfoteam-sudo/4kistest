@@ -224,20 +224,31 @@ export async function fetchIpoLinkedDcfRecords(ipo: IPO, currentUser?: User | nu
   );
   const linkedTrainings = linkedActivities.filter(activity => activity.type === 'Training');
 
-  const linkedActivityIds = new Set(linkedActivities.map(activity => Number(activity.id)));
-  const reports = (await fetchQuery(
+  // Report visibility follows the selected IPO. The submitting activity's OU must
+  // not hide a report from users who can already access this IPO.
+  const reports = await fetchQuery(
     supabase
       .from('activity_monitoring_reports')
       .select('*')
       .eq('ipo_id', ipoId)
       .is('deleted_at', null)
       .order('updated_at', { ascending: false })
-  ) as ActivityMonitoringReport[]).filter(report => linkedActivityIds.has(Number(report.activity_id)));
+  ) as ActivityMonitoringReport[];
+  const reportActivityIds = toNumericIds(reports.map(report => report.activity_id));
+  const reportActivities = reportActivityIds.length > 0
+    ? await fetchQuery(
+      supabase
+        .from('activities')
+        .select('*')
+        .in('id', reportActivityIds)
+        .order('id', { ascending: true })
+    ) as Activity[]
+    : [];
 
   return {
     subprojects: linkedSubprojects,
     trainings: linkedTrainings,
-    monitoringActivities: linkedActivities,
+    monitoringActivities: mergePreferFirstById(linkedActivities, reportActivities),
     monitoringReports: reports,
     monitoringActions: await fetchActionsForReports(reports),
   };
