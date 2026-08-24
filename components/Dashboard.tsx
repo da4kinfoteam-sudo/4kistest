@@ -729,10 +729,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             .slice(0, 5);
     }, [activities]);
 
-    const canManageDeadlines = currentUser?.role !== 'Guest'
-        && (hasAccess('System Management', 'view')
-            || currentUser?.role === 'Administrator'
-            || currentUser?.role === 'Super Admin');
+    const canManageDeadlines = hasAccess('Settings - System', 'manage_settings');
     
     const filteredIposForMap = mapFilters.ipos ? filteredData.ipos : [];
     const filteredSubprojectsForMap = mapFilters.subprojects ? filteredData.subprojects : [];

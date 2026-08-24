@@ -16,6 +16,8 @@
     "test:drive-folder-identity": "node --experimental-strip-types scripts/run-drive-folder-identity-check.mjs",
     "test:signed-obligations": "node --experimental-strip-types scripts/run-signed-obligation-check.mjs",
     "test:identity": "node scripts/verify-identity-helpers.mjs",
+    "test:access-control": "node --experimental-strip-types scripts/run-central-access-check.mjs",
+    "test:access-control:live": "node scripts/verify-live-central-authorization.mjs",
     "audit:ui": "node scripts/ui-consistency-audit.mjs",
     "audit:legacy-ui": "node scripts/legacy-ui-inventory.mjs"
   },

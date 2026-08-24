@@ -379,9 +379,9 @@ const IpoSectionModal: React.FC<{
 };
 
 const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, monitoringActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], linkedDcfLoading = false, linkedDcfError = null, marketingPartners, onUpdateIpo, onSelectSubproject, onSelectActivity, onOpenMonitoringReport, onSelectLodYear, onSelectMarketingPartner, particularTypes, commodityCategories }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { canEdit } = useUserAccess('IPO Management');
-    const canDeleteDriveFiles = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
+    const canDeleteDriveFiles = hasAccess('IPO Management', 'delete_files');
     const [isEditing, setIsEditing] = useState(false);
     const [editedIpo, setEditedIpo] = useState<IPO>(ipo);
     const [baseRegion, setBaseRegion] = useState(''); // Track base region from dropdown

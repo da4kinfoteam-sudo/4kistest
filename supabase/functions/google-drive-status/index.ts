@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    await requireUser(body.user_id);
+    await requireUser(request, body.user_id);
     return jsonResponse(await getConnectionStatus());
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : "Unable to read Google Drive status.", 400);

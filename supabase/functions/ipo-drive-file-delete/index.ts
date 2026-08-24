@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const user = await requireAdmin(body.user_id);
+    const user = await requireAdmin(request, body.user_id, "IPO Management");
     const fileId = Number(body.file_row_id);
     if (!Number.isFinite(fileId)) throw new Error("A valid file is required.");
     return jsonResponse({ file: await deleteIpoFile(fileId, user) });

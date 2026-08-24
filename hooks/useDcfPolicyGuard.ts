@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDcfPolicy } from '../contexts/DcfPolicyContext';
 import { useLogAction } from './useLogAction';
+import { supabase } from '../supabaseClient';
 import {
     canDeleteDcfItem,
     canEditDcfSection,
@@ -118,7 +119,7 @@ export const formatPolicyMonthLabel = (month?: string | null): string => {
 };
 
 export const useDcfPolicyGuard = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { policy, serverDate, loading, error } = useDcfPolicy();
     const { logAction } = useLogAction();
 
@@ -139,15 +140,23 @@ export const useDcfPolicyGuard = () => {
             return { allowed: false, code: 'blocked_by_status', message: 'DCF editing policy is still loading.' };
         }
         const resolvedStatus = status || getDcfItemPolicyStatus(moduleKey, item || {});
+        const moduleName = moduleKey === 'subprojects' ? 'Subprojects' : moduleKey === 'activities' ? 'Activities' : 'Program Management';
+        const centralizedAccess = action === 'editPhysicalAccomplishment'
+            ? hasAccess('Accomplishment - Physical', 'edit_physical_actual')
+            : action === 'editFinancialAccomplishment'
+                ? hasAccess('Accomplishment - Financial', 'edit_financial_actual')
+                : action === 'delete'
+                    ? hasAccess(moduleName, 'delete')
+                    : hasAccess(moduleName, 'edit');
         return canEditDcfSection({
             user: currentUser,
-            hasModuleAccess,
+            hasModuleAccess: centralizedAccess,
             policy,
             moduleKey,
             status: resolvedStatus,
             action,
         });
-    }, [currentUser, loading, policy]);
+    }, [currentUser, hasAccess, loading, policy]);
 
     const getDeleteDecision = useCallback(({
         moduleKey,
@@ -164,16 +173,17 @@ export const useDcfPolicyGuard = () => {
             return { allowed: false, code: 'blocked_by_status', message: 'DCF editing policy is still loading.' };
         }
         const resolvedStatus = status || getDcfItemPolicyStatus(moduleKey, item || {});
+        const moduleName = moduleKey === 'subprojects' ? 'Subprojects' : moduleKey === 'activities' ? 'Activities' : 'Program Management';
         return canDeleteDcfItem({
             user: currentUser,
-            hasModuleAccess,
+            hasModuleAccess: hasAccess(moduleName, 'delete'),
             policy,
             moduleKey,
             status: resolvedStatus,
         });
-    }, [currentUser, loading, policy]);
+    }, [currentUser, hasAccess, loading, policy]);
 
-    const getMonthDecision = useCallback((month?: string | null): DcfPolicyDecision => {
+    const getMonthDecision = useCallback((month?: string | null, accomplishment: 'physical' | 'financial' = 'financial'): DcfPolicyDecision => {
         const normalizedMonth = normalizePolicyMonth(month);
         if (!normalizedMonth) return ALLOWED_DECISION;
         if (loading) {
@@ -184,8 +194,9 @@ export const useDcfPolicyGuard = () => {
             policy,
             targetMonth: normalizedMonth,
             serverDate,
+            canOverride: hasAccess(accomplishment === 'physical' ? 'Accomplishment - Physical' : 'Accomplishment - Financial', 'override_period'),
         });
-    }, [currentUser, loading, policy, serverDate]);
+    }, [currentUser, hasAccess, loading, policy, serverDate]);
 
     const getCurrentAccomplishmentMonthLabel = useCallback((): string => (
         formatPolicyMonthLabel(serverDate)
@@ -233,6 +244,23 @@ export const useDcfPolicyGuard = () => {
                 userRole: currentUser?.role,
             })
         );
+        if (!supabase) throw new Error('Supabase is not configured for override auditing.');
+        const auditModule = context.action === 'editPhysicalAccomplishment'
+            ? 'Accomplishment - Physical'
+            : 'Accomplishment - Financial';
+        const { error: auditError } = await supabase.rpc('log_authorization_event', {
+            p_module: auditModule,
+            p_action: 'override_period',
+            p_target_type: context.entityType || context.moduleKey,
+            p_target_id: context.itemId !== undefined ? String(context.itemId) : null,
+            p_operating_unit: context.item?.operatingUnit || null,
+            p_before_state: null,
+            p_after_state: { month: context.month, serverDate },
+            p_reason: reason,
+            p_outcome: 'allowed',
+            p_metadata: { source: 'dcf_period_override', policyDecision: decision.code },
+        });
+        if (auditError) throw auditError;
     }, [currentUser?.role, logAction, serverDate]);
 
     const ensureDecisionAllowed = useCallback(async (decision: DcfPolicyDecision, context: DcfPolicyGuardContext): Promise<boolean> => {

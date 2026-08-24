@@ -15,6 +15,7 @@ import { Search, X, Check, Download, FileSpreadsheet, Plus, Upload } from 'lucid
 import { useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader } from '../ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from '../ui/MajorDataTable';
+import { transitionWorkflow } from '../../lib/workflowService';
 
 declare const XLSX: any;
 
@@ -72,7 +73,8 @@ interface OfficeRequirementsTabProps {
 
 export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
     const { locale } = useAuth(); // Assume it exists or just use default
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
+    const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
     const tableStoragePrefix = `programManagement_office_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management');
@@ -325,8 +327,6 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
             return;
         }
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
-
         const submissionData: any = {
             ...formData,
             numberOfUnits: Number(formData.numberOfUnits),
@@ -338,7 +338,8 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
             actualDisbursementAmount: 0,
             encodedBy: formData.encodedBy || currentUser?.fullName || 'System',
             status: formData.status || 'Proposed',
-            workflow_status,
+            workflow_status: 'DRAFT',
+            created_by_user_id: currentUser?.id || null,
             updated_at: new Date().toISOString()
         };
 
@@ -357,7 +358,10 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
                 return; 
             }
             if (data) {
-                setItems(prev => [data, ...prev]);
+                const workflowResult = submitIntent === 'submit'
+                    ? await transitionWorkflow('office_requirements', data.id, 'submit')
+                    : null;
+                setItems(prev => [workflowResult ? { ...data, ...workflowResult } : data, ...prev]);
                 logAction('Created Office Requirement', data.particulars || data.equipment || data.uid, undefined, 'Office Requirement', String(data.id));
             }
         } else {
@@ -466,7 +470,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
 
         if (!window.confirm(`Are you sure you want to clone ${itemsToClone.length} office requirements? This will create new entries with the same targets but reset accomplishments.`)) return;
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+        const workflow_status = 'DRAFT';
         const currentTimestamp = new Date().toISOString();
         const newItemsPayload = itemsToClone.map((item, index) => {
             const { id, uid, created_at, updated_at, obligations, physical_accomplishment_submitted_at, ...rest } = item;
@@ -490,6 +494,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
                 ...resetActuals,
                 uid: newUid,
                 workflow_status: item_workflow_status,
+                created_by_user_id: currentUser?.id || null,
                 encodedBy: currentUser?.fullName || 'System Clone',
                 created_at: currentTimestamp,
                 updated_at: currentTimestamp,
@@ -535,24 +540,20 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
         return <span className={classes}>{status || 'DRAFT'}</span>;
     };
 
-    const canApprove = (role?: string) => {
-        return ['Super Admin', 'Administrator', 'Focal - User', 'Management'].includes(role || '');
-    };
+    const canApprove = () => hasAccess('Program Management', 'approve');
+    const canSubmitWorkflow = (item: OfficeRequirement) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+    const handleSubmitWorkflow = async (item: OfficeRequirement, event: React.MouseEvent) => { event.stopPropagation(); try { const result = await transitionWorkflow('office_requirements', item.id, item.workflow_status === 'REJECTED' ? 'resubmit' : 'submit'); setItems(previous => previous.map(row => row.id === item.id ? { ...row, ...result } : row)); } catch (error: any) { alert('Failed to submit: ' + (error?.message || 'Unknown error')); } };
 
     const handleApprove = async (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!window.confirm('Are you sure you want to approve this requirement?')) return;
         
-        if (supabase) {
-            const { error } = await supabase.from('office_requirements').update({ workflow_status: 'APPROVED' }).eq('id', id);
-            if (error) {
-                alert('Failed to approve: ' + error.message);
-            } else {
-                setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-                logAction('Approved Office Requirement', String(id), undefined, 'Office Requirement', String(id));
-            }
-        } else {
+        try {
+            await transitionWorkflow('office_requirements', id, 'approve');
             setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
+            logAction('Approved Office Requirement', String(id), undefined, 'Office Requirement', String(id));
+        } catch (error: any) {
+            alert('Failed to approve: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -561,18 +562,11 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
         const reason = window.prompt('Please provide a reason for rejection:');
         if (reason === null) return;
 
-        if (supabase) {
-            const { error } = await supabase.from('office_requirements').update({ 
-                workflow_status: 'REJECTED',
-                remarks: reason ? `REJECTED: ${reason}` : undefined
-            }).eq('id', id);
-            if (error) {
-                alert('Failed to reject: ' + error.message);
-            } else {
-                setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-            }
-        } else {
-            setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
+        try {
+            await transitionWorkflow('office_requirements', id, 'reject', reason);
+            setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED' } : s));
+        } catch (error: any) {
+            alert('Failed to reject: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -625,7 +619,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
                 const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]) as any[];
                 
                 const currentTimestamp = new Date().toISOString();
-                const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+                const workflow_status = 'DRAFT';
 
                 const newItems = jsonData.map((row: any, index: number) => {
                     const fundYear = Number(row.fundYear) || new Date().getFullYear();
@@ -644,6 +638,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
                         encodedBy: currentUser?.fullName || 'Upload',
                         status: row.status || 'Proposed',
                         workflow_status,
+                        created_by_user_id: currentUser?.id || null,
                         created_at: currentTimestamp,
                         updated_at: currentTimestamp
                     });
@@ -881,11 +876,13 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
                         >
                             Cancel
                         </button>
+                        <button type="submit" onClick={() => setSubmitIntent('draft')} className="btn btn-secondary">Save Draft</button>
                         <button 
                             type="submit" 
+                            onClick={() => setSubmitIntent('submit')}
                             className="btn btn-primary"
                         >
-                            Save
+                            Submit for Review
                         </button>
                     </div>
                 </form>
@@ -927,7 +924,7 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
             </tr></thead><tbody>
                 {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>
                     {isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} disabled={selectionIntent === 'delete' && !getDeleteDecision({ moduleKey: 'office_requirements', item, hasModuleAccess: canEdit }).allowed} /></td>}
-                    <td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={getStatusBadge(item.status)}>{item.status}</span></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.equipment} /></td><td className="data-table__cell--numeric">{item.numberOfUnits}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td className="data-table__cell--numeric">{formatCurrency(getOfficeBudget(item))}</td><td>{getWorkflowStatusBadge(item.workflow_status)}</td>
+                    <td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={getStatusBadge(item.status)}>{item.status}</span></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.equipment} /></td><td className="data-table__cell--numeric">{item.numberOfUnits}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td className="data-table__cell--numeric">{formatCurrency(getOfficeBudget(item))}</td><td><div className="data-table__actions">{getWorkflowStatusBadge(item.workflow_status)}{canSubmitWorkflow(item) && <button onClick={event => void handleSubmitWorkflow(item, event)} className="table-action table-action--edit">Submit</button>}{item.workflow_status === 'PENDING' && canApprove() && <><button onClick={event => void handleApprove(item.id, event)} className="action-mini action-mini--approve" aria-label={`Approve ${item.uid}`}><Check /></button><button onClick={event => void handleReject(item.id, event)} className="action-mini action-mini--reject" aria-label={`Reject ${item.uid}`}><X /></button></>}</div></td>
                 </tr>)}
                 {paginatedData.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No office requirements match the current filters.</td></tr>}
             </tbody></table></div>

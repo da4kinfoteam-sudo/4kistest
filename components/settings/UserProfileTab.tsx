@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { User } from '../../constants';
 import { supabase } from '../../supabaseClient';
-import { User as UserIcon, ShieldCheck, Mail, Key, Eye, EyeOff, Save, Monitor, Moon, Sun } from 'lucide-react';
+import { User as UserIcon, ShieldCheck, Mail, Key, Save, Monitor, Moon, Sun } from 'lucide-react';
 import { ThemePreference } from '../../lib/theme';
 
 interface UserProfileTabProps {
@@ -15,10 +15,10 @@ interface UserProfileTabProps {
 const commonInputClasses = "form-control";
 
 const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, themePreference, onThemePreferenceChange }) => {
-    const { currentUser, setUsersList, login } = useAuth();
+    const { currentUser, refreshUser } = useAuth();
     const [profileData, setProfileData] = useState<User | null>(null);
-    const [showPassword, setShowPassword] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [resetSending, setResetSending] = useState(false);
 
     useEffect(() => {
         if (currentUser) {
@@ -42,9 +42,7 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, themePrefer
                     .from('users')
                     .update({
                         username: profileData.username,
-                        fullName: profileData.fullName,
-                        email: profileData.email,
-                        password: profileData.password
+                        fullName: profileData.fullName
                     })
                     .eq('id', profileData.id);
 
@@ -62,10 +60,20 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, themePrefer
             }
         }
 
-        setUsersList(prev => prev.map(u => u.id === profileData.id ? profileData : u));
-        login(profileData);
+        await refreshUser();
         setSaving(false);
-        alert("Success: Your profile and account credentials have been updated.");
+        alert("Success: Your profile has been updated.");
+    };
+
+    const handleSendPasswordReset = async () => {
+        if (!supabase || !currentUser?.email) return;
+        setResetSending(true);
+        const { error } = await supabase.auth.resetPasswordForEmail(currentUser.email, {
+            redirectTo: `${window.location.origin}/#/settings?tab=profile`,
+        });
+        setResetSending(false);
+        if (error) alert(`Unable to send the secure reset email: ${error.message}`);
+        else alert('A secure password reset link was sent to your account email.');
     };
 
     if (!profileData) return null;
@@ -99,8 +107,9 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, themePrefer
                                 <label className="form-label">Email address</label>
                                 <div className="profile-settings__input-wrap">
                                     <Mail className="profile-settings__input-adornment profile-settings__input-adornment--icon" />
-                                    <input type="email" name="email" value={profileData.email} onChange={handleProfileChange} className={`${commonInputClasses} pl-10`} />
+                                    <input type="email" name="email" value={profileData.email} readOnly className={`${commonInputClasses} pl-10`} aria-describedby="profile-email-help" />
                                 </div>
+                                <p id="profile-email-help" className="form-help">Email changes require an authorized account administrator so the Supabase Auth identity remains synchronized.</p>
                             </div>
                         </div>
                     </section>
@@ -113,31 +122,10 @@ const UserProfileTab: React.FC<UserProfileTabProps> = ({ isDarkMode, themePrefer
                             <h3>Account security</h3>
                         </div>
                         
-                        <p className="settings-copy">Change your system password. Changes take effect immediately upon saving.</p>
-                        
-                        <div className="space-y-4">
-                            <div>
-                                <label className="form-label">Update password</label>
-                                <div className="relative">
-                                    <input 
-                                        type={showPassword ? "text" : "password"} 
-                                        name="password" 
-                                        value={profileData.password || ''} 
-                                        onChange={handleProfileChange} 
-                                        className={commonInputClasses} 
-                                        placeholder="Enter new password"
-                                    />
-                                    <button 
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="profile-settings__password-toggle"
-                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                    >
-                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <p className="settings-copy">Passwords are managed by Supabase Auth and are never stored in the application profile.</p>
+                        <button type="button" className="btn btn-secondary" onClick={handleSendPasswordReset} disabled={resetSending}>
+                            <Key className="h-4 w-4" /> {resetSending ? 'Sending...' : 'Send secure password reset'}
+                        </button>
                     </section>
                 </div>
 

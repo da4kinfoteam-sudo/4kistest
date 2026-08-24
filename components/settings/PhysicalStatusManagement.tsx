@@ -1,11 +1,12 @@
 // Author: 4K
 import React, { useState, useMemo } from 'react';
-import { 
-    Subproject, Activity, OfficeRequirement, StaffingRequirement
+import {
+    Subproject, Activity, OfficeRequirement, StaffingRequirement, OtherProgramExpense
 } from '../../constants';
-import { supabase } from '../../supabaseClient';
 import { useLogAction } from '../../hooks/useLogAction';
 import { ConfirmDialog } from '../ui/enterprise';
+import { transitionItemStatus, type WorkflowEntityType } from '../../lib/workflowService';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PhysicalStatusManagementProps {
     subprojects: Subproject[];
@@ -16,6 +17,8 @@ interface PhysicalStatusManagementProps {
     setOfficeReqs: React.Dispatch<React.SetStateAction<OfficeRequirement[]>>;
     staffingReqs: StaffingRequirement[];
     setStaffingReqs: React.Dispatch<React.SetStateAction<StaffingRequirement[]>>;
+    otherProgramExpenses: OtherProgramExpense[];
+    setOtherProgramExpenses: React.Dispatch<React.SetStateAction<OtherProgramExpense[]>>;
     onSelectSubproject: (project: Subproject) => void;
     onSelectActivity: (activity: Activity) => void;
 }
@@ -64,13 +67,15 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
     activities, setActivities,
     officeReqs, setOfficeReqs,
     staffingReqs, setStaffingReqs,
+    otherProgramExpenses, setOtherProgramExpenses,
     onSelectSubproject,
     onSelectActivity
 }) => {
     const { logAction } = useLogAction();
+    const { currentUser } = useAuth();
 
     // UI State
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Subprojects', 'Activities & Trainings', 'Staffing Requirements', 'Office Requirements']));
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Subprojects', 'Activities & Trainings', 'Staffing Requirements', 'Office Requirements', 'Other Program Expenses']));
     const [isSaving, setIsSaving] = useState(false);
     const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
     const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilters>>({});
@@ -93,8 +98,9 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
         (activities || []).forEach(x => add(x.fundingYear));
         (officeReqs || []).forEach(x => add(x.fundYear));
         (staffingReqs || []).forEach(x => add(x.fundYear));
+        (otherProgramExpenses || []).forEach(x => add(x.fundYear));
         return Array.from(years).sort().reverse();
-    }, [subprojects, activities, officeReqs, staffingReqs]);
+    }, [subprojects, activities, officeReqs, staffingReqs, otherProgramExpenses]);
 
     const toggleGroup = (group: string) => {
         setExpandedGroups(prev => {
@@ -195,23 +201,15 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
     const persistChanges = async (changes: PendingChange[]) => {
         setIsSaving(true);
         try {
-            if (supabase) {
-                const results = await Promise.all(changes.map(change =>
-                    supabase
-                        .from(change.table)
-                        .update({ [change.field]: change.value })
-                        .eq('id', change.id)
-                ));
-
-                const failed = results.find(result => result.error);
-                if (failed?.error) {
-                    throw failed.error;
-                }
-                
-                logAction('DCF Management', `Batch updated ${changes.length} physical status record(s).`);
-            } else {
-                throw new Error('Supabase client is not available.');
+            const reasonedChanges = changes.filter(change => ['Cancelled', 'Unfilled'].includes(change.value));
+            let reason: string | undefined;
+            if (reasonedChanges.length && currentUser?.role !== 'Super Admin') {
+                const input = window.prompt(`Reason required for ${reasonedChanges.length} Cancelled/Unfilled status change(s):`);
+                if (!input?.trim()) throw new Error('A reason is required for Cancelled or Unfilled status changes.');
+                reason = input.trim();
             }
+            await Promise.all(changes.map(change => transitionItemStatus(change.table as WorkflowEntityType, change.id, change.value, ['Cancelled', 'Unfilled'].includes(change.value) ? reason : undefined)));
+            logAction('DCF Management', `Batch updated ${changes.length} physical status record(s) through centralized status governance.`);
 
             setPendingChanges({});
             setNotice({ type: 'success', message: `${changes.length} change(s) saved successfully.` });
@@ -229,7 +227,8 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
             'subprojects': setSubprojects as any,
             'activities': setActivities as any,
             'staffing_requirements': setStaffingReqs as any,
-            'office_requirements': setOfficeReqs as any
+            'office_requirements': setOfficeReqs as any,
+            'other_program_expenses': setOtherProgramExpenses as any,
         };
 
         const changes = Object.values(pendingChanges) as PendingChange[];
@@ -521,6 +520,13 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
                     table="office_requirements" 
                     setter={setOfficeReqs as any} 
                     displayField="equipment" 
+                />
+                <RenderGroup
+                    title="Other Program Expenses"
+                    items={otherProgramExpenses}
+                    table="other_program_expenses"
+                    setter={setOtherProgramExpenses as any}
+                    displayField="particulars"
                 />
             </div>
 

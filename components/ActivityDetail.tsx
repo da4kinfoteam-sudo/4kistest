@@ -117,13 +117,13 @@ const MonitoringPreviewLine: React.FC<{ label: string; value?: string | null }> 
 );
 
 export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, onSelectIpo, onEdit, uacsCodes, referenceActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], onOpenMonitoringReport }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { canEdit } = useUserAccess('Activities');
     const { canEdit: canEditFinancial } = useUserAccess('Accomplishment - Financial');
     const { canEdit: canEditPhysical } = useUserAccess('Accomplishment - Physical');
     const { getStatusDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
 
-    const canDeleteDriveFiles = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
+    const canDeleteDriveFiles = hasAccess('Activities', 'delete_files');
     const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
     const [driveFiles, setDriveFiles] = useState<ActivityDriveFile[]>([]);
     const [isDriveLoading, setIsDriveLoading] = useState(true);

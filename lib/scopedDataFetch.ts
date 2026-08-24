@@ -40,6 +40,9 @@ export interface DataScope {
   tier: string;
   fundType: string;
   canViewAllOus: boolean;
+  userOperatingUnit?: string;
+  moduleScopes?: Record<string, 'All' | 'Own OU'>;
+  policyVersion?: number;
   requestedBy?: string | number | null;
 }
 
@@ -114,8 +117,22 @@ export const getDataScopeKey = (scope: DataScope) => [
   scope.tier || 'All',
   scope.fundType || 'All',
   scope.canViewAllOus ? 'all-ou' : 'own-ou',
+  scope.userOperatingUnit || 'no-user-ou',
+  Object.entries(scope.moduleScopes || {}).sort(([a], [b]) => a.localeCompare(b)).map(([module, value]) => `${module}:${value}`).join(','),
+  scope.policyVersion || 0,
   scope.requestedBy || 'anonymous',
 ].join('|');
+
+const forModule = (scope: DataScope, module: string): DataScope => {
+  const configuredScope = scope.moduleScopes?.[module];
+  const canViewAllOus = configuredScope ? configuredScope === 'All' : scope.canViewAllOus;
+  return normalizeDataScope({
+    ...scope,
+    canViewAllOus,
+    operatingUnit: canViewAllOus ? scope.operatingUnit : (scope.userOperatingUnit || scope.operatingUnit),
+    operatingUnits: canViewAllOus ? scope.operatingUnits : (scope.userOperatingUnit ? [scope.userOperatingUnit] : scope.operatingUnits),
+  }, scope.userOperatingUnit);
+};
 
 const isAll = (value: unknown) => value === undefined || value === null || value === '' || value === 'All';
 
@@ -589,13 +606,13 @@ export async function loadScopedAppData(scope: DataScope): Promise<ScopedAppData
     gidaAreas,
     elcacAreas,
   ] = await Promise.all([
-    fetchScopedBusinessTable('subprojects', normalizedScope, 'fundingYear'),
-    fetchScopedIpos(normalizedScope),
-    fetchScopedBusinessTable('activities', normalizedScope, 'fundingYear'),
-    fetchScopedMarketingPartners(normalizedScope),
-    fetchScopedBusinessTable('office_requirements', normalizedScope, 'fundYear'),
-    fetchScopedBusinessTable('staffing_requirements', normalizedScope, 'fundYear'),
-    fetchScopedBusinessTable('other_program_expenses', normalizedScope, 'fundYear'),
+    fetchScopedBusinessTable('subprojects', forModule(normalizedScope, 'Subprojects'), 'fundingYear'),
+    fetchScopedIpos(forModule(normalizedScope, 'IPO Management')),
+    fetchScopedBusinessTable('activities', forModule(normalizedScope, 'Activities'), 'fundingYear'),
+    fetchScopedMarketingPartners(forModule(normalizedScope, 'Marketing Database')),
+    fetchScopedBusinessTable('office_requirements', forModule(normalizedScope, 'Program Management'), 'fundYear'),
+    fetchScopedBusinessTable('staffing_requirements', forModule(normalizedScope, 'Program Management'), 'fundYear'),
+    fetchScopedBusinessTable('other_program_expenses', forModule(normalizedScope, 'Program Management'), 'fundYear'),
     fetchReferenceTable('reference_uacs'),
     fetchReferenceTable('reference_particulars'),
     fetchReferenceTable('ref_commodities'),
@@ -606,7 +623,7 @@ export async function loadScopedAppData(scope: DataScope): Promise<ScopedAppData
     fetchReferenceTable('ref_trainings'),
     fetchReferenceTable('reference_activities'),
     fetchReferenceTable('deadlines', 'date'),
-    fetchBudgetCeilings(normalizedScope),
+    fetchBudgetCeilings(forModule(normalizedScope, 'Accomplishment - Financial')),
     fetchReferenceTable('gida_areas'),
     fetchReferenceTable('elcac_areas'),
   ]);

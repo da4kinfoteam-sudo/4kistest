@@ -22,6 +22,7 @@ import {
  type FinancialObligationEntityType,
 } from '../../lib/financialObligationSync';
 import { getActivityDisplayTitle } from '../../lib/entityIdentity';
+import { beginWorkflowRevision, type WorkflowEntityType } from '../../lib/workflowService';
 
 interface Props {
  subprojects: Subproject[];
@@ -309,8 +310,8 @@ const FinancialAccomplishment: React.FC<Props> = ({
  return false;
  }
  if (!(await ensureFinancialItemAllowed(item))) return false;
- const monthDecision = getMonthDecision(month);
- if (isMonthSelectionAllowed(monthDecision)) {
+ const monthDecision = getMonthDecision(month, 'financial');
+ if (isMonthSelectionAllowed(monthDecision) || await ensureDecisionAllowed(monthDecision, { moduleKey, item: getPolicySubjectForFinancialItem(item), itemId: item.sourceId, itemName: item.sourceName, month, action: 'editFinancialAccomplishment', entityType: item.sourceType.toLowerCase() })) {
  setMonthLockMessage('');
  return true;
  }
@@ -1179,9 +1180,15 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const sync = options.sync ?? 'both';
  const submittedAt = new Date().toISOString();
  let commitSourceState = () => {};
+ const beginTargetRevision = async (entityType: WorkflowEntityType, source: { id: number; workflow_status?: string }) => {
+   if (includeTargets && item.status === 'Proposed' && source.workflow_status === 'APPROVED') {
+     await beginWorkflowRevision(entityType, source.id, 'Financial target edit');
+   }
+ };
  if (item.sourceType === 'Subproject') {
  const sp = subprojects.find(s => s.id === item.sourceId);
  if (!sp) throw new Error("Subproject not found");
+ await beginTargetRevision('subprojects', sp);
 
  const updatedDetails = sp.details.map(d => {
  if (d.id === item.detailId) {
@@ -1215,6 +1222,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  } else if (item.sourceType === 'Activity') {
  const act = activities.find(a => a.id === item.sourceId);
  if (!act) throw new Error("Activity not found");
+ await beginTargetRevision('activities', act);
 
  const updatedExpenses = act.expenses.map(e => {
  if (e.id === item.detailId) {
@@ -1249,6 +1257,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  } else if (item.sourceType === 'Staffing') {
  const s = staffingReqs.find(req => req.id === item.sourceId);
  if (!s) throw new Error("Staffing Requirement not found");
+ await beginTargetRevision('staffing_requirements', s);
 
  let payload: any = {};
  let updatedExpenses = normalizeStaffingExpenses(s.expenses || []);
@@ -1340,6 +1349,9 @@ const FinancialAccomplishment: React.FC<Props> = ({
  commitSourceState = () => setStaffingReqs(prev => prev.map(req => req.id === item.sourceId ? { ...req, ...payload } : req));
 
  } else if (item.sourceType === 'Other') {
+ const source = otherProgramExpenses.find(expense => expense.id === item.sourceId);
+ if (!source) throw new Error('Other Program Expense not found');
+ await beginTargetRevision('other_program_expenses', source);
  const disbursementSummary = summarizeDisbursements(item.disbursements || [], item.fundYear);
  const payload: any = {
  actualObligationDate: item.actualObligationMonth,
@@ -1369,6 +1381,9 @@ const FinancialAccomplishment: React.FC<Props> = ({
  disbursements: item.disbursements || [],
  } : o));
  } else if (item.sourceType === 'Office') {
+ const source = officeReqs.find(requirement => requirement.id === item.sourceId);
+ if (!source) throw new Error('Office Requirement not found');
+ await beginTargetRevision('office_requirements', source);
  const payload: any = {
  actualObligationDate: item.actualObligationMonth,
  actualObligationAmount: item.actualObligationAmount,
@@ -1583,7 +1598,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const changedMonths = getChangedRecordMonths(normalizedRecords, currentRecords);
  for (const month of changedMonths) {
  if (!(await validateFinancialActualMonth(item, month))) {
- setActualsDialogError(getMonthLockMessage(getMonthDecision(month)) || 'The selected month is locked.');
+ setActualsDialogError(getMonthLockMessage(getMonthDecision(month, 'financial')) || 'The selected month is locked.');
  return;
  }
  }

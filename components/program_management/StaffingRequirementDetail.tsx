@@ -24,6 +24,7 @@ import {
     summarizeBudgetAdjustments,
     writeBudgetItemAdjustmentHistory
 } from '../../lib/budgetLineAdjustments';
+import { beginWorkflowRevision, transitionItemStatus } from '../../lib/workflowService';
 import { createStaffingExpenseId, normalizeStaffingExpenses } from '../../lib/staffingExpenseIdentity';
 import { getActualObligationValidationError, hasActualObligationRecords } from '../../lib/financialObligationUtils';
 import { replaceFinancialObligationRecords } from '../../lib/financialObligationSync';
@@ -99,8 +100,8 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
 
     const validateActualMonth = async (month?: string) => {
         if (!month) return true;
-        const decision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(decision)) {
+        const decision = getMonthDecision(month, 'physical');
+        if (isMonthSelectionAllowed(decision) || await ensureDecisionAllowed(decision, { moduleKey: 'staffing_requirements', item, itemId: item.id, itemName: item.particulars || item.position, month, action: 'editPhysicalAccomplishment', entityType: 'staffing_requirement' })) {
             setMonthLockMessage('');
             return true;
         }
@@ -706,6 +707,16 @@ const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ i
             try {
                 setIsSaving(true);
                 const { id, obligations, disbursements, ...payload } = updatedItem;
+                if (updatedItem.hiringStatus !== item.hiringStatus) {
+                    const reason = updatedItem.hiringStatus === 'Unfilled' ? window.prompt('Reason for marking this staffing requirement unfilled:') : null;
+                    if (updatedItem.hiringStatus === 'Unfilled' && !reason?.trim()) throw new Error('An unfilled reason is required.');
+                    await transitionItemStatus('staffing_requirements', item.id, updatedItem.hiringStatus, reason || undefined);
+                    delete payload.hiringStatus;
+                }
+                if (editMode === 'details') {
+                    const revision = await beginWorkflowRevision('staffing_requirements', item.id, 'Material staffing requirement edit');
+                    Object.assign(payload, revision);
+                }
                 
                 console.log("Saving Staffing Requirement...", { id: item.id, payload });
                 const { error: updateError } = await supabase.from('staffing_requirements').update(payload).eq('id', item.id);

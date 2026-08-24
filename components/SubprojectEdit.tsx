@@ -14,6 +14,7 @@ import { resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../lib/p
 import { resolveIpoByIdOrName } from '../lib/entityIdentity';
 import { isMonthTargetOverdue } from '../lib/dateStatus';
 import { ConfirmDialog } from './ui/enterprise';
+import { beginWorkflowRevision, transitionItemStatus, transitionWorkflow } from '../lib/workflowService';
 
 interface SubprojectEditProps {
     subproject?: Subproject;
@@ -86,8 +87,10 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
     subproject, ipos, setIpos, onBack, onUpdateSubproject, uacsCodes, particularTypes, commodityCategories, refCommodities, refLivestock
 }): React.ReactNode => {
     const { currentUser, hasAccess } = useAuth();
+    const canManageOperatingUnit = hasAccess('Subprojects', 'manage_settings');
     const { logAction } = useLogAction();
     const { addIpoHistory } = useIpoHistory();
+    const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
     const { getStatusDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
     
     const [formData, setFormData] = useState<Subproject>(subproject || defaultFormData);
@@ -550,12 +553,8 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
             payload.uid = formData.uid || `SP-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
             payload.history = [historyEntry];
             
-            // Phase 2: Workflow Logic
-            if (currentUser?.requires_approver) {
-                payload.workflow_status = 'PENDING';
-            } else {
-                payload.workflow_status = 'APPROVED';
-            }
+            payload.workflow_status = 'DRAFT';
+            payload.created_by_user_id = currentUser?.id || null;
         } else {
             payload.history = [...(subproject.history || []), historyEntry];
         }
@@ -585,11 +584,22 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                 const { data, error } = await supabase.from('subprojects').insert([dbPayload]).select().single();
                 if (error) { alert("Error saving: " + error.message); return; }
                 if (data) {
-                    onUpdateSubproject(data);
+                    const workflowResult = submitIntent === 'submit'
+                        ? await transitionWorkflow('subprojects', data.id, 'submit')
+                        : null;
+                    onUpdateSubproject(workflowResult ? { ...data, ...workflowResult } : data);
                     logAction('Created Subproject', data.name, data.indigenousPeopleOrganization, 'Subproject', String(data.id));
                     if (resolvedIpoId) addIpoHistory(resolvedIpoId, `Subproject Created: ${data.name}`);
                 }
             } else {
+                if (dbPayload.status !== subproject.status) {
+                    const reason = dbPayload.status === 'Cancelled' ? window.prompt('Reason for cancelling this subproject:') : null;
+                    if (dbPayload.status === 'Cancelled' && !reason?.trim()) { alert('A cancellation reason is required.'); return; }
+                    await transitionItemStatus('subprojects', subproject.id, dbPayload.status, reason || undefined);
+                }
+                const revision = await beginWorkflowRevision('subprojects', subproject.id, 'Material subproject edit');
+                dbPayload.workflow_status = revision.workflow_status;
+                dbPayload.revision_number = revision.revision_number;
                 const { data, error } = await supabase.from('subprojects').update(dbPayload).eq('id', subproject.id).select().single();
                 if (error) { alert("Error saving: " + error.message); return; }
                 if (data) {
@@ -654,8 +664,8 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
                                         value={formData.operatingUnit || ''} 
                                         onChange={handleInputChange} 
                                         className={commonInputClasses} 
-                                        disabled={currentUser?.role !== 'Administrator'}
-                                        title={currentUser?.role !== 'Administrator' ? "Only Administrators can edit the Operating Unit" : ""}
+                                        disabled={!canManageOperatingUnit}
+                                        title={!canManageOperatingUnit ? "Operating Unit management permission is required" : ""}
                                     >
                                         <option value="">Select Operating Unit</option>
                                         {operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}
@@ -1193,13 +1203,17 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
 
                     {/* Confirmation/Update Buttons */}
                     {(activeTab === 'summary' || (subproject && activeTab === 'budget')) && (
-                        <button 
-                            type="submit" 
-                            disabled={!subproject && validationErrors.length > 0}
-                            className={`btn btn-primary ${(!subproject && validationErrors.length > 0) ? 'is-disabled' : ''}`}
-                        >
-                            {subproject ? 'Update Subproject' : 'Confirm & Save Subproject'}
-                        </button>
+                        <>
+                            {!subproject && <button type="submit" onClick={() => setSubmitIntent('draft')} className="btn btn-secondary">Save Draft</button>}
+                            <button
+                                type="submit"
+                                onClick={() => setSubmitIntent('submit')}
+                                disabled={!subproject && validationErrors.length > 0}
+                                className={`btn btn-primary ${(!subproject && validationErrors.length > 0) ? 'is-disabled' : ''}`}
+                            >
+                                {subproject ? 'Update Subproject' : 'Submit for Review'}
+                            </button>
+                        </>
                     )}
                 </div>
             </form>

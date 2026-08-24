@@ -5,7 +5,7 @@ Deno.serve(async (request) => {
   if (options) return options;
   try {
     const body = await request.json().catch(() => ({}));
-    const user = await requireGadPimmeEditor(body.user_id);
+    const user = await requireGadPimmeEditor(request, body.user_id, "delete_files");
     const fileId = Number(body.file_row_id);
     if (!Number.isFinite(fileId)) throw new Error("A valid evidence file is required.");
     return jsonResponse({ file: await deleteGadPimmeFile(fileId, user) });

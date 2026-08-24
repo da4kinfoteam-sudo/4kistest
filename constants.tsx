@@ -65,6 +65,14 @@ export const AccomplishmentIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export interface BaseEntity {
     id: number;
     workflow_status?: WorkflowStatus;
+    created_by_user_id?: number | null;
+    revision_number?: number;
+    approved_revision?: number | null;
+    submitted_at?: string | null;
+    approved_at?: string | null;
+    approved_by_user_id?: number | null;
+    rejected_at?: string | null;
+    rejected_by_user_id?: number | null;
     created_at?: string;
     updated_at?: string;
     physical_accomplishment_submitted_at?: string | null;
@@ -86,7 +94,16 @@ export interface RoleConfig {
     visibility_scope?: VisibilityScope;
 }
 
+export interface AuthorizationPolicyState {
+    policy_version: number;
+    legacy_user_auto_approve_enabled: boolean;
+    legacy_user_auto_approve_owner?: string | null;
+    legacy_user_auto_approve_cutoff?: string | null;
+}
+
 export const appModules = [
+    'Home',
+    'Profile',
     'Dashboards',
     'Reports',
     'Subprojects',
@@ -100,7 +117,19 @@ export const appModules = [
     'Gender and Development',
     'Commodity Mapping',
     'References',
-    'System Management'
+    'System Management',
+    'Settings - User Management',
+    'Settings - Access Control',
+    'Settings - Data Scope',
+    'Settings - Workflow',
+    'Settings - DCF and Status',
+    'Settings - Physical Accomplishment',
+    'Settings - Financial Accomplishment',
+    'Settings - System',
+    'Settings - Audit and Security',
+    'Settings - Google Drive',
+    'Settings - LOD',
+    'Settings - Archive'
 ];
 
 export interface User extends BaseEntity {
@@ -114,7 +143,11 @@ export interface User extends BaseEntity {
     requires_approver?: boolean;
     approver_id?: number | null;
     permissions_override?: any; // JSONB toggles
-    password?: string;
+    auth_id?: string | null;
+    is_active?: boolean;
+    deactivated_at?: string | null;
+    permission_version?: number;
+    password_reset_required?: boolean;
 }
 
 export const tiers = ['Tier 1', 'Tier 2'] as const;

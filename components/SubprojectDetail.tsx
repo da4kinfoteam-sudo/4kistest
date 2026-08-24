@@ -19,6 +19,7 @@ import { ConfirmDialog } from './ui/enterprise';
 import { getActualDisbursementSummary, getActualObligationSummary, hasFinancialActuals } from '../lib/financialActualSummary';
 import { getActualObligationValidationError, hasActualObligationRecords } from '../lib/financialObligationUtils';
 import { fetchFinancialObligationsForParent, replaceFinancialObligationRecords } from '../lib/financialObligationSync';
+import { beginWorkflowRevision, transitionItemStatus } from '../lib/workflowService';
 import {
     BudgetItemAdjustmentHistory,
     ensureOriginalBudgetSnapshot,
@@ -155,14 +156,15 @@ const budgetItemFieldLabels: Record<string, string> = {
 };
 
 const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, onEditModeChange, onUpdateSubproject, particularTypes, uacsCodes, commodityCategories, refCommodities, refLivestock }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { canEdit } = useUserAccess('Subprojects');
     const { canEdit: canEditFinancial } = useUserAccess('Accomplishment - Financial');
     const { canEdit: canEditPhysical } = useUserAccess('Accomplishment - Physical');
     const { addIpoHistory } = useIpoHistory();
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
-    const isAdmin = currentUser?.role === 'Administrator';
-    const canDeleteDriveFiles = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
+    const canManageStatus = hasAccess('Subprojects', 'manage_status');
+    const canManageOperatingUnit = hasAccess('Subprojects', 'manage_settings');
+    const canDeleteDriveFiles = hasAccess('Subprojects', 'delete_files');
 
     // Edit Modes: 'full' (legacy), 'details' (exclusive), 'commodity' (exclusive), 'budget' (exclusive), 'accomplishment'
     const [editMode, setEditMode] = useState<'none' | 'full' | 'details' | 'commodity' | 'budget' | 'accomplishment'>('none');
@@ -220,7 +222,6 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     const [uploadModal, setUploadModal] = useState<'gallery' | 'files' | null>(null);
     const [galleryView, setGalleryView] = useState<GalleryViewMode>('thumbnail');
 
-    const isUserRole = currentUser?.role === 'User';
 
     const detailsDecision = getStatusDecision({
         moduleKey: 'subprojects',
@@ -284,8 +285,8 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
 
     const validateSubprojectActualMonth = async (month?: string) => {
         if (!month) return true;
-        const decision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(decision)) {
+        const decision = getMonthDecision(month, 'financial');
+        if (isMonthSelectionAllowed(decision) || await ensureDecisionAllowed(decision, { moduleKey: 'subprojects', item: subproject, itemId: subproject.id, itemName: subproject.name, month, action: 'editFinancialAccomplishment', entityType: 'subproject' })) {
             setMonthLockMessage('');
             return true;
         }
@@ -1199,7 +1200,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
             submittedAt
         });
 
-        const updatedSubprojectWithDetails = {
+        const updatedSubprojectWithDetails: Subproject = {
             ...editedSubproject,
             ipo_id: resolvedIpoId,
             status: nextStatus,
@@ -1215,6 +1216,16 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                 (updatedSubprojectWithDetails as any)[field] = null;
             }
         });
+
+        if (['full', 'details', 'commodity', 'budget'].includes(editMode)) {
+            if (updatedSubprojectWithDetails.status !== subproject.status) {
+                const reason = updatedSubprojectWithDetails.status === 'Cancelled' ? window.prompt('Reason for cancelling this subproject:') : null;
+                if (updatedSubprojectWithDetails.status === 'Cancelled' && !reason?.trim()) { alert('A cancellation reason is required.'); return; }
+                await transitionItemStatus('subprojects', subproject.id, updatedSubprojectWithDetails.status, reason || undefined);
+            }
+            const revision = await beginWorkflowRevision('subprojects', subproject.id, `Material subproject ${editMode} edit`);
+            Object.assign(updatedSubprojectWithDetails, revision);
+        }
 
         onUpdateSubproject(updatedSubprojectWithDetails);
 
@@ -1325,8 +1336,8 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                                     value={editedSubproject.operatingUnit || ''}
                                                     onChange={handleInputChange}
                                                     className={commonInputClasses}
-                                                    disabled={currentUser?.role !== 'Administrator'}
-                                                    title={currentUser?.role !== 'Administrator' ? "Only Administrators can edit the Operating Unit" : ""}
+                                                    disabled={!canManageOperatingUnit}
+                                                    title={!canManageOperatingUnit ? "Operating Unit management permission is required" : ""}
                                                 >
                                                     <option value="">Select Operating Unit</option>
                                                     {operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}
@@ -1344,7 +1355,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                                 <select name="status" value={editedSubproject.status} onChange={handleInputChange} className={`${commonInputClasses} ${missingFields.includes('status') ? 'form-control--invalid' : ''}`}>
                                                     <option value="Proposed">Proposed</option>
                                                     <option value="Ongoing">Ongoing</option>
-                                                    {(isAdmin || editedSubproject.status === 'Completed') && <option value="Completed">Completed</option>}
+                                                    {(canManageStatus || editedSubproject.status === 'Completed') && <option value="Completed">Completed</option>}
                                                     <option value="Cancelled">Cancelled</option>
                                                 </select>
                                             </div>

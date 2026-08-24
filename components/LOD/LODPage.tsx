@@ -143,7 +143,7 @@ const parseAdminOverrideSelection = (value: string): LodAdminOverrideSelection |
 };
 
 const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
-    const { currentUser, getVisibilityScope } = useAuth();
+    const { currentUser, getVisibilityScope, hasAccess } = useAuth();
     const { canManage } = useUserAccess('Level of Development');
     const { logAction } = useLogAction();
     const visibilityScope = getVisibilityScope('Level of Development');
@@ -156,7 +156,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     const [loadError, setLoadError] = useState('');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [importReport, setImportReport] = useState<ImportResultRow[] | null>(null);
-    const isSuperAdmin = currentUser?.role === 'Super Admin';
+    const canOverride = hasAccess('Level of Development', 'manage_settings');
     const [isControllerOpen, setIsControllerOpen] = useState(false);
     const [controllerSettings, setControllerSettings] = useState<LodControllerSettings>({
         year: filters.year,
@@ -351,11 +351,11 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     }, [selectedOnPage, paginatedIpos.length]);
 
     useEffect(() => {
-        if (isSuperAdmin) return;
+        if (canOverride) return;
         setControllerSettings(previous => ({ ...previous, bulkSelection: false, inlineEditing: false }));
         setSelectedIpoIds(new Set());
         setInlineEditingIpoId(null);
-    }, [isSuperAdmin]);
+    }, [canOverride]);
 
     const requestSort = (key: string) => updateFilters({
         sortKey: key,
@@ -397,13 +397,13 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     };
 
     const openOverrideDialog = (ipoIds: number[], source: LodOverrideSource, selection: LodAdminOverrideSelection | '' = '') => {
-        if (!isSuperAdmin || ipoIds.length === 0) return;
+        if (!canOverride || ipoIds.length === 0) return;
         setOverrideFeedback(null);
         setOverrideDialog({ ipoIds, source, selection, reason: controllerSettings.defaultReason });
     };
 
     const applyManualOverrides = async () => {
-        if (!isSuperAdmin || !overrideDialog || !supabase || !currentUser) return;
+        if (!canOverride || !overrideDialog || !supabase || !currentUser) return;
         setOverrideSaving(true);
         setOverrideFeedback(null);
         try {
@@ -629,7 +629,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                     searchPlaceholder="Search IPOs by name or region..."
                     activeFilterCount={activeFilterCount}
                     onOpenFilters={() => setIsFilterOpen(true)}
-                    filterActions={isSuperAdmin ? (
+                    filterActions={canOverride ? (
                         <button type="button" className="btn btn-secondary" onClick={openController}>
                             <Settings2 aria-hidden="true" /> Super Admin Controls
                         </button>
@@ -642,7 +642,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                         <p>{overrideFeedback.message}</p>
                     </div>
                 )}
-                {isSuperAdmin && controllerSettings.bulkSelection && selectedIpoIds.size > 0 && (
+                {canOverride && controllerSettings.bulkSelection && selectedIpoIds.size > 0 && (
                     <div className="lod-bulk-action-bar" role="region" aria-label="LOD bulk actions">
                         <span><strong>{selectedIpoIds.size}</strong> selected</span>
                         <div>
@@ -658,7 +658,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                         <div className="data-table-scroll">
                             <table className="data-table lod-major-table">
                                 <thead><tr>
-                                    {isSuperAdmin && controllerSettings.bulkSelection && (
+                                    {canOverride && controllerSettings.bulkSelection && (
                                         <th className="lod-selection-column">
                                             <input
                                                 ref={pageSelectionRef}
@@ -677,7 +677,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                 <tbody>
                                     {paginatedIpos.map(ipo => (
                                         <tr key={ipo.id} className="data-table__row--interactive" onClick={() => onSelectIpo(ipo, filters.year)}>
-                                            {isSuperAdmin && controllerSettings.bulkSelection && (
+                                            {canOverride && controllerSettings.bulkSelection && (
                                                 <td className="lod-selection-column" onClick={event => event.stopPropagation()}>
                                                     <input
                                                         type="checkbox"
@@ -692,7 +692,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                             <td><TruncatedTableCell value={ipo.region} /></td>
                                             {displayYears.map(year => {
                                                 const state = getLodEffectiveState(getAssessment(ipo.id, year));
-                                                const canInlineEdit = isSuperAdmin && controllerSettings.inlineEditing && controllerSettings.year === year;
+                                                const canInlineEdit = canOverride && controllerSettings.inlineEditing && controllerSettings.year === year;
                                                 return (
                                                     <td key={year} className="data-table__numeric" onClick={event => event.stopPropagation()}>
                                                         {canInlineEdit && inlineEditingIpoId === Number(ipo.id) ? (
@@ -728,7 +728,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                             })}
                                         </tr>
                                     ))}
-                                    {paginatedIpos.length === 0 && <tr><td className="data-table__empty-cell" colSpan={displayYears.length + 2 + (isSuperAdmin && controllerSettings.bulkSelection ? 1 : 0)}>No IPOs match the current LOD filters.</td></tr>}
+                                    {paginatedIpos.length === 0 && <tr><td className="data-table__empty-cell" colSpan={displayYears.length + 2 + (canOverride && controllerSettings.bulkSelection ? 1 : 0)}>No IPOs match the current LOD filters.</td></tr>}
                                 </tbody>
                             </table>
                         </div>
@@ -745,7 +745,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                 )}
             </div>
 
-            {isControllerOpen && isSuperAdmin && (
+            {isControllerOpen && canOverride && (
                 <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsControllerOpen(false)}>
                     <section className="modal-card lod-controller-modal" role="dialog" aria-modal="true" aria-labelledby="lod-controller-title" onMouseDown={event => event.stopPropagation()}>
                         <header className="modal-card__header">
@@ -781,7 +781,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                 </div>
             )}
 
-            {overrideDialog && isSuperAdmin && (
+            {overrideDialog && canOverride && (
                 <div className="modal-backdrop" role="presentation" onMouseDown={() => !overrideSaving && setOverrideDialog(null)}>
                     <section className="modal-card lod-override-modal" role="dialog" aria-modal="true" aria-labelledby="lod-override-title" onMouseDown={event => event.stopPropagation()}>
                         <header className="modal-card__header">

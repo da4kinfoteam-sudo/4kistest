@@ -190,7 +190,7 @@ const createDefaultReportsPageState = (ownOu?: string | null, isLockedToOwnOu = 
 };
 
 const AppContent: React.FC = () => {
-    const { currentUser, hasAccess, getVisibilityScope, isAuthReady, refreshUser, refreshUsersList, refreshPermissions } = useAuth();
+    const { currentUser, hasAccess, getVisibilityScope, policyState, isAuthReady, refreshUser, refreshUsersList, refreshPermissions } = useAuth();
     const { getStatusDecision } = useDcfPolicyGuard();
     // Initialize Sidebar state based on screen width (Open on Desktop by default)
     const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
@@ -461,20 +461,13 @@ const AppContent: React.FC = () => {
     const replaceFinancialObligations = financialObligationsSync.replaceLocalData;
     const replaceFinancialDisbursements = financialDisbursementsSync.replaceLocalData;
 
-    // Helper to filter data based on visibility scope
-    const filterByVisibility = <T extends { operatingUnit?: string }>(data: T[]): T[] => {
-        if (!currentUser) return data;
-        if (['Super Admin', 'Administrator'].includes(currentUser.role)) return data;
-        const scope = currentUser.visibility_scope || 'All OUs';
-        if (scope === 'All OUs') return data;
-        return data.filter(item => item.operatingUnit === currentUser.operatingUnit);
-    };
-
-    const visibleSubprojects = filterByVisibility(enrichedSubprojects);
-    const visibleActivities = filterByVisibility(enrichedActivities);
-    const visibleOfficeReqs = filterByVisibility(enrichedOfficeReqs);
-    const visibleStaffingReqs = filterByVisibility(enrichedStaffingReqs);
-    const visibleOtherExpenses = filterByVisibility(enrichedOtherExpenses);
+    // These collections are already constrained by each module's effective scope at
+    // query time and again by database policy. Do not apply a role-derived global scope.
+    const visibleSubprojects = enrichedSubprojects;
+    const visibleActivities = enrichedActivities;
+    const visibleOfficeReqs = enrichedOfficeReqs;
+    const visibleStaffingReqs = enrichedStaffingReqs;
+    const visibleOtherExpenses = enrichedOtherExpenses;
 
     // Derived Activities
     const trainings = useMemo(() => visibleActivities.filter(a => a.type === 'Training'), [visibleActivities]);
@@ -509,6 +502,12 @@ const AppContent: React.FC = () => {
 
     const buildDefaultDataScope = useCallback((overrides: Partial<DataScope> = {}): DataScope => {
         const canViewAllOus = currentUser ? getVisibilityScope('Dashboards') !== 'Own OU' : true;
+        const scopedModules = [
+            'Dashboards', 'Reports', 'Subprojects', 'Activities', 'Program Management',
+            'IPO Management', 'Marketing Database', 'Accomplishment - Financial',
+            'Accomplishment - Physical', 'References', 'Gender and Development',
+            'Level of Development', 'Settings - System',
+        ];
         return {
             year: overrides.year ?? new Date().getFullYear().toString(),
             operatingUnit: canViewAllOus
@@ -517,9 +516,12 @@ const AppContent: React.FC = () => {
             tier: overrides.tier ?? 'Tier 1',
             fundType: overrides.fundType ?? 'Current',
             canViewAllOus,
+            userOperatingUnit: currentUser?.operatingUnit,
+            moduleScopes: Object.fromEntries(scopedModules.map(module => [module, getVisibilityScope(module)])),
+            policyVersion: policyState?.policy_version || 0,
             requestedBy: currentUser?.id ?? null
         };
-    }, [currentUser, getVisibilityScope]);
+    }, [currentUser, getVisibilityScope, policyState?.policy_version]);
 
     const applyScopedData = useCallback((data: Awaited<ReturnType<typeof loadScopedAppData>>) => {
         replaceSubprojects(data.subprojects);
@@ -646,9 +648,9 @@ const AppContent: React.FC = () => {
     }, [currentUser?.id]);
 
     useEffect(() => {
-        if (!isAuthReady) return;
+        if (!isAuthReady || !currentUser) return;
         ensureDataScope();
-    }, [ensureDataScope, isAuthReady]);
+    }, [currentUser, ensureDataScope, isAuthReady]);
 
     // Selection States
     const [selectedSubproject, setSelectedSubproject] = useState<Subproject | null>(null);
@@ -1045,10 +1047,10 @@ const AppContent: React.FC = () => {
     }, [currentUser?.operatingUnit, isReportsLockedToOwnOu]);
 
     useEffect(() => {
-        if (currentUser?.role !== 'Super Admin') {
+        if (!hasAccess('Reports', 'manage_settings')) {
             setReportsPageState(prev => prev.activeTab === 'Financial Audit' ? { ...prev, activeTab: 'WFP' } : prev);
         }
-    }, [currentUser?.role]);
+    }, [hasAccess]);
 
     const fallbackIpoLinkedDcfRecords = useMemo<IpoLinkedDcfRecords>(() => {
         if (!selectedIpo?.id) return emptyIpoLinkedDcfRecords();
@@ -1543,10 +1545,16 @@ const AppContent: React.FC = () => {
         if (routePath === '/commodity-mapping') {
             if (!checkAccess('Commodity Mapping')) return denied;
         }
-        if (isReferencePagePath(routePath) && (currentUser?.role === 'Management' || !checkAccess('References'))) return denied;
-        if (routePath === '/settings' && !checkAccess('System Management')) {
-             // System Management is for the whole settings tab, but maybe we should allow profiles?
-             // Usually settings has profile. Let's see.
+        if (isReferencePagePath(routePath) && !checkAccess('References')) return denied;
+        if (routePath === '/settings') {
+            const settingsModules = [
+                'Profile', 'Settings - User Management', 'Settings - Access Control', 'Settings - Data Scope',
+                'Settings - Workflow', 'Settings - DCF and Status',
+                'Settings - Physical Accomplishment', 'Settings - Financial Accomplishment',
+                'Settings - System', 'Settings - Audit and Security', 'Settings - Archive',
+                'Settings - Google Drive', 'Settings - LOD',
+            ];
+            if (!settingsModules.some(checkAccess)) return denied;
         }
 
         if (isDashboardPagePath(routePath)) {

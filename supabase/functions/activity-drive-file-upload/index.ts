@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const form = await request.formData();
-    const user = await requireActivityEditor(form.get("user_id"));
+    const user = await requireActivityEditor(request, form.get("user_id"));
     const activityId = Number(form.get("activity_id"));
     const file = form.get("file");
     const uploadSection = parseDriveUploadSection(form.get("upload_section"));

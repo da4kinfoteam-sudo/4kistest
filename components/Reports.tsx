@@ -91,10 +91,10 @@ const Reports: React.FC<ReportsProps> = ({
     reportState,
     onReportStateChange,
 }) => {
-    const { currentUser, getVisibilityScope } = useAuth();
+    const { currentUser, getVisibilityScope, hasAccess } = useAuth();
     const visibilityScope = getVisibilityScope('Reports');
     const isLockedToOwnOu = visibilityScope === 'Own OU';
-    const isSuperAdmin = currentUser?.role === 'Super Admin';
+    const canViewFinancialAudit = hasAccess('Reports', 'manage_settings');
 
     const {
         activeTab,
@@ -180,7 +180,7 @@ const Reports: React.FC<ReportsProps> = ({
 
     useEffect(() => {
         if (!requiresFinancialHistoryScope) return;
-        if (activeTab === 'Financial Audit' && !isSuperAdmin) return;
+        if (activeTab === 'Financial Audit' && !canViewFinancialAudit) return;
         onDataScopeChange?.({
             year: 'All',
             operatingUnit: selectedOu,
@@ -190,7 +190,7 @@ const Reports: React.FC<ReportsProps> = ({
             canViewAllOus: !isLockedToOwnOu,
             requestedBy: currentUser?.id ?? null
         });
-    }, [activeTab, allOusSelected, currentUser?.id, isLockedToOwnOu, isSuperAdmin, onDataScopeChange, requiresFinancialHistoryScope, selectedOu, selectedOus, selectedTier]);
+    }, [activeTab, allOusSelected, canViewFinancialAudit, currentUser?.id, isLockedToOwnOu, onDataScopeChange, requiresFinancialHistoryScope, selectedOu, selectedOus, selectedTier]);
 
     useEffect(() => {
         if (isLockedToOwnOu && currentUser) {
@@ -198,23 +198,16 @@ const Reports: React.FC<ReportsProps> = ({
         }
     }, [currentUser, isLockedToOwnOu, updateReportState]);
 
-    // Enforce User OU restriction on mount/change
-    useEffect(() => {
-        if (currentUser && currentUser.role === 'User') {
-            updateReportState({ selectedOu: currentUser.operatingUnit, selectedOus: [currentUser.operatingUnit] });
-        }
-    }, [currentUser, updateReportState]);
-
     useEffect(() => {
         if (isLockedToOwnOu || Array.isArray(reportState.selectedOus)) return;
         updateReportState({ selectedOus: operatingUnits, selectedOu: 'All' });
     }, [isLockedToOwnOu, reportState.selectedOus, updateReportState]);
 
     useEffect(() => {
-        if (!isSuperAdmin && activeTab === 'Financial Audit') {
+        if (!canViewFinancialAudit && activeTab === 'Financial Audit') {
             updateReportState({ activeTab: 'WFP' });
         }
-    }, [activeTab, isSuperAdmin, updateReportState]);
+    }, [activeTab, canViewFinancialAudit, updateReportState]);
 
     useEffect(() => {
         const handleAfterPrint = () => {
@@ -334,7 +327,7 @@ const Reports: React.FC<ReportsProps> = ({
         { tabName: 'Budget Utilization Report', label: 'Budget Utilization' },
         { tabName: 'Monthly Matrix', label: 'Monthly Matrix' },
         { tabName: 'Detailed Accomplishment Data', label: 'Detailed Accomplishment Data' },
-        ...(isSuperAdmin ? [{ tabName: 'Financial Audit' as ReportTab, label: 'Financial Audit' }] : []),
+        ...(canViewFinancialAudit ? [{ tabName: 'Financial Audit' as ReportTab, label: 'Financial Audit' }] : []),
     ];
 
     const TabButton: React.FC<{ tabName: ReportTab; label: string; }> = ({ tabName, label }) => {
@@ -532,7 +525,7 @@ const Reports: React.FC<ReportsProps> = ({
                     />
                 );
             case 'Financial Audit':
-                if (!isSuperAdmin) return null;
+                if (!canViewFinancialAudit) return null;
                 return (
                     <FinancialAuditReport
                         data={financialFilteredData}

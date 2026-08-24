@@ -152,10 +152,8 @@ const Donut = ({ title, total, data }: {
 const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     data, selectedYearProp, selectedOuProp, selectedTierProp, selectedFundTypeProp,
 }) => {
-    const { currentUser } = useAuth();
-    const canViewMatrix = currentUser?.role === 'Super Admin'
-        || currentUser?.role === 'Administrator'
-        || currentUser?.role === 'Management';
+    const { currentUser, getVisibilityScope } = useAuth();
+    const canViewMatrix = getVisibilityScope('Dashboards') === 'All';
     const selectedYear = selectedYearProp || new Date().getFullYear().toString();
     const selectedOu = selectedOuProp || (canViewMatrix ? 'All' : (currentUser?.operatingUnit || 'All'));
     const selectedTier = selectedTierProp || 'Tier 1';

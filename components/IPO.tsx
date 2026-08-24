@@ -72,8 +72,7 @@ const registeringBodyOptions = ['SEC', 'DOLE', 'CDA'];
 const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onSelectIpo, onSelectSubproject, particularTypes, commodityCategories, externalFilters, onClearExternalFilters, gidaAreas, elcacAreas }) => {
     const { currentUser } = useAuth();
     const tableStoragePrefix = `ipos_${currentUser?.id || 'anonymous'}`;
-    const { canEdit } = useUserAccess('IPO Management');
-    const isAdmin = currentUser?.role === 'Administrator' || currentUser?.role === 'Super Admin';
+    const { canEdit, canDelete } = useUserAccess('IPO Management');
     const { logAction } = useLogAction();
     const [formData, setFormData] = useState(defaultFormData);
     const [baseRegion, setBaseRegion] = useState(''); // Track base region from dropdown
@@ -681,12 +680,11 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             return;
         }
         
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
         const submissionData = { 
             ...formData, 
             registeringBody: finalRegisteringBody,
             registrationDate: formData.registrationDate || null,
-            workflow_status,
+            workflow_status: 'APPROVED',
             updated_at: new Date().toISOString()
         };
 
@@ -808,17 +806,6 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
     const linkedTrainings = useMemo(() => (activities || []).filter(a => a.type === 'Training'), [activities]);
     const activeFlagFilterCount = Object.values(flagFilter).filter(Boolean).length;
 
-    const getWorkflowStatusBadge = (status?: string) => {
-        let classes = 'status-badge status-badge--compact status-badge--neutral';
-        switch (status) {
-            case 'APPROVED': classes = 'status-badge status-badge--compact status-badge--approved'; break;
-            case 'PENDING': classes = 'status-badge status-badge--compact status-badge--pending'; break;
-            case 'REJECTED': classes = 'status-badge status-badge--compact status-badge--rejected'; break;
-            case 'DRAFT': classes = 'status-badge status-badge--compact status-badge--draft'; break;
-        }
-        return <span className={classes}>{status || 'DRAFT'}</span>;
-    };
-
     const getProjectStatusBadgeClass = (status?: string) => {
         switch (status) {
             case 'Completed': return 'status-badge status-badge--compact status-badge--completed';
@@ -826,46 +813,6 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             case 'Proposed': return 'status-badge status-badge--compact status-badge--proposed';
             case 'Cancelled': return 'status-badge status-badge--compact status-badge--cancelled';
             default: return 'status-badge status-badge--compact status-badge--neutral';
-        }
-    };
-
-    const canApprove = (role?: string) => {
-        return ['Super Admin', 'Administrator', 'Focal - User', 'Management'].includes(role || '');
-    };
-
-    const handleApprove = async (id: number, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!window.confirm('Are you sure you want to approve this IPO?')) return;
-        
-        if (supabase) {
-            const { error } = await supabase.from('ipos').update({ workflow_status: 'APPROVED' }).eq('id', id);
-            if (error) {
-                alert('Failed to approve: ' + error.message);
-            } else {
-                setIpos(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-            }
-        } else {
-            setIpos(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-        }
-    };
-
-    const handleReject = async (id: number, e: React.MouseEvent) => {
-        e.stopPropagation();
-        const reason = window.prompt('Please provide a reason for rejection:');
-        if (reason === null) return;
-
-        if (supabase) {
-            const { error } = await supabase.from('ipos').update({ 
-                workflow_status: 'REJECTED',
-                remarks: reason ? `REJECTED: ${reason}` : undefined
-            }).eq('id', id);
-            if (error) {
-                alert('Failed to reject: ' + error.message);
-            } else {
-                setIpos(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-            }
-        } else {
-            setIpos(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
         }
     };
 
@@ -926,7 +873,7 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                             <button onClick={downloadIposTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
                             <label htmlFor="ipo-upload-major" className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
                             <input id="ipo-upload-major" type="file" className="hidden" onChange={(event) => handleIposUpload(event, ipos, setIpos, logAction, setIsUploading, gidaAreas, elcacAreas)} accept=".xlsx,.xls" disabled={isUploading} />
-                            {isAdmin && <button onClick={handleToggleSelectionMode} className="btn btn-secondary" aria-label="Delete multiple IPOs"><TrashIcon /> Delete</button>}
+                            {canDelete && <button onClick={handleToggleSelectionMode} className="btn btn-secondary" aria-label="Delete multiple IPOs"><TrashIcon /> Delete</button>}
                         </>}
                     </>}
                 />

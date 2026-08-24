@@ -245,12 +245,10 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
             user: currentUser?.fullName || 'System'
         };
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
-
         const newPartnerPayload = {
             ...formData,
             uid,
-            workflow_status,
+            workflow_status: 'APPROVED',
             history: [historyEntry],
             created_at: new Date().toISOString()
         };
@@ -302,7 +300,6 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                 const newPartners = jsonData.map((row: any, index: number) => {
                     const uid = `MP-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}${index}`;
                     const { region } = parseLocation(row.location || '');
-                    const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
                     return {
                         uid,
                         companyName: String(row.companyName || 'Unnamed Partner'),
@@ -316,7 +313,7 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                         commodityNeeds: row.commodityNeeds ? JSON.parse(row.commodityNeeds) : [],
                         linkedIpoNames: [],
                         marketingLinkages: [],
-                        workflow_status,
+                        workflow_status: 'APPROVED',
                         history: [{ date: new Date().toISOString(), event: 'Imported from Excel', user: currentUser?.fullName || 'System' }],
                         encodedBy: currentUser?.fullName || 'Excel Import',
                         created_at: new Date().toISOString()
@@ -335,59 +332,8 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
         reader.readAsArrayBuffer(file);
     };
 
-    const getWorkflowStatusBadge = (status?: string) => {
-        let classes = 'status-badge status-badge--compact status-badge--neutral';
-        switch (status) {
-            case 'APPROVED': classes = 'status-badge status-badge--compact status-badge--approved'; break;
-            case 'PENDING': classes = 'status-badge status-badge--compact status-badge--pending'; break;
-            case 'REJECTED': classes = 'status-badge status-badge--compact status-badge--rejected'; break;
-            case 'DRAFT': classes = 'status-badge status-badge--compact status-badge--draft'; break;
-        }
-        return <span className={classes}>{status || 'DRAFT'}</span>;
-    };
-
-    const canApprove = (role?: string) => {
-        return ['Super Admin', 'Administrator', 'Focal - User', 'Management'].includes(role || '');
-    };
-
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
-    };
-
-    const handleApprove = async (id: number, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!window.confirm('Are you sure you want to approve this partner?')) return;
-        
-        if (supabase) {
-            const { error } = await supabase.from('marketing_partners').update({ workflow_status: 'APPROVED' }).eq('id', id);
-            if (error) {
-                alert('Failed to approve: ' + error.message);
-            } else {
-                setPartners(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-            }
-        } else {
-            setPartners(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-        }
-    };
-
-    const handleReject = async (id: number, e: React.MouseEvent) => {
-        e.stopPropagation();
-        const reason = window.prompt('Please provide a reason for rejection:');
-        if (reason === null) return;
-
-        if (supabase) {
-            const { error } = await supabase.from('marketing_partners').update({ 
-                workflow_status: 'REJECTED',
-                remarks: reason ? `REJECTED: ${reason}` : undefined
-            }).eq('id', id);
-            if (error) {
-                alert('Failed to reject: ' + error.message);
-            } else {
-                setPartners(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-            }
-        } else {
-            setPartners(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-        }
     };
 
     if (view === 'add') {
@@ -589,7 +535,6 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                                 <th>Commodity Needs</th>
                                 <th>Owner / Contact</th>
                                 <th>Total Sales from Market Linkage</th>
-                                <th>Workflow Status</th>
                                 {canDelete && <th className="data-table__head--actions">Action</th>}
                             </tr>
                         </thead>
@@ -615,29 +560,6 @@ const MarketingDatabase: React.FC<MarketingDatabaseProps> = ({ partners, setPart
                                     <td className="data-table__cell--nowrap">
                                         <div className="data-table__cell--primary">{formatCurrency(salesSummary.totalSales)}</div>
                                         <div className="data-table__subline">{salesSummary.linkageCount} linkage{salesSummary.linkageCount === 1 ? '' : 's'}</div>
-                                    </td>
-                                    <td className="data-table__cell--nowrap">
-                                        <div className="data-table-workflow">
-                                            {getWorkflowStatusBadge(partner.workflow_status)}
-                                            {partner.workflow_status === 'PENDING' && canApprove(currentUser?.role) && (
-                                                <div className="data-table-workflow__actions">
-                                                    <button 
-                                                        onClick={(e) => handleApprove(partner.id, e)} 
-                                                        className="action-mini action-mini--approve"
-                                                        title="Approve"
-                                                    >
-                                                        <Check aria-hidden="true" />
-                                                    </button>
-                                                    <button 
-                                                        onClick={(e) => handleReject(partner.id, e)} 
-                                                        className="action-mini action-mini--reject"
-                                                        title="Reject"
-                                                    >
-                                                        <X aria-hidden="true" />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
                                     </td>
                                     {canDelete && (
                                         <td className="data-table__cell--actions data-table__cell--nowrap">

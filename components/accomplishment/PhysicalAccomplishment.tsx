@@ -14,6 +14,7 @@ import { isMonthTargetOverdue } from '../../lib/dateStatus';
 import type { DataScope } from '../../lib/scopedDataFetch';
 import { ConfirmDialog, LoadingState } from '../ui/enterprise';
 import { getActivityDisplayTitle } from '../../lib/entityIdentity';
+import { transitionItemStatus } from '../../lib/workflowService';
 
 interface Props {
     subprojects: Subproject[];
@@ -159,7 +160,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
     onSelectOfficeReq, onSelectStaffingReq,
     onDataScopeChange
 }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { canEdit, canViewAll } = useUserAccess('Accomplishment - Physical');
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
     const defaultYear = new Date().getFullYear();
@@ -234,8 +235,8 @@ const PhysicalAccomplishment: React.FC<Props> = ({
             return false;
         }
         if (!(await ensurePhysicalItemAllowed(item))) return false;
-        const monthDecision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(monthDecision)) {
+        const monthDecision = getMonthDecision(month, 'physical');
+        if (isMonthSelectionAllowed(monthDecision) || await ensureDecisionAllowed(monthDecision, { moduleKey, item: getPolicySubjectForPhysicalItem(item), itemId: item.sourceId, itemName: item.name, month, action: 'editPhysicalAccomplishment', entityType: item.sourceType.toLowerCase() })) {
             setMonthLockMessage('');
             return true;
         }
@@ -652,6 +653,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     });
 
                     if (supabase) {
+                        if (newStatus !== sp.status) await transitionItemStatus('subprojects', sp.id, newStatus);
                         await supabase.from('subprojects').update({
                             actualCompletionDate: newActualCompletionDate,
                             estimatedCompletionDate: item.targetDateStart || null,
@@ -659,7 +661,6 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                             actualMaleBeneficiaries: item.actualMaleBeneficiaries ?? null,
                             actualFemaleBeneficiaries: item.actualFemaleBeneficiaries ?? null,
                             actualFourPsBeneficiaries: item.actualFourPsBeneficiaries ?? null,
-                            status: newStatus,
                             details: normalizedUpdatedDetails,
                             physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
                             updated_at: submittedAt
@@ -704,9 +705,9 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     });
 
                     if (supabase) {
+                        if (newStatus !== sp.status) await transitionItemStatus('subprojects', sp.id, newStatus);
                         await supabase.from('subprojects').update({
                             details: normalizedUpdatedDetails,
-                            status: newStatus,
                             actualCompletionDate: newActualCompletionDate,
                             physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
                             updated_at: submittedAt
@@ -740,15 +741,15 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     endDate: item.targetDateEnd || item.targetDateStart,
                     participantsMale: item.targetMale,
                     participantsFemale: item.targetFemale,
-                    status: newStatus,
                     physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
                     updated_at: submittedAt
                 };
 
                 if (supabase) {
+                    if (newStatus !== act.status) await transitionItemStatus('activities', act.id, newStatus);
                     await supabase.from('activities').update(payload).eq('id', act.id);
                 }
-                setActivities(prev => prev.map(a => a.id === act.id ? { ...a, ...payload } : a));
+                setActivities(prev => prev.map(a => a.id === act.id ? { ...a, ...payload, status: newStatus } : a));
 
             } else if (item.sourceType === 'Staffing') {
                  const existing = staffingReqs.find(s => s.id === item.sourceId);
@@ -983,9 +984,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
     const canEditTarget = (item: PhysicalItem) => {
         if (!canEdit) return false;
-        if (currentUser?.role === 'Administrator') return true;
-        if (currentUser?.role === 'User' && item.status === 'Proposed') return true;
-        return false;
+        return item.status === 'Proposed' && hasAccess('Accomplishment - Physical', 'edit_physical_target');
     };
 
     const renderTargetUnits = (item: PhysicalItem, isTargetEditable: boolean) => {

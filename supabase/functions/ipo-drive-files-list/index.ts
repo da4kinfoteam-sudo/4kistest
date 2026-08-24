@@ -6,10 +6,10 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    await requireUser(body.user_id);
+    const user = await requireUser(request, body.user_id, "IPO Management");
     const ipoId = Number(body.ipo_id);
     if (!Number.isFinite(ipoId)) throw new Error("A valid IPO is required.");
-    return jsonResponse({ files: await listIpoFiles(ipoId) });
+    return jsonResponse({ files: await listIpoFiles(ipoId, user) });
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : "Unable to list IPO files.", 400);
   }

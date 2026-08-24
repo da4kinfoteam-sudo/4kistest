@@ -90,12 +90,13 @@ export const corsHeaders = {
 
 type UserRow = {
   id: number;
+  auth_id?: string | null;
+  is_active?: boolean | null;
   role?: string | null;
   fullName?: string | null;
   username?: string | null;
   operatingUnit?: string | null;
   visibility_scope?: string | null;
-  permissions_override?: Record<string, any> | null;
 };
 
 type IpoRow = {
@@ -303,6 +304,67 @@ async function fetchUser(userId: unknown): Promise<UserRow> {
   return data as UserRow;
 }
 
+async function fetchAuthenticatedUser(request: Request, claimedUserId?: unknown): Promise<UserRow> {
+  const authorization = request.headers.get("Authorization") || "";
+  if (!authorization.startsWith("Bearer ")) throw new Error("Authentication is required.");
+  const token = authorization.slice("Bearer ".length);
+  const client = adminClient();
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) throw new Error("The authentication session is invalid or expired.");
+  const { data: profile, error: profileError } = await client
+    .from("users")
+    .select("id,auth_id,is_active,role,fullName,username,operatingUnit,visibility_scope")
+    .eq("auth_id", data.user.id)
+    .maybeSingle();
+  if (profileError) throw new Error(profileError.message);
+  if (!profile || profile.is_active === false) throw new Error("An active application profile is required.");
+  if (claimedUserId !== undefined && Number(claimedUserId) !== Number(profile.id)) {
+    throw new Error("The requested user does not match the authenticated session.");
+  }
+  return profile as UserRow;
+}
+
+async function requireCentralAccess(user: UserRow, module: string, action: string, operatingUnit?: string | null) {
+  const { data, error } = await adminClient().rpc("resolve_access_for_user", {
+    p_user_id: user.id,
+    p_module: module,
+    p_action: action,
+    p_record_ou: operatingUnit || null
+  });
+  if (error) throw new Error(error.message);
+  const decision = Array.isArray(data) ? data[0] : data;
+  if (!decision?.allowed) throw new Error(decision?.decision_reason || `You do not have ${action} permission for ${module}.`);
+  return user;
+}
+
+export async function auditDriveAction(
+  user: UserRow,
+  module: string,
+  action: "upload_files" | "delete_files" | "manage_settings",
+  targetType: string,
+  targetId: string | number | null,
+  operatingUnit?: string | null,
+  metadata: Record<string, unknown> = {}
+) {
+  const client = adminClient();
+  const { data: policy, error: policyError } = await client.from("authorization_policy").select("policy_version").eq("singleton", true).single();
+  if (policyError) throw new Error(`Drive audit policy lookup failed: ${policyError.message}`);
+  const { error } = await client.from("authorization_audit_events").insert({
+    actor_user_id: user.id,
+    actor_auth_id: user.auth_id,
+    actor_role: user.role,
+    module,
+    action,
+    target_type: targetType,
+    target_id: targetId === null ? null : String(targetId),
+    operating_unit: operatingUnit || null,
+    policy_version: policy.policy_version || 0,
+    outcome: "allowed",
+    metadata: { ...metadata, source: "google_drive_edge" }
+  });
+  if (error) throw new Error(`Drive audit write failed: ${error.message}`);
+}
+
 async function fetchIpo(ipoId: number): Promise<IpoRow> {
   const { data, error } = await adminClient()
     .from("ipos")
@@ -349,129 +411,54 @@ function operatingUnitFromRegion(region?: string | null) {
   return REGION_TO_OPERATING_UNIT[normalizedRegion] || normalizedRegion || "Unassigned Operating Unit";
 }
 
-function isAdmin(user: UserRow) {
-  return user.role === "Super Admin" || user.role === "Administrator";
-}
-
-function isSuperAdmin(user: UserRow) {
-  return user.role === "Super Admin";
-}
-
 export function displayUserName(user: UserRow) {
   return user.fullName || user.username || `User ${user.id}`;
 }
 
-export async function requireUser(userId: unknown) {
-  return fetchUser(userId);
+export async function requireUser(request: Request, userId: unknown, module?: string) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return module ? requireCentralAccess(user, module, "view_files") : user;
 }
 
-export async function requireSuperAdmin(userId: unknown) {
-  const user = await fetchUser(userId);
-  if (!isSuperAdmin(user)) {
-    throw new Error("Only Super Admin users can manage Google Drive storage.");
-  }
-  return user;
+export async function requireSuperAdmin(request: Request, userId: unknown) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, "Settings - Google Drive", "manage_settings");
 }
 
-export async function requireAdmin(userId: unknown) {
+export async function requireDriveManagerFromSignedState(userId: unknown) {
   const user = await fetchUser(userId);
-  if (!isAdmin(user)) {
-    throw new Error("Only Super Admin and Administrator users can delete Drive files.");
-  }
-  return user;
+  if (user.is_active === false) throw new Error("An active application profile is required.");
+  return requireCentralAccess(user, "Settings - Google Drive", "manage_settings");
 }
 
-export async function requireIpoEditor(userId: unknown) {
-  const user = await fetchUser(userId);
-  if (isAdmin(user)) return user;
-
-  const override = user.permissions_override?.["IPO Management"];
-  if (override && override.can_edit === true) return user;
-
-  const { data, error } = await adminClient()
-    .from("roles_config")
-    .select("can_edit")
-    .eq("role", user.role)
-    .eq("module", "IPO Management")
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (data?.can_edit) return user;
-
-  throw new Error("You do not have permission to upload IPO files.");
+export async function requireAdmin(request: Request, userId: unknown, module: string) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, module, "delete_files");
 }
 
-export async function requireSubprojectEditor(userId: unknown) {
-  const user = await fetchUser(userId);
-  if (isAdmin(user)) return user;
-
-  const override = user.permissions_override?.["Subprojects"];
-  if (override && override.can_edit === true) return user;
-
-  const { data, error } = await adminClient()
-    .from("roles_config")
-    .select("can_edit")
-    .eq("role", user.role)
-    .eq("module", "Subprojects")
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (data?.can_edit) return user;
-
-  throw new Error("You do not have permission to upload Subproject files.");
+export async function requireIpoEditor(request: Request, userId: unknown) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, IPO_DRIVE_MODULE, "upload_files");
 }
 
-export async function requireActivityEditor(userId: unknown) {
-  const user = await fetchUser(userId);
-  if (isAdmin(user)) return user;
-
-  const override = user.permissions_override?.["Activities"];
-  if (override && override.can_edit === true) return user;
-
-  const { data, error } = await adminClient()
-    .from("roles_config")
-    .select("can_edit")
-    .eq("role", user.role)
-    .eq("module", "Activities")
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (data?.can_edit) return user;
-
-  throw new Error("You do not have permission to upload Activity files.");
+export async function requireSubprojectEditor(request: Request, userId: unknown) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, SUBPROJECT_DRIVE_MODULE, "upload_files");
 }
 
-export async function requireGadPimmeEditor(userId: unknown) {
-  const user = await fetchUser(userId);
-  const override = user.permissions_override?.[GAD_PIMME_DRIVE_MODULE];
-  if (override && typeof override.can_edit === "boolean") {
-    if (override.can_edit) return user;
-    throw new Error("You do not have permission to manage GAD PIMME evidence files.");
-  }
-
-  const { data, error } = await adminClient()
-    .from("roles_config")
-    .select("can_edit")
-    .eq("role", user.role)
-    .eq("module", GAD_PIMME_DRIVE_MODULE)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (data?.can_edit) return user;
-  throw new Error("You do not have permission to manage GAD PIMME evidence files.");
+export async function requireActivityEditor(request: Request, userId: unknown) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, ACTIVITY_DRIVE_MODULE, "upload_files");
 }
 
-export async function requireGadPimmeViewer(userId: unknown) {
-  const user = await fetchUser(userId);
-  const override = user.permissions_override?.[GAD_PIMME_DRIVE_MODULE];
-  if (override && typeof override.can_view === "boolean") {
-    if (override.can_view) return user;
-    throw new Error("You do not have permission to view GAD PIMME evidence files.");
-  }
-  const { data, error } = await adminClient().from("roles_config").select("can_view")
-    .eq("role", user.role).eq("module", GAD_PIMME_DRIVE_MODULE).maybeSingle();
-  if (error) throw new Error(error.message);
-  if (data?.can_view) return user;
-  throw new Error("You do not have permission to view GAD PIMME evidence files.");
+export async function requireGadPimmeEditor(request: Request, userId: unknown, action = "upload_files") {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, GAD_PIMME_DRIVE_MODULE, action);
+}
+
+export async function requireGadPimmeViewer(request: Request, userId: unknown) {
+  const user = await fetchAuthenticatedUser(request, userId);
+  return requireCentralAccess(user, GAD_PIMME_DRIVE_MODULE, "view_files");
 }
 
 export function getEnvironmentStatus() {
@@ -1452,7 +1439,9 @@ async function deleteDriveFile(accessToken: string, fileId: string) {
   throw new Error(`Unable to delete the Google Drive file: ${message}`);
 }
 
-export async function listIpoFiles(ipoId: number) {
+export async function listIpoFiles(ipoId: number, user: UserRow) {
+  const ipo = await fetchIpo(ipoId);
+  await requireCentralAccess(user, IPO_DRIVE_MODULE, "view_files", operatingUnitFromRegion(ipo.region));
   const { data, error } = await adminClient()
     .from("ipo_drive_files")
     .select("*")
@@ -1478,7 +1467,9 @@ async function updateDriveFileMetadata(
   table: "ipo_drive_files" | "subproject_drive_files" | "activity_drive_files",
   fileRowId: number,
   displayName: unknown,
-  caption: unknown
+  caption: unknown,
+  user: UserRow,
+  module: string
 ) {
   const supabase = adminClient();
   const { data: existing, error: existingError } = await supabase
@@ -1489,6 +1480,7 @@ async function updateDriveFileMetadata(
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (!existing) throw new Error("Drive file was not found.");
+  await requireCentralAccess(user, module, "upload_files", existing.operating_unit || null);
   if (existing.upload_section !== "gallery") {
     throw new Error("Only Gallery image metadata can be edited.");
   }
@@ -1500,6 +1492,7 @@ async function updateDriveFileMetadata(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
+  await auditDriveAction(user, module, "upload_files", table, fileRowId, existing.operating_unit, { operation: "metadata_update" });
   return { data, existing };
 }
 
@@ -1509,7 +1502,7 @@ export async function updateIpoFileMetadata(
   caption: unknown,
   user: UserRow
 ) {
-  const { data, existing } = await updateDriveFileMetadata("ipo_drive_files", fileRowId, displayName, caption);
+  const { data, existing } = await updateDriveFileMetadata("ipo_drive_files", fileRowId, displayName, caption, user, IPO_DRIVE_MODULE);
   await adminClient().from("ipo_history").insert({
     ipo_id: existing.ipo_id,
     event: `Updated gallery image details: ${data.display_name || data.file_name}`,
@@ -1519,12 +1512,12 @@ export async function updateIpoFileMetadata(
   return data;
 }
 
-export async function updateSubprojectFileMetadata(fileRowId: number, displayName: unknown, caption: unknown) {
-  return (await updateDriveFileMetadata("subproject_drive_files", fileRowId, displayName, caption)).data;
+export async function updateSubprojectFileMetadata(fileRowId: number, displayName: unknown, caption: unknown, user: UserRow) {
+  return (await updateDriveFileMetadata("subproject_drive_files", fileRowId, displayName, caption, user, SUBPROJECT_DRIVE_MODULE)).data;
 }
 
-export async function updateActivityFileMetadata(fileRowId: number, displayName: unknown, caption: unknown) {
-  return (await updateDriveFileMetadata("activity_drive_files", fileRowId, displayName, caption)).data;
+export async function updateActivityFileMetadata(fileRowId: number, displayName: unknown, caption: unknown, user: UserRow) {
+  return (await updateDriveFileMetadata("activity_drive_files", fileRowId, displayName, caption, user, ACTIVITY_DRIVE_MODULE)).data;
 }
 
 export async function uploadIpoFile(ipoId: number, file: File, user: UserRow, uploadSection: DriveUploadSection = "files") {
@@ -1532,6 +1525,7 @@ export async function uploadIpoFile(ipoId: number, file: File, user: UserRow, up
   assertAllowedUploadFile(file, uploadSection);
   const ipo = await fetchIpo(ipoId);
   const operatingUnit = operatingUnitFromRegion(ipo.region);
+  await requireCentralAccess(user, IPO_DRIVE_MODULE, "upload_files", operatingUnit);
   const {
     connection,
     accessToken,
@@ -1596,6 +1590,8 @@ export async function uploadIpoFile(ipoId: number, file: File, user: UserRow, up
     date: new Date().toISOString()
   });
 
+  await auditDriveAction(user, IPO_DRIVE_MODULE, "upload_files", "ipo_drive_file", data.id, operatingUnit, { ipoId, uploadSection });
+
   return data;
 }
 
@@ -1609,6 +1605,7 @@ export async function deleteIpoFile(fileRowId: number, user: UserRow) {
     .maybeSingle();
   if (fileError) throw new Error(fileError.message);
   if (!fileRow) throw new Error("IPO Drive file was not found.");
+  await requireCentralAccess(user, IPO_DRIVE_MODULE, "delete_files", fileRow.operating_unit || null);
 
   const { accessToken } = await connectedDrive();
   await deleteDriveFile(accessToken, fileRow.file_id);
@@ -1633,10 +1630,14 @@ export async function deleteIpoFile(fileRowId: number, user: UserRow) {
     date: deletedAt
   });
 
+  await auditDriveAction(user, IPO_DRIVE_MODULE, "delete_files", "ipo_drive_file", fileRowId, fileRow.operating_unit, { ipoId: fileRow.ipo_id });
+
   return data;
 }
 
-export async function listSubprojectFiles(subprojectId: number) {
+export async function listSubprojectFiles(subprojectId: number, user: UserRow) {
+  const subproject = await fetchSubproject(subprojectId);
+  await requireCentralAccess(user, SUBPROJECT_DRIVE_MODULE, "view_files", subproject.operatingUnit || null);
   const { data, error } = await adminClient()
     .from("subproject_drive_files")
     .select("*")
@@ -1650,6 +1651,8 @@ export async function listSubprojectFiles(subprojectId: number) {
 export async function uploadSubprojectFile(subprojectId: number, file: File, user: UserRow, uploadSection: DriveUploadSection = "files") {
   const supabase = adminClient();
   assertAllowedUploadFile(file, uploadSection);
+  const subject = await fetchSubproject(subprojectId);
+  await requireCentralAccess(user, SUBPROJECT_DRIVE_MODULE, "upload_files", subject.operatingUnit || null);
 
   const {
     connection,
@@ -1718,6 +1721,8 @@ export async function uploadSubprojectFile(subprojectId: number, file: File, use
     throw new Error(UPLOAD_RECORD_ERROR);
   }
 
+  await auditDriveAction(user, SUBPROJECT_DRIVE_MODULE, "upload_files", "subproject_drive_file", data.id, operatingUnit, { subprojectId, uploadSection });
+
   return data;
 }
 
@@ -1731,6 +1736,7 @@ export async function deleteSubprojectFile(fileRowId: number, user: UserRow) {
     .maybeSingle();
   if (fileError) throw new Error(fileError.message);
   if (!fileRow) throw new Error("Subproject Drive file was not found.");
+  await requireCentralAccess(user, SUBPROJECT_DRIVE_MODULE, "delete_files", fileRow.operating_unit || null);
 
   const { accessToken } = await connectedDrive();
   await deleteDriveFile(accessToken, fileRow.file_id);
@@ -1748,10 +1754,14 @@ export async function deleteSubprojectFile(fileRowId: number, user: UserRow) {
     .single();
   if (error) throw new Error(error.message);
 
+  await auditDriveAction(user, SUBPROJECT_DRIVE_MODULE, "delete_files", "subproject_drive_file", fileRowId, fileRow.operating_unit, { subprojectId: fileRow.subproject_id });
+
   return data;
 }
 
-export async function listActivityFiles(activityId: number) {
+export async function listActivityFiles(activityId: number, user: UserRow) {
+  const activity = await fetchActivity(activityId);
+  await requireCentralAccess(user, ACTIVITY_DRIVE_MODULE, "view_files", activity.operatingUnit || null);
   const { data, error } = await adminClient()
     .from("activity_drive_files")
     .select("*")
@@ -1765,6 +1775,8 @@ export async function listActivityFiles(activityId: number) {
 export async function uploadActivityFile(activityId: number, file: File, user: UserRow, uploadSection: DriveUploadSection = "files") {
   const supabase = adminClient();
   assertAllowedUploadFile(file, uploadSection);
+  const subject = await fetchActivity(activityId);
+  await requireCentralAccess(user, ACTIVITY_DRIVE_MODULE, "upload_files", subject.operatingUnit || null);
 
   const {
     connection,
@@ -1835,6 +1847,8 @@ export async function uploadActivityFile(activityId: number, file: File, user: U
     throw new Error(UPLOAD_RECORD_ERROR);
   }
 
+  await auditDriveAction(user, ACTIVITY_DRIVE_MODULE, "upload_files", "activity_drive_file", data.id, operatingUnit, { activityId, uploadSection });
+
   return data;
 }
 
@@ -1848,6 +1862,7 @@ export async function deleteActivityFile(fileRowId: number, user: UserRow) {
     .maybeSingle();
   if (fileError) throw new Error(fileError.message);
   if (!fileRow) throw new Error("Activity Drive file was not found.");
+  await requireCentralAccess(user, ACTIVITY_DRIVE_MODULE, "delete_files", fileRow.operating_unit || null);
 
   const { accessToken } = await connectedDrive();
   await deleteDriveFile(accessToken, fileRow.file_id);
@@ -1865,19 +1880,22 @@ export async function deleteActivityFile(fileRowId: number, user: UserRow) {
     .single();
   if (error) throw new Error(error.message);
 
+  await auditDriveAction(user, ACTIVITY_DRIVE_MODULE, "delete_files", "activity_drive_file", fileRowId, fileRow.operating_unit, { activityId: fileRow.activity_id });
+
   return data;
 }
 
 async function gadPimmePermission(user: UserRow) {
-  if (user.visibility_scope === "All OUs" || user.visibility_scope === "Own OU") return user.visibility_scope;
-  const { data, error } = await adminClient()
-    .from("roles_config")
-    .select("visibility_scope")
-    .eq("role", user.role)
-    .eq("module", GAD_PIMME_DRIVE_MODULE)
-    .maybeSingle();
+  const { data, error } = await adminClient().rpc("resolve_access_for_user", {
+    p_user_id: user.id,
+    p_module: GAD_PIMME_DRIVE_MODULE,
+    p_action: "view_files",
+    p_record_ou: null
+  });
   if (error) throw new Error(error.message);
-  return data?.visibility_scope || "Own OU";
+  const decision = Array.isArray(data) ? data[0] : data;
+  if (!decision?.allowed) throw new Error(decision?.decision_reason || "You do not have permission to view GAD PIMME evidence files.");
+  return decision.visibility_scope || "Own OU";
 }
 
 async function assertGadPimmeOuAccess(user: UserRow, operatingUnit: string) {
@@ -2009,6 +2027,7 @@ export async function uploadGadPimmeFile(operatingUnitInput: unknown, yearInput:
       uploaded_by_name: displayUserName(user)
     }).select("*").single();
     if (error) throw new Error(UPLOAD_RECORD_ERROR);
+    await auditDriveAction(user, GAD_PIMME_DRIVE_MODULE, "upload_files", "gad_pimme_file", data.id, identity.operatingUnit, { year: identity.year, questionKey: identity.questionKey });
     return { ...data, preview_permission_id: previewPermission?.id ?? null };
   } catch (error) {
     await deleteDriveFile(accessToken, uploadedFile.id);
@@ -2028,5 +2047,6 @@ export async function deleteGadPimmeFile(fileRowId: number, user: UserRow) {
   const { data, error } = await supabase.from("gad_pimme_files")
     .update({ deleted_at: new Date().toISOString() }).eq("id", fileRowId).select("*").single();
   if (error) throw new Error(error.message);
+  await auditDriveAction(user, GAD_PIMME_DRIVE_MODULE, "delete_files", "gad_pimme_file", fileRowId, fileRow.gad_pimme_assessments?.operating_unit, {});
   return data;
 }

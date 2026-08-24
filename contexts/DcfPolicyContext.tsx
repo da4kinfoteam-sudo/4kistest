@@ -24,7 +24,7 @@ const getLocalFallbackDate = () => {
 };
 
 export const DcfPolicyProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { isAuthReady } = useAuth();
+    const { currentUser, isAuthReady } = useAuth();
     const [policy, setPolicy] = useState<DcfPolicySettings>(DEFAULT_DCF_POLICY_SETTINGS);
     const [serverDate, setServerDate] = useState(getLocalFallbackDate());
     const [loading, setLoading] = useState(true);
@@ -76,10 +76,15 @@ export const DcfPolicyProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
 
     useEffect(() => {
-        if (isAuthReady) {
+        if (isAuthReady && currentUser) {
             refreshPolicy();
+        } else if (isAuthReady) {
+            setPolicy(DEFAULT_DCF_POLICY_SETTINGS);
+            setServerDate(getLocalFallbackDate());
+            setLoading(false);
+            setError(null);
         }
-    }, [isAuthReady]);
+    }, [currentUser, isAuthReady]);
 
     return (
         <DcfPolicyContext.Provider value={{ policy, serverDate, loading, error, refreshPolicy }}>

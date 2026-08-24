@@ -1,4 +1,4 @@
-import { completeConnection, readSignedState, requireSuperAdmin, settingsRedirectUrl } from "../_shared/googleDrive.ts";
+import { auditDriveAction, completeConnection, readSignedState, requireDriveManagerFromSignedState, settingsRedirectUrl } from "../_shared/googleDrive.ts";
 
 Deno.serve(async (request) => {
   try {
@@ -15,8 +15,9 @@ Deno.serve(async (request) => {
     }
 
     const parsedState = await readSignedState(state);
-    const user = await requireSuperAdmin(parsedState.userId);
+    const user = await requireDriveManagerFromSignedState(parsedState.userId);
     await completeConnection(code, user.id);
+    await auditDriveAction(user, "Settings - Google Drive", "manage_settings", "google_drive_connection", null, null, { operation: "connect" });
     return Response.redirect(settingsRedirectUrl("connected"), 302);
   } catch (error) {
     return Response.redirect(

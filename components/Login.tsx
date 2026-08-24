@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 
 const Login: React.FC = () => {
-    const { login } = useAuth();
+    const { signIn, authorizationError } = useAuth();
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -21,7 +21,7 @@ const Login: React.FC = () => {
         }
 
         try {
-            const { error: dbError } = await supabase.from('users').select('id', { head: true, count: 'exact' }).limit(1);
+            const { error: dbError } = await supabase.rpc('get_app_current_date');
             if (!dbError) {
                 setDbStatus('online');
                 setConnError(null);
@@ -45,44 +45,10 @@ const Login: React.FC = () => {
         setIsLoading(true);
 
         try {
-            let user = null;
-
-            if (supabase) {
-                const { data, error: dbError } = await supabase
-                    .from('users')
-                    .select('*')
-                    .or(`username.eq."${identifier}",email.eq."${identifier}"`)
-                    .eq('password', password)
-                    .maybeSingle();
-
-                if (dbError) {
-                    console.error('Direct Auth Error:', dbError);
-                } else if (data) {
-                    user = data;
-                }
-            }
-
-            // Preserve the existing local fallback for test environments.
-            if (!user && identifier === 'admin' && password === 'admin') {
-                user = {
-                    id: 99999,
-                    username: 'admin',
-                    fullName: 'System Administrator',
-                    email: 'admin@system.local',
-                    role: 'Super Admin' as any,
-                    operatingUnit: 'NPMO',
-                    password: 'admin',
-                };
-            }
-
-            if (user) {
-                login(user);
-            } else {
-                setError('Invalid credentials. Access denied.');
-            }
+            await signIn(identifier, password);
         } catch (loginError) {
             console.error('Login exception:', loginError);
-            setError('System error during validation.');
+            setError(loginError instanceof Error ? loginError.message : 'System error during validation.');
         } finally {
             setIsLoading(false);
         }
@@ -118,7 +84,7 @@ const Login: React.FC = () => {
                     </div>
 
                     {connError && <p className="login-connection-error">{connError}</p>}
-                    {error && <div className="login-alert" role="alert">{error}</div>}
+                    {(error || authorizationError) && <div className="login-alert" role="alert">{error || authorizationError}</div>}
 
                     <form onSubmit={handleSubmit} className="login-form">
                         <label className="login-field">

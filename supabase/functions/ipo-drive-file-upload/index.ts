@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const form = await request.formData();
-    const user = await requireIpoEditor(form.get("user_id"));
+    const user = await requireIpoEditor(request, form.get("user_id"));
     const ipoId = Number(form.get("ipo_id"));
     const file = form.get("file");
     const uploadSection = parseDriveUploadSection(form.get("upload_section"));

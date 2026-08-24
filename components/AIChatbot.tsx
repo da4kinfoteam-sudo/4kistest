@@ -57,7 +57,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
     onNavigate, onSelectSubproject, onSelectIpo, onSelectActivity, onSelectMarketingPartner,
     onApplyFilter
 }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, getVisibilityScope } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string, type?: 'quickstats' }[]>([
         { role: 'model', text: "Hello! I'm ready to help. Ask me 'How many Completed Subprojects in Region 2?' or 'How much is the budget for 2024?'" }
@@ -681,7 +681,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
             setQuickStatsStep(3);
             setMessages(prev => [...prev, { role: 'model', text: "Select Tier:" }]);
         } else if (key === 'tier') {
-            if (currentUser?.role === 'Administrator') {
+            if (getVisibilityScope('Dashboards') === 'All') {
                 setQuickStatsStep(4);
                 setMessages(prev => [...prev, { role: 'model', text: "Select Operating Unit:" }]);
             } else {
