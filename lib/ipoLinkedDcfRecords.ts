@@ -9,8 +9,6 @@ export interface IpoLinkedDcfRecords {
   monitoringActions: ActivityMonitoringAction[];
 }
 
-const isAdminRole = (role?: string) => role === 'Super Admin' || role === 'Administrator';
-
 const isMissingColumnError = (error: any) => {
   const message = String(error?.message || '').toLowerCase();
   return error?.code === 'PGRST204'
@@ -65,7 +63,7 @@ const mergePreferFirstById = <T extends { id: number }>(...groups: T[][]) => {
 };
 
 const filterByUserVisibility = <T extends { operatingUnit?: string }>(rows: T[], currentUser: User | null | undefined) => {
-  if (!currentUser || isAdminRole(currentUser.role)) return rows;
+  if (!currentUser) return rows;
   const scope = currentUser.visibility_scope || 'All OUs';
   if (scope === 'All OUs') return rows;
   return rows.filter(row => row.operatingUnit === currentUser.operatingUnit);
@@ -90,7 +88,7 @@ const activityIncludesIpo = (activity: Activity, ipoId: number, ipoName: string)
 
 const getLikelyOperatingUnits = (ipo: IPO, currentUser?: User | null) => {
   const units = new Set<string>();
-  if (currentUser && !isAdminRole(currentUser.role) && currentUser.visibility_scope !== 'All OUs' && currentUser.operatingUnit) {
+  if (currentUser && currentUser.visibility_scope !== 'All OUs' && currentUser.operatingUnit) {
     units.add(currentUser.operatingUnit);
   }
 

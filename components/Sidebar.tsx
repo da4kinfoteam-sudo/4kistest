@@ -66,8 +66,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, closeSidebar, currentPage, se
     const persistedExpansion = expandedGroupsByUser[userStorageKey] || {};
 
     const canViewItem = (item: AppNavigationItem): boolean => {
-        if (item.hiddenFor?.includes(currentUser?.role || '')) return false;
-        if (item.allowedRoles && !item.allowedRoles.includes(currentUser?.role || '')) return false;
         if (item.module && !hasAccess(item.module, 'view')) return false;
         return true;
     };

@@ -1,4 +1,4 @@
-import { User, UserRole } from '../constants';
+import type { User, UserRole } from '../constants';
 
 export const DCF_POLICY_SETTINGS_KEY = 'dcf_editing_policy';
 
@@ -94,6 +94,14 @@ const LOCKED_RULES: Record<DcfPolicyAction, boolean> = {
     delete: false,
 };
 
+const COMPLETED_RULES: Record<DcfPolicyAction, boolean> = {
+    editDetails: false,
+    editBudget: false,
+    editPhysicalAccomplishment: false,
+    editFinancialAccomplishment: true,
+    delete: false,
+};
+
 const buildRoleRules = (role: UserRole): DcfRolePolicyRules => {
     const roleRules: DcfRolePolicyRules = {};
     DCF_MODULES.forEach(module => {
@@ -101,12 +109,14 @@ const buildRoleRules = (role: UserRole): DcfRolePolicyRules => {
         module.statuses.forEach(status => {
             if (role === 'Super Admin' || role === 'Administrator') {
                 statusRules[status] = { ...ADMIN_ACTIONS };
-            } else if (role === 'Guest') {
+            } else if (role === 'Management' || role === 'Guest') {
                 statusRules[status] = { ...GUEST_ACTIONS };
             } else if (status === 'Proposed') {
                 statusRules[status] = { ...PROPOSED_RULES };
             } else if (status === 'Ongoing') {
                 statusRules[status] = { ...ONGOING_RULES };
+            } else if (status === 'Completed' || status === 'Filled') {
+                statusRules[status] = { ...COMPLETED_RULES };
             } else {
                 statusRules[status] = { ...LOCKED_RULES };
             }
@@ -165,7 +175,10 @@ export const normalizeDcfPolicySettings = (settings: unknown): DcfPolicySettings
                         [status]: {
                             ...defaultStatusRules,
                             ...rawStatusRules,
-                            ...(role === 'Guest' ? GUEST_ACTIONS : {}),
+                            ...((status === 'Completed' || status === 'Filled') && !['Management', 'Guest'].includes(role)
+                                ? { editFinancialAccomplishment: true }
+                                : {}),
+                            ...(['Management', 'Guest'].includes(role) ? GUEST_ACTIONS : {}),
                         },
                     },
                 };
@@ -243,13 +256,11 @@ export const canEditDcfSection = ({
         return { allowed: false, code: 'blocked_by_permission', message: 'No signed-in user.' };
     }
 
-    const isOverrideRole = policy.monthLock.overrideRoles.includes(user.role);
-    if (isOverrideRole) {
+    if (user.role === 'Super Admin') {
         return {
             allowed: true,
-            code: 'allowed_by_override',
-            message: 'Allowed by administrator override role.',
-            requiresOverrideReason: policy.monthLock.requireOverrideReason,
+            code: 'allowed',
+            message: 'Allowed by the protected Super Admin invariant.',
         };
     }
 
@@ -269,13 +280,15 @@ export const canDeleteDcfItem = (args: Omit<Parameters<typeof canEditDcfSection>
     canEditDcfSection({ ...args, action: 'delete' })
 );
 
-const parseYearMonth = (value: string): { year: number; month: number } | null => {
-    const match = value.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
+const parseYearMonth = (value: string): { year: number; month: number; day: number | null } | null => {
+    const match = value.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?$/);
     if (!match) return null;
     const year = Number(match[1]);
     const month = Number(match[2]);
     if (!Number.isFinite(year) || month < 1 || month > 12) return null;
-    return { year, month };
+    const day = match[3] ? Number(match[3]) : null;
+    if (day !== null && (!Number.isFinite(day) || day < 1 || day > 31)) return null;
+    return { year, month, day };
 };
 
 const monthIndex = (year: number, month: number) => year * 12 + month;
@@ -285,11 +298,13 @@ export const canUseAccomplishmentMonth = ({
     policy,
     targetMonth,
     serverDate,
+    canOverride,
 }: {
     user: Pick<User, 'role'> | null | undefined;
     policy: DcfPolicySettings;
     targetMonth: string;
     serverDate: string;
+    canOverride?: boolean;
 }): DcfPolicyDecision => {
     if (!policy.monthLock.enabled) {
         return { allowed: true, code: 'allowed', message: 'Accomplishment period locking is disabled.' };
@@ -299,7 +314,8 @@ export const canUseAccomplishmentMonth = ({
         return { allowed: false, code: 'blocked_by_permission', message: 'No signed-in user.' };
     }
 
-    const isOverrideRole = policy.monthLock.overrideRoles.includes(user.role);
+    const isSuperAdmin = user.role === 'Super Admin';
+    const isOverrideRole = canOverride ?? policy.monthLock.overrideRoles.includes(user.role);
     const target = parseYearMonth(targetMonth);
     const current = parseYearMonth(serverDate);
     if (!target || !current) {
@@ -312,6 +328,14 @@ export const canUseAccomplishmentMonth = ({
         return { allowed: true, code: 'allowed', message: 'Current month is open for accomplishment entry.' };
     }
 
+    if (isSuperAdmin) {
+        return {
+            allowed: true,
+            code: 'allowed',
+            message: 'Allowed by the protected Super Admin invariant.',
+        };
+    }
+
     if (isOverrideRole) {
         return {
             allowed: true,
@@ -321,11 +345,15 @@ export const canUseAccomplishmentMonth = ({
         };
     }
 
-    if (targetIndex < currentIndex) {
+    if (targetIndex === currentIndex - 1 && current.day !== null && current.day <= policy.monthLock.graceDays) {
+        return { allowed: true, code: 'allowed', message: 'Previous month remains open during the configured grace period.' };
+    }
+
+    if (targetIndex < currentIndex && policy.monthLock.blockPastMonthsAfterGrace) {
         return { allowed: false, code: 'blocked_by_month_lock', message: 'Only the current accomplishment month is open.' };
     }
 
-    if (targetIndex > currentIndex) {
+    if (targetIndex > currentIndex && policy.monthLock.blockFutureMonths) {
         return { allowed: false, code: 'blocked_by_month_lock', message: 'Only the current accomplishment month is open.' };
     }
 

@@ -35,6 +35,7 @@ import {
     replaceActivityIpoRelationships,
     resolveSelectedIpoIds,
 } from '../lib/activityIpoRelationships';
+import { beginWorkflowRevision, transitionItemStatus, transitionWorkflow } from '../lib/workflowService';
 
 interface ActivityEditProps {
     mode: 'create' | 'details' | 'expenses' | 'accomplishment';
@@ -106,12 +107,13 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
     const { logAction } = useLogAction();
     const { addIpoHistory } = useIpoHistory();
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
-    const isAdmin = currentUser?.role === 'Administrator';
+    const canManageOperatingUnit = hasAccess('Activities', 'manage_settings');
 
     const [formData, setFormData] = useState<Activity>(activity || defaultFormData);
     const [initialActivity, setInitialActivity] = useState<Activity>(activity || defaultFormData);
     const [monthLockMessage, setMonthLockMessage] = useState('');
     const [hasRemoteDuplicateTitle, setHasRemoteDuplicateTitle] = useState(false);
+    const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
 
     const [activeTab, setActiveTab] = useState<'details' | 'expenses'>('details');
     const [selectedActivityType, setSelectedActivityType] = useState('');
@@ -630,8 +632,8 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
 
     const validateActivityActualMonth = async (month?: string) => {
         if (!month || !activity) return true;
-        const decision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(decision)) {
+        const decision = getMonthDecision(month, 'financial');
+        if (isMonthSelectionAllowed(decision) || await ensureDecisionAllowed(decision, { moduleKey: 'activities', item: activity, itemId: activity.id, itemName: activity.name, month, action: 'editFinancialAccomplishment', entityType: 'activity' })) {
             setMonthLockMessage('');
             return true;
         }
@@ -744,7 +746,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
         let activitiesToSave: Activity[] = [];
         const currentYear = new Date().getFullYear();
         const prefix = formData.type === 'Training' ? 'TRN' : 'ACT';
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+        const workflow_status = 'DRAFT';
 
         if (mode === 'create') {
              if (conductType === 'Repeating') {
@@ -759,6 +761,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                     expenses: formData.expenses.map((exp, eIdx) => ({ ...exp, id: Date.now() + Math.random() + eIdx })), 
                     id: 0,
                     workflow_status,
+                    created_by_user_id: currentUser?.id || null,
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     history: [{ date: new Date().toISOString(), event: "Created (Repeating)", user: currentUser?.fullName || "System" }]
@@ -769,6 +772,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                      uid: `${prefix}-${currentYear}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
                      id: 0,
                      workflow_status,
+                     created_by_user_id: currentUser?.id || null,
                      created_at: new Date().toISOString(),
                      updated_at: new Date().toISOString(),
                      history: [{ date: new Date().toISOString(), event: "Created", user: currentUser?.fullName || "System" }]
@@ -872,6 +876,10 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                          if (data && data.length > 0) {
                               const createdId = data[0].id;
                               activitiesToSave[i].id = createdId;
+                              if (submitIntent === 'submit') {
+                                  const workflowResult = await transitionWorkflow('activities', createdId, 'submit');
+                                  activitiesToSave[i] = { ...activitiesToSave[i], ...workflowResult };
+                              }
                               await replaceActivityIpoRelationships(
                                   createdId,
                                   participatingIpoIds,
@@ -890,6 +898,17 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                              await syncActivityDisbursements(createdId, act.expenses);
                          }
                     } else {
+                         if (sanitizedPayload.status !== activity!.status) {
+                             const reason = sanitizedPayload.status === 'Cancelled' ? window.prompt('Reason for cancelling this activity:') : null;
+                             if (sanitizedPayload.status === 'Cancelled' && !reason?.trim()) throw new Error('A cancellation reason is required.');
+                             await transitionItemStatus('activities', activity!.id, sanitizedPayload.status, reason || undefined);
+                         }
+                         if (mode === 'details' || mode === 'expenses') {
+                             const revision = await beginWorkflowRevision('activities', activity!.id, `Material activity ${mode} edit`);
+                             sanitizedPayload.workflow_status = revision.workflow_status;
+                             sanitizedPayload.revision_number = revision.revision_number;
+                             activitiesToSave[i] = { ...activitiesToSave[i], ...revision };
+                         }
                          const { error } = await supabase.from('activities').update(sanitizedPayload).eq('id', activity!.id);
                          if (error) throw error;
                          await replaceActivityIpoRelationships(
@@ -1047,8 +1066,8 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                                         value={formData.operatingUnit || ''} 
                                         onChange={handleInputChange} 
                                         className={commonInputClasses} 
-                                        disabled={!isAdmin}
-                                        title={!isAdmin ? "Only Administrators can edit the Operating Unit" : ""}
+                                        disabled={!canManageOperatingUnit}
+                                        title={!canManageOperatingUnit ? "Operating Unit management permission is required" : ""}
                                     >
                                         <option value="">Select Operating Unit</option>
                                         {operatingUnits.map(ou => <option key={ou} value={ou}>{ou}</option>)}
@@ -1496,8 +1515,9 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                     <button type="button" onClick={onBack} className="btn btn-secondary">
                         Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary">
-                        {mode === 'create' ? 'Create Activity' : 'Save Changes'}
+                    {mode === 'create' && <button type="submit" onClick={() => setSubmitIntent('draft')} className="btn btn-secondary">Save Draft</button>}
+                    <button type="submit" onClick={() => setSubmitIntent('submit')} className="btn btn-primary">
+                        {mode === 'create' ? 'Submit for Review' : 'Save Changes'}
                     </button>
                 </div>
             </form>

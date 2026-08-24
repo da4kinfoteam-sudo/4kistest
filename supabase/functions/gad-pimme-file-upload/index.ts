@@ -5,7 +5,7 @@ Deno.serve(async (request) => {
   if (options) return options;
   try {
     const form = await request.formData();
-    const user = await requireGadPimmeEditor(form.get("user_id"));
+    const user = await requireGadPimmeEditor(request, form.get("user_id"));
     const file = form.get("file");
     if (!(file instanceof File)) throw new Error("A file is required.");
     return jsonResponse({

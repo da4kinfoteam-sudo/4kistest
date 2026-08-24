@@ -13,6 +13,7 @@ import { Search, X, Check, ChevronDown, Download, FileSpreadsheet, Plus, Upload 
 import { useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader } from '../ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from '../ui/MajorDataTable';
+import { transitionWorkflow } from '../../lib/workflowService';
 
 declare const XLSX: any;
 
@@ -69,7 +70,8 @@ interface OtherExpensesTabProps {
 }
 
 export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
+    const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
     const tableStoragePrefix = `programManagement_other_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management');
@@ -368,8 +370,6 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
 
         setValidationErrors([]);
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
-
         const submissionData: any = {
             ...formData,
             amount: Number(formData.amount), 
@@ -378,7 +378,8 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
             // Default 0 for new accomplishments
             actualAmount: 0, actualObligationAmount: 0, actualDisbursementAmount: 0,
             encodedBy: formData.encodedBy || currentUser?.fullName || 'System', 
-            workflow_status,
+            workflow_status: 'DRAFT',
+            created_by_user_id: currentUser?.id || null,
             updated_at: new Date().toISOString()
         };
 
@@ -405,7 +406,10 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
                 return; 
             }
             if (data) {
-                setItems(prev => [data, ...prev]);
+                const workflowResult = submitIntent === 'submit'
+                    ? await transitionWorkflow('other_program_expenses', data.id, 'submit')
+                    : null;
+                setItems(prev => [workflowResult ? { ...data, ...workflowResult } : data, ...prev]);
                 logAction('Created Other Program Expense', data.particulars || data.uid, undefined, 'Other Program Expense', String(data.id));
             }
         } else {
@@ -511,7 +515,7 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
 
         if (!window.confirm(`Are you sure you want to clone ${itemsToClone.length} items?`)) return;
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+        const workflow_status = 'DRAFT';
         const currentTimestamp = new Date().toISOString();
         const newItemsPayload = itemsToClone.map((item, index) => {
             const { id, uid, created_at, updated_at, physicalDeliveryDate, obligations, ...rest } = item;
@@ -536,6 +540,7 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
                 ...resetActuals,
                 uid: newUid,
                 workflow_status,
+                created_by_user_id: currentUser?.id || null,
                 encodedBy: currentUser?.fullName || 'System Clone',
                 created_at: currentTimestamp,
                 updated_at: currentTimestamp,
@@ -581,24 +586,20 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
         return <span className={classes}>{status || 'DRAFT'}</span>;
     };
 
-    const canApprove = (role?: string) => {
-        return ['Super Admin', 'Administrator', 'Focal - User', 'Management'].includes(role || '');
-    };
+    const canApprove = () => hasAccess('Program Management', 'approve');
+    const canSubmitWorkflow = (item: OtherProgramExpense) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+    const handleSubmitWorkflow = async (item: OtherProgramExpense, event: React.MouseEvent) => { event.stopPropagation(); try { const result = await transitionWorkflow('other_program_expenses', item.id, item.workflow_status === 'REJECTED' ? 'resubmit' : 'submit'); setItems(previous => previous.map(row => row.id === item.id ? { ...row, ...result } : row)); } catch (error: any) { alert('Failed to submit: ' + (error?.message || 'Unknown error')); } };
 
     const handleApprove = async (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!window.confirm('Are you sure you want to approve this expense?')) return;
         
-        if (supabase) {
-            const { error } = await supabase.from('other_program_expenses').update({ workflow_status: 'APPROVED' }).eq('id', id);
-            if (error) {
-                alert('Failed to approve: ' + error.message);
-            } else {
-                setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-                logAction('Approved Other Program Expense', String(id), undefined, 'Other Program Expense', String(id));
-            }
-        } else {
+        try {
+            await transitionWorkflow('other_program_expenses', id, 'approve');
             setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
+            logAction('Approved Other Program Expense', String(id), undefined, 'Other Program Expense', String(id));
+        } catch (error: any) {
+            alert('Failed to approve: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -607,18 +608,11 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
         const reason = window.prompt('Please provide a reason for rejection:');
         if (reason === null) return;
 
-        if (supabase) {
-            const { error } = await supabase.from('other_program_expenses').update({ 
-                workflow_status: 'REJECTED',
-                remarks: reason ? `REJECTED: ${reason}` : undefined
-            }).eq('id', id);
-            if (error) {
-                alert('Failed to reject: ' + error.message);
-            } else {
-                setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-            }
-        } else {
-            setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
+        try {
+            await transitionWorkflow('other_program_expenses', id, 'reject', reason);
+            setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED' } : s));
+        } catch (error: any) {
+            alert('Failed to reject: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -644,7 +638,7 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
                 const data = event.target?.result; const workbook = XLSX.read(data, { type: 'array' });
                 const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
                 const currentTimestamp = new Date().toISOString();
-                const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+                const workflow_status = 'DRAFT';
 
                 const newItems = jsonData.map((row: any, index: number) => {
                     const fundYear = Number(row.fundYear) || new Date().getFullYear();
@@ -661,6 +655,7 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
                         uacsCode: row.uacsCode || '', 
                         encodedBy: currentUser?.fullName || 'Upload', 
                         workflow_status,
+                        created_by_user_id: currentUser?.id || null,
                         created_at: currentTimestamp, 
                         updated_at: currentTimestamp
                     });
@@ -860,9 +855,8 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
                     </fieldset>
 
                     <div className="detail-edit-footer">
-                        <button type="submit" className="btn btn-primary">
-                            Save
-                        </button>
+                        <button type="submit" onClick={() => setSubmitIntent('draft')} className="btn btn-secondary">Save Draft</button>
+                        <button type="submit" onClick={() => setSubmitIntent('submit')} className="btn btn-primary">Submit for Review</button>
                     </div>
                 </form>
             </div>
@@ -891,7 +885,7 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
                 {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all expenses on this page" onChange={(event) => handleSelectAll(event, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(item => selectedIds.includes(item.id))} indeterminate={paginatedData.some(item => selectedIds.includes(item.id)) && !paginatedData.every(item => selectedIds.includes(item.id))} /></th>}
                 <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Status" columnKey="status" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="UACS Code" columnKey="uacsCode" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Particulars" columnKey="particulars" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Amount" columnKey="amount" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Year" columnKey="fundYear" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={requestSort} /><th>Workflow Status</th>
             </tr></thead><tbody>
-                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>{isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} /></td>}<td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={`status-badge ${item.status === 'Completed' ? 'status-badge--completed' : item.status === 'Ongoing' ? 'status-badge--ongoing' : item.status === 'Cancelled' ? 'status-badge--cancelled' : 'status-badge--proposed'}`}>{item.status}</span></td><td className="data-table__cell--mono"><TruncatedTableCell value={item.uacsCode} /></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.particulars} /></td><td className="data-table__cell--numeric">{formatCurrency(item.amount)}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td>{getWorkflowStatusBadge(item.workflow_status)}</td></tr>)}
+                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>{isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} /></td>}<td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={`status-badge ${item.status === 'Completed' ? 'status-badge--completed' : item.status === 'Ongoing' ? 'status-badge--ongoing' : item.status === 'Cancelled' ? 'status-badge--cancelled' : 'status-badge--proposed'}`}>{item.status}</span></td><td className="data-table__cell--mono"><TruncatedTableCell value={item.uacsCode} /></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.particulars} /></td><td className="data-table__cell--numeric">{formatCurrency(item.amount)}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td><div className="data-table__actions">{getWorkflowStatusBadge(item.workflow_status)}{canSubmitWorkflow(item) && <button onClick={event => void handleSubmitWorkflow(item, event)} className="table-action table-action--edit">Submit</button>}{item.workflow_status === 'PENDING' && canApprove() && <><button onClick={event => void handleApprove(item.id, event)} className="action-mini action-mini--approve" aria-label={`Approve ${item.uid}`}><Check /></button><button onClick={event => void handleReject(item.id, event)} className="action-mini action-mini--reject" aria-label={`Reject ${item.uid}`}><X /></button></>}</div></td></tr>)}
                 {paginatedData.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No other expenses match the current filters.</td></tr>}
             </tbody></table></div>
             <DataTablePagination currentPage={currentPage} itemsPerPage={itemsPerPage} totalItems={filteredItems.length} totalPages={totalPages} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />

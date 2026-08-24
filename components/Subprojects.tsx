@@ -15,6 +15,7 @@ import { useDcfPolicyGuard } from '../hooks/useDcfPolicyGuard';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader } from './ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from './ui/MajorDataTable';
 import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../lib/budgetLineAdjustments';
+import { transitionWorkflow } from '../lib/workflowService';
 
 // Declare XLSX to inform TypeScript about the global variable from the script tag
 declare const XLSX: any;
@@ -62,7 +63,7 @@ const Subprojects: React.FC<SubprojectsProps> = ({
     onCreateSubproject, uacsCodes, particularTypes, commodityCategories, externalFilters, onClearExternalFilters,
     onDataScopeChange
 }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const tableStoragePrefix = `subprojects_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Subprojects');
@@ -532,23 +533,29 @@ const Subprojects: React.FC<SubprojectsProps> = ({
         return <span className={classes}>{status || 'DRAFT'}</span>;
     };
 
-    const canApprove = (role?: string) => {
-        return ['Super Admin', 'Administrator', 'Focal - User', 'Management'].includes(role || '');
+    const canApprove = () => hasAccess('Subprojects', 'approve');
+    const canSubmitWorkflow = (subproject: Subproject) => ['DRAFT', 'REJECTED'].includes(subproject.workflow_status || 'DRAFT')
+        && (subproject.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+
+    const handleSubmitWorkflow = async (subproject: Subproject, event: React.MouseEvent) => {
+        event.stopPropagation();
+        try {
+            const result = await transitionWorkflow('subprojects', subproject.id, subproject.workflow_status === 'REJECTED' ? 'resubmit' : 'submit');
+            setSubprojects(previous => previous.map(item => item.id === subproject.id ? { ...item, ...result } : item));
+        } catch (error: any) {
+            alert('Failed to submit: ' + (error?.message || 'Unknown error'));
+        }
     };
 
     const handleApprove = async (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!window.confirm('Are you sure you want to approve this subproject?')) return;
         
-        if (supabase) {
-            const { error } = await supabase.from('subprojects').update({ workflow_status: 'APPROVED' }).eq('id', id);
-            if (error) {
-                alert('Failed to approve: ' + error.message);
-            } else {
-                setSubprojects(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-            }
-        } else {
+        try {
+            await transitionWorkflow('subprojects', id, 'approve');
             setSubprojects(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
+        } catch (error: any) {
+            alert('Failed to approve: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -557,18 +564,11 @@ const Subprojects: React.FC<SubprojectsProps> = ({
         const reason = window.prompt('Please provide a reason for rejection:');
         if (reason === null) return;
 
-        if (supabase) {
-            const { error } = await supabase.from('subprojects').update({ 
-                workflow_status: 'REJECTED',
-                remarks: reason ? `REJECTED: ${reason}` : undefined
-            }).eq('id', id);
-            if (error) {
-                alert('Failed to reject: ' + error.message);
-            } else {
-                setSubprojects(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-            }
-        } else {
-            setSubprojects(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
+        try {
+            await transitionWorkflow('subprojects', id, 'reject', reason);
+            setSubprojects(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED' } : s));
+        } catch (error: any) {
+            alert('Failed to reject: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -652,7 +652,7 @@ const Subprojects: React.FC<SubprojectsProps> = ({
                                     <td className="data-table__cell--numeric">{formatCurrency(budget)}</td>
                                     <td><span className={getStatusBadge(s.status)}>{s.status || 'Unknown'}</span></td>
                                     <td>{completionRate}%</td>
-                                    <td><div className="data-table__actions">{getWorkflowStatusBadge(s.workflow_status)}{s.workflow_status === 'PENDING' && canApprove(currentUser?.role) && <><button onClick={(e) => handleApprove(s.id, e)} className="action-mini action-mini--approve" aria-label={`Approve ${s.name}`}><Check aria-hidden="true" /></button><button onClick={(e) => handleReject(s.id, e)} className="action-mini action-mini--reject" aria-label={`Reject ${s.name}`}><X aria-hidden="true" /></button></>}</div></td>
+                                    <td><div className="data-table__actions">{getWorkflowStatusBadge(s.workflow_status)}{canSubmitWorkflow(s) && <button onClick={(event) => void handleSubmitWorkflow(s, event)} className="table-action table-action--edit">Submit</button>}{s.workflow_status === 'PENDING' && canApprove() && <><button onClick={(e) => handleApprove(s.id, e)} className="action-mini action-mini--approve" aria-label={`Approve ${s.name}`}><Check aria-hidden="true" /></button><button onClick={(e) => handleReject(s.id, e)} className="action-mini action-mini--reject" aria-label={`Reject ${s.name}`}><X aria-hidden="true" /></button></>}</div></td>
                                 </tr>;
                             })}
                             {paginatedSubprojects.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 13 : 12}>No subprojects match the current filters.</td></tr>}

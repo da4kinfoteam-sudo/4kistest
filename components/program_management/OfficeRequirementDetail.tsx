@@ -14,6 +14,7 @@ import { ObligationsEditor } from '../accomplishment/ObligationsEditor';
 import { getProgramManagementPhysicalDateBasis, resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../../lib/physicalAccomplishmentTimestamp';
 import { getActualObligationValidationError } from '../../lib/financialObligationUtils';
 import { replaceFinancialObligationRecords } from '../../lib/financialObligationSync';
+import { beginWorkflowRevision, transitionItemStatus } from '../../lib/workflowService';
 
 interface OfficeRequirementDetailProps {
     item: OfficeRequirement;
@@ -67,8 +68,8 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
 
     const validateActualMonth = async (month?: string) => {
         if (!month) return true;
-        const decision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(decision)) {
+        const decision = getMonthDecision(month, 'physical');
+        if (isMonthSelectionAllowed(decision) || await ensureDecisionAllowed(decision, { moduleKey: 'office_requirements', item, itemId: item.id, itemName: item.equipment, month, action: 'editPhysicalAccomplishment', entityType: 'office_requirement' })) {
             setMonthLockMessage('');
             return true;
         }
@@ -377,6 +378,16 @@ const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item,
                 setIsSaving(true);
                 // Exclude ID and obligations from update payload
                 const { id, obligations, disbursements, ...payload } = updatedItem;
+                if (updatedItem.status !== item.status) {
+                    const reason = updatedItem.status === 'Cancelled' ? window.prompt('Reason for cancelling this office requirement:') : null;
+                    if (updatedItem.status === 'Cancelled' && !reason?.trim()) throw new Error('A cancellation reason is required.');
+                    await transitionItemStatus('office_requirements', item.id, updatedItem.status, reason || undefined);
+                    delete payload.status;
+                }
+                if (editMode === 'details') {
+                    const revision = await beginWorkflowRevision('office_requirements', item.id, 'Material office requirement edit');
+                    Object.assign(payload, revision);
+                }
                 
                 console.log("Saving Office Requirement...", { id: item.id, payload });
                 const { error: updateError } = await supabase.from('office_requirements').update(payload).eq('id', item.id);

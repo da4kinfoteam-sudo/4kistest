@@ -82,9 +82,11 @@ const ActivityMonitoringReportDetail: React.FC<ActivityMonitoringReportDetailPro
     initialReport,
     initialActions = []
 }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { canEdit } = useUserAccess('Activities');
-    const isAdmin = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
+    const canManageMonitoring = hasAccess('Activities', 'manage_monitoring');
+    const canAddMonitoringAction = hasAccess('Activities', 'add_monitoring_action');
+    const canDeleteMonitoringAction = hasAccess('Activities', 'delete_monitoring_action');
     const [report, setReport] = useState<ActivityMonitoringReport | null>(initialReport || null);
     const [status, setStatus] = useState<ActivityMonitoringStatus>(initialReport?.status || 'Pending');
     const [findings, setFindings] = useState(initialReport?.findings || '');
@@ -99,7 +101,7 @@ const ActivityMonitoringReportDetail: React.FC<ActivityMonitoringReportDetailPro
     const [isLoading, setIsLoading] = useState(true);
     const [isAddingAction, setIsAddingAction] = useState(false);
 
-    const canEditReport = canEdit || isAdmin;
+    const canEditReport = canEdit || canManageMonitoring;
 
     useEffect(() => {
         setActions(initialActions);
@@ -325,7 +327,7 @@ const ActivityMonitoringReportDetail: React.FC<ActivityMonitoringReportDetailPro
     };
 
     const handleEditAction = async (action: ActivityMonitoringAction) => {
-        if (!supabase || !isAdmin) return;
+        if (!supabase || !canAddMonitoringAction) return;
         const nextValue = window.prompt('Update action taken:', action.action_taken);
         if (nextValue === null || !nextValue.trim()) return;
         try {
@@ -350,7 +352,7 @@ const ActivityMonitoringReportDetail: React.FC<ActivityMonitoringReportDetailPro
     };
 
     const handleDeleteAction = async (action: ActivityMonitoringAction) => {
-        if (!supabase || !isAdmin) return;
+        if (!supabase || !canDeleteMonitoringAction) return;
         if (!confirm('Delete this action update?')) return;
         try {
             const deletedAt = new Date().toISOString();
@@ -448,7 +450,7 @@ const ActivityMonitoringReportDetail: React.FC<ActivityMonitoringReportDetailPro
                                             {formatDateTime(action.created_at)} by {action.created_by_name || 'Unknown user'}
                                             {action.edited_at ? ` - edited ${formatDateTime(action.edited_at)}` : ''}
                                         </p>
-                                        {isAdmin && (
+                                        {canDeleteMonitoringAction && (
                                             <div className="drive-file-card__actions mt-2">
                                                 <button type="button" className="table-action table-action--primary" onClick={() => handleEditAction(action)}>
                                                     <Edit3 aria-hidden="true" />

@@ -217,8 +217,8 @@ const SpecialAwardsTable: React.FC<{
 );
 
 const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data, selectedYear, selectedTier, selectedFundType }) => {
-    const { currentUser } = useAuth();
-    const isAdmin = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
+    const { currentUser, hasAccess } = useAuth();
+    const isAdmin = hasAccess('Reports', 'manage_settings');
     const effectiveYear = Number.isFinite(Number(selectedYear)) ? Number(selectedYear) : new Date().getFullYear();
     const [controllerOpen, setControllerOpen] = useState(false);
     const [quarterDetailMode, setQuarterDetailMode] = useState<QuarterDetailMode>('financial');

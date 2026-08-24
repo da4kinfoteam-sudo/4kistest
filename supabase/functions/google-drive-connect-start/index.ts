@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const user = await requireSuperAdmin(body.user_id);
+    const user = await requireSuperAdmin(request, body.user_id);
     return jsonResponse({ authUrl: await createAuthorizationUrl(user.id) });
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : "Unable to start Google Drive connection.", 400);

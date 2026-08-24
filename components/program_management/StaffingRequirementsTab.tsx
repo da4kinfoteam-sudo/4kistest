@@ -16,6 +16,7 @@ import { getBudgetLineAmount, isBudgetLineExcludedFromTargets } from '../../lib/
 import { useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
 import { ConfirmDialog, DataTablePagination, SortableTableHeader } from '../ui/enterprise';
 import { BulkSelectionBar, ColumnFilterDialog, MajorTableToolbar, SelectionCheckbox, TruncatedTableCell } from '../ui/MajorDataTable';
+import { transitionWorkflow } from '../../lib/workflowService';
 
 declare const XLSX: any;
 
@@ -85,7 +86,8 @@ interface StaffingRequirementsTabProps {
 }
 
 export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
+    const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
     const tableStoragePrefix = `programManagement_staffing_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management');
@@ -394,8 +396,6 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
             });
         });
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
-
         const submissionData: any = {
             ...formData,
             ...aggregatedTotals,
@@ -407,7 +407,8 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
             actualAmount: 0, actualObligationAmount: 0, actualDisbursementAmount: 0,
             hiringStatus: formData.hiringStatus || 'Proposed',
             encodedBy: formData.encodedBy || currentUser?.fullName || 'System', 
-            workflow_status,
+            workflow_status: 'DRAFT',
+            created_by_user_id: currentUser?.id || null,
             updated_at: new Date().toISOString()
         };
 
@@ -424,7 +425,10 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
                 return; 
             }
             if (data) {
-                setItems(prev => [data, ...prev]);
+                const workflowResult = submitIntent === 'submit'
+                    ? await transitionWorkflow('staffing_requirements', data.id, 'submit')
+                    : null;
+                setItems(prev => [workflowResult ? { ...data, ...workflowResult } : data, ...prev]);
                 logAction('Created Staffing Requirement', data.personnelPosition || data.uid, undefined, 'Staffing Requirement', String(data.id));
             }
         } else {
@@ -530,7 +534,7 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
 
         if (!window.confirm(`Are you sure you want to clone ${itemsToClone.length} staffing requirements? This will create new entries with the same targets but reset accomplishments.`)) return;
 
-        const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+        const workflow_status = 'DRAFT';
         const currentTimestamp = new Date().toISOString();
         const newItemsPayload = itemsToClone.map((item, index) => {
             const { id, uid, created_at, updated_at, obligations, physical_accomplishment_submitted_at, ...rest } = item;
@@ -576,6 +580,7 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
                 uid: newUid,
                 expenses: clonedExpenses,
                 workflow_status,
+                created_by_user_id: currentUser?.id || null,
                 encodedBy: currentUser?.fullName || 'System Clone',
                 created_at: currentTimestamp,
                 updated_at: currentTimestamp,
@@ -622,24 +627,20 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
         return <span className={classes}>{status || 'DRAFT'}</span>;
     };
 
-    const canApprove = (role?: string) => {
-        return ['Super Admin', 'Administrator', 'Focal - User', 'Management'].includes(role || '');
-    };
+    const canApprove = () => hasAccess('Program Management', 'approve');
+    const canSubmitWorkflow = (item: StaffingRequirement) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+    const handleSubmitWorkflow = async (item: StaffingRequirement, event: React.MouseEvent) => { event.stopPropagation(); try { const result = await transitionWorkflow('staffing_requirements', item.id, item.workflow_status === 'REJECTED' ? 'resubmit' : 'submit'); setItems(previous => previous.map(row => row.id === item.id ? { ...row, ...result } : row)); } catch (error: any) { alert('Failed to submit: ' + (error?.message || 'Unknown error')); } };
 
     const handleApprove = async (id: number, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!window.confirm('Are you sure you want to approve this staffing requirement?')) return;
         
-        if (supabase) {
-            const { error } = await supabase.from('staffing_requirements').update({ workflow_status: 'APPROVED' }).eq('id', id);
-            if (error) {
-                alert('Failed to approve: ' + error.message);
-            } else {
-                setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
-                logAction('Approved Staffing Requirement', String(id), undefined, 'Staffing Requirement', String(id));
-            }
-        } else {
+        try {
+            await transitionWorkflow('staffing_requirements', id, 'approve');
             setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'APPROVED' } : s));
+            logAction('Approved Staffing Requirement', String(id), undefined, 'Staffing Requirement', String(id));
+        } catch (error: any) {
+            alert('Failed to approve: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -648,18 +649,11 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
         const reason = window.prompt('Please provide a reason for rejection:');
         if (reason === null) return;
 
-        if (supabase) {
-            const { error } = await supabase.from('staffing_requirements').update({ 
-                workflow_status: 'REJECTED',
-                remarks: reason ? `REJECTED: ${reason}` : undefined
-            }).eq('id', id);
-            if (error) {
-                alert('Failed to reject: ' + error.message);
-            } else {
-                setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
-            }
-        } else {
-            setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED', remarks: reason ? `REJECTED: ${reason}` : s.remarks } : s));
+        try {
+            await transitionWorkflow('staffing_requirements', id, 'reject', reason);
+            setItems(prev => prev.map(s => s.id === id ? { ...s, workflow_status: 'REJECTED' } : s));
+        } catch (error: any) {
+            alert('Failed to reject: ' + (error?.message || 'Unknown error'));
         }
     };
 
@@ -685,7 +679,7 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
                 const data = event.target?.result; const workbook = XLSX.read(data, { type: 'array' });
                 const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]) as any[];
                 const currentTimestamp = new Date().toISOString();
-                const workflow_status = currentUser?.requires_approver ? 'PENDING' : 'APPROVED';
+                const workflow_status = 'DRAFT';
                 
                 const newItems = jsonData.map((row: any, index: number) => {
                     const fundYear = Number(row.fundYear) || new Date().getFullYear();
@@ -704,6 +698,7 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
                         uacsCode: row.uacsCode || '', 
                         encodedBy: currentUser?.fullName || 'Upload', 
                         workflow_status,
+                        created_by_user_id: currentUser?.id || null,
                         created_at: currentTimestamp, 
                         updated_at: currentTimestamp
                     });
@@ -938,7 +933,8 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
                     
                     <div className="detail-edit-footer">
                         <button type="button" onClick={() => { setView('list'); }} className="btn btn-secondary">Cancel</button>
-                        <button type="submit" className="btn btn-primary">Save</button>
+                        <button type="submit" onClick={() => setSubmitIntent('draft')} className="btn btn-secondary">Save Draft</button>
+                        <button type="submit" onClick={() => setSubmitIntent('submit')} className="btn btn-primary">Submit for Review</button>
                     </div>
                 </form>
             </div>
@@ -967,7 +963,7 @@ export const StaffingRequirementsTab: React.FC<StaffingRequirementsTabProps> = (
                 {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all staffing requirements on this page" onChange={(event) => handleSelectAll(event, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(item => selectedIds.includes(item.id))} indeterminate={paginatedData.some(item => selectedIds.includes(item.id)) && !paginatedData.every(item => selectedIds.includes(item.id))} /></th>}
                 <SortableTableHeader label="Code" columnKey="uid" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="OU" columnKey="operatingUnit" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Status" columnKey="hiringStatus" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Position" columnKey="personnelPosition" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Annual Salary" columnKey="annualSalary" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Year" columnKey="fundYear" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Fund Type" columnKey="fundType" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Tier" columnKey="tier" sortConfig={sortConfig} onSort={requestSort} /><SortableTableHeader label="Budget" columnKey="budget" sortConfig={sortConfig} onSort={requestSort} /><th>Workflow Status</th>
             </tr></thead><tbody>
-                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>{isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} /></td>}<td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={getHiringStatusBadge(item.hiringStatus)}>{item.hiringStatus}</span></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.personnelPosition} /></td><td className="data-table__cell--numeric">{formatCurrency(item.annualSalary)}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td className="data-table__cell--numeric">{formatCurrency(getStaffingBudget(item))}</td><td>{getWorkflowStatusBadge(item.workflow_status)}</td></tr>)}
+                {paginatedData.map(item => <tr key={item.id} className={isSelectionMode ? (selectedIds.includes(item.id) ? `data-table__row--selected${selectionIntent === 'delete' ? ' data-table__row--selected-danger' : ''}` : undefined) : 'data-table__row--interactive'} tabIndex={isSelectionMode ? undefined : 0} aria-label={isSelectionMode ? undefined : `View details for ${item.uid}`} onClick={isSelectionMode ? undefined : () => onSelect(item)} onKeyDown={isSelectionMode ? undefined : event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(item); } }}>{isSelectionMode && <td className="data-table__cell--selection"><SelectionCheckbox aria-label={`Select ${item.uid}`} checked={selectedIds.includes(item.id)} onChange={() => handleSelectRow(item.id)} /></td>}<td className="data-table__cell--mono"><TruncatedTableCell value={item.uid} /></td><td><TruncatedTableCell value={item.operatingUnit} /></td><td><span className={getHiringStatusBadge(item.hiringStatus)}>{item.hiringStatus}</span></td><td className="data-table__cell--primary"><TruncatedTableCell value={item.personnelPosition} /></td><td className="data-table__cell--numeric">{formatCurrency(item.annualSalary)}</td><td>{item.fundYear}</td><td>{item.fundType}</td><td>{item.tier}</td><td className="data-table__cell--numeric">{formatCurrency(getStaffingBudget(item))}</td><td><div className="data-table__actions">{getWorkflowStatusBadge(item.workflow_status)}{canSubmitWorkflow(item) && <button onClick={event => void handleSubmitWorkflow(item, event)} className="table-action table-action--edit">Submit</button>}{item.workflow_status === 'PENDING' && canApprove() && <><button onClick={event => void handleApprove(item.id, event)} className="action-mini action-mini--approve" aria-label={`Approve ${item.uid}`}><Check /></button><button onClick={event => void handleReject(item.id, event)} className="action-mini action-mini--reject" aria-label={`Reject ${item.uid}`}><X /></button></>}</div></td></tr>)}
                 {paginatedData.length === 0 && <tr><td className="data-table__empty-cell" colSpan={isSelectionMode ? 11 : 10}>No staffing requirements match the current filters.</td></tr>}
             </tbody></table></div>
             <DataTablePagination currentPage={currentPage} itemsPerPage={itemsPerPage} totalItems={filteredItems.length} totalPages={totalPages} onPageChange={setCurrentPage} onItemsPerPageChange={setItemsPerPage} />

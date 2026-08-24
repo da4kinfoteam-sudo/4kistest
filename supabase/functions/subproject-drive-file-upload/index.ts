@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const form = await request.formData();
-    const user = await requireSubprojectEditor(form.get("user_id"));
+    const user = await requireSubprojectEditor(request, form.get("user_id"));
     const subprojectId = Number(form.get("subproject_id"));
     const file = form.get("file");
     const uploadSection = parseDriveUploadSection(form.get("upload_section"));

@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json();
-    const user = await requireAdmin(body.user_id);
+    const user = await requireAdmin(request, body.user_id, "Activities");
     const fileRowId = Number(body.file_row_id);
 
     if (!Number.isFinite(fileRowId)) throw new Error("A valid file row is required.");

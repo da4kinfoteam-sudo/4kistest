@@ -13,6 +13,7 @@ import { supabase } from '../../supabaseClient';
 import { ObligationsEditor } from '../accomplishment/ObligationsEditor';
 import { createDisbursementsFromMonthlyFields, summarizeDisbursements } from '../../lib/disbursementUtils';
 import { replaceFinancialObligationRecords } from '../../lib/financialObligationSync';
+import { beginWorkflowRevision, transitionItemStatus } from '../../lib/workflowService';
 
 interface OtherExpenseDetailProps {
     item: OtherProgramExpense;
@@ -53,8 +54,8 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, uacsCodes
 
     const validateActualMonth = async (month?: string) => {
         if (!month) return true;
-        const decision = getMonthDecision(month);
-        if (isMonthSelectionAllowed(decision)) {
+        const decision = getMonthDecision(month, 'financial');
+        if (isMonthSelectionAllowed(decision) || await ensureDecisionAllowed(decision, { moduleKey: 'other_program_expenses', item, itemId: item.id, itemName: item.particulars, month, action: 'editFinancialAccomplishment', entityType: 'other_program_expense' })) {
             setMonthLockMessage('');
             return true;
         }
@@ -361,6 +362,16 @@ const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, uacsCodes
                 setIsSaving(true);
                 // Exclude ID and obligations from payload
                 const { id, obligations, disbursements, ...payload } = updatedItem;
+                if (updatedItem.status !== item.status) {
+                    const reason = updatedItem.status === 'Cancelled' ? window.prompt('Reason for cancelling this program expense:') : null;
+                    if (updatedItem.status === 'Cancelled' && !reason?.trim()) throw new Error('A cancellation reason is required.');
+                    await transitionItemStatus('other_program_expenses', item.id, updatedItem.status, reason || undefined);
+                    delete payload.status;
+                }
+                if (editMode === 'details') {
+                    const revision = await beginWorkflowRevision('other_program_expenses', item.id, 'Material program expense edit');
+                    Object.assign(payload, revision);
+                }
 
                 console.log("Saving Other Program Expense...", { id: item.id, payload });
                 const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.id);

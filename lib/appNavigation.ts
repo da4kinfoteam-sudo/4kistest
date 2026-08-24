@@ -31,7 +31,6 @@ export interface RoutePageDefinition<TPage extends string> {
     page: TPage;
     route: string;
     activeMatchPaths?: readonly string[];
-    allowedRoles?: readonly string[];
 }
 
 export const dashboardPages: readonly RoutePageDefinition<DashboardPageKey>[] = [
@@ -48,8 +47,7 @@ export const dashboardPages: readonly RoutePageDefinition<DashboardPageKey>[] = 
         id: 'dashboard-awards-rankings',
         label: 'Awards and Rankings',
         page: 'Awards and Rankings',
-        route: '/dashboards/awards-rankings',
-        allowedRoles: ['Super Admin', 'Administrator']
+        route: '/dashboards/awards-rankings'
     }
 ];
 
@@ -131,8 +129,6 @@ export interface AppNavigationItem {
     kind: NavigationItemKind;
     href?: string;
     module?: string;
-    hiddenFor?: readonly string[];
-    allowedRoles?: readonly string[];
     activeMatchPaths?: readonly string[];
     children?: readonly AppNavigationItem[];
 }
@@ -140,7 +136,6 @@ export interface AppNavigationItem {
 const pageToNavigationItem = <TPage extends string>(
     page: RoutePageDefinition<TPage>,
     module: string,
-    hiddenFor?: readonly string[]
 ): AppNavigationItem => ({
     id: page.id,
     name: page.sidebarLabel || page.label,
@@ -148,8 +143,6 @@ const pageToNavigationItem = <TPage extends string>(
     kind: 'link',
     href: page.route,
     module,
-    hiddenFor,
-    allowedRoles: page.allowedRoles,
     activeMatchPaths: page.activeMatchPaths
 });
 
@@ -210,28 +203,23 @@ export const appNavigationStructure: readonly AppNavigationItem[] = [
                 name: 'References',
                 kind: 'disclosure',
                 module: 'References',
-                hiddenFor: ['Management'],
                 children: referenceNavigationGroups.map(group => ({
                     id: group.id,
                     name: group.label,
                     kind: 'group' as const,
                     module: 'References',
-                    hiddenFor: ['Management'],
-                    children: group.pages.map(page => pageToNavigationItem(page, 'References', ['Management']))
+                    children: group.pages.map(page => pageToNavigationItem(page, 'References'))
                 }))
             }
         ]
     }
 ];
 
-const isRoleAllowed = (page: RoutePageDefinition<string>, role?: string | null) =>
-    !page.allowedRoles || (!!role && page.allowedRoles.includes(role));
-
 const resolvePage = <TPage extends string>(
     pages: readonly RoutePageDefinition<TPage>[],
     path: string,
-    role?: string | null
-) => pages.find(page => page.route === path && isRoleAllowed(page, role)) || pages[0];
+    _role?: string | null
+) => pages.find(page => page.route === path) || pages[0];
 
 export const isDashboardPagePath = (path: string) => path === '/dashboards' || path.startsWith('/dashboards/');
 

@@ -1,122 +1,276 @@
-// Author: 4K 
-import React, { createContext, useContext, ReactNode, useEffect, useState, useRef } from 'react';
-import { User, RoleConfig } from '../constants';
-import useLocalStorageState from '../hooks/useLocalStorageState';
-import { useSupabaseTable } from '../hooks/useSupabaseTable';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import type { AuthorizationPolicyState, RoleConfig, User } from '../constants';
 import { supabase } from '../supabaseClient';
+import {
+    legacyActionMap,
+    resolveAccessDecision,
+    type AccessAction,
+    type AccessDecision,
+    type RolePermissionRule,
+    type UserPermissionRule,
+    type UserScopeRule,
+} from '../lib/accessControl';
+
+type LegacyAction = 'view' | 'edit' | 'delete' | 'manage';
 
 interface AuthContextType {
     currentUser: User | null;
-    login: (user: User) => void;
-    logout: () => void;
+    session: Session | null;
+    signIn: (identifier: string, password: string) => Promise<void>;
+    logout: () => Promise<void>;
     usersList: User[];
     setUsersList: React.Dispatch<React.SetStateAction<User[]>>;
     rolesConfigs: RoleConfig[];
-    hasAccess: (module: string, action: 'view' | 'edit' | 'delete' | 'manage') => boolean;
+    roleRules: RolePermissionRule[];
+    userRules: UserPermissionRule[];
+    userScopes: UserScopeRule[];
+    policyState: AuthorizationPolicyState | null;
+    hasAccess: (module: string, action: AccessAction | LegacyAction, recordOperatingUnit?: string | null) => boolean;
+    getAccessDecision: (module: string, action: AccessAction | LegacyAction, recordOperatingUnit?: string | null) => AccessDecision;
     getVisibilityScope: (module: string) => 'All' | 'Own OU';
     refreshUsersList: () => Promise<void>;
     refreshUser: () => Promise<void>;
     refreshPermissions: () => Promise<void>;
     isAuthReady: boolean;
+    authorizationError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const PROFILE_COLUMNS = 'id,auth_id,username,fullName,email,role,operatingUnit,visibility_scope,assigned_focal_id,requires_approver,approver_id,is_active,deactivated_at,permission_version,password_reset_required,created_at,updated_at';
+
+const normalizeAction = (action: AccessAction | LegacyAction): AccessAction => (
+    action in legacyActionMap ? legacyActionMap[action as LegacyAction] : action as AccessAction
+);
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [currentUser, setCurrentUser] = useLocalStorageState<User | null>('currentUserSession', null);
+    const [session, setSession] = useState<Session | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [usersList, setUsersList] = useState<User[]>([]);
+    const [roleRules, setRoleRules] = useState<RolePermissionRule[]>([]);
+    const [userRules, setUserRules] = useState<UserPermissionRule[]>([]);
+    const [userScopes, setUserScopes] = useState<UserScopeRule[]>([]);
+    const [policyState, setPolicyState] = useState<AuthorizationPolicyState | null>(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
-    const [usersList, setUsersList, usersSync] = useSupabaseTable<User>('users', []);
-    const [rolesConfigs, setRolesConfigs] = useState<RoleConfig[]>([]);
+    const [authorizationError, setAuthorizationError] = useState<string | null>(null);
+    const bootstrapId = useRef(0);
 
-    const fetchRolesConfigs = async () => {
-        if (!supabase) return;
-        try {
-            const { data, error } = await supabase.from('roles_config').select('*');
-            if (data) setRolesConfigs(data);
-            if (error) console.error("Error fetching roles configs:", error);
-        } catch (err) {
-            console.error("Fetch roles configs exception:", err);
-        }
-    };
-
-    useEffect(() => {
-        fetchRolesConfigs();
-        setIsAuthReady(true);
+    const clearAuthorizationState = useCallback(() => {
+        setCurrentUser(null);
+        setUsersList([]);
+        setRoleRules([]);
+        setUserRules([]);
+        setUserScopes([]);
+        setPolicyState(null);
+        setAuthorizationError(null);
     }, []);
 
-    const login = (user: User) => {
-        setCurrentUser(user);
-    };
+    const fetchProfile = useCallback(async (authUserId: string): Promise<User> => {
+        if (!supabase) throw new Error('Supabase is not configured.');
+        const { data, error } = await supabase.from('users').select(PROFILE_COLUMNS).eq('auth_id', authUserId).maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error('No active application profile is linked to this account.');
+        if (data.is_active === false) throw new Error('This account is inactive.');
+        return data as User;
+    }, []);
 
-    const logout = () => {
-        setCurrentUser(null);
-        localStorage.removeItem('currentUserSession');
-    };
+    const fetchPolicy = useCallback(async (profile: User) => {
+        if (!supabase) throw new Error('Supabase is not configured.');
+        const [roleResult, overrideResult, scopeResult, stateResult] = await Promise.all([
+            supabase.from('authorization_role_rules').select('role,module,action,allowed,visibility_scope'),
+            supabase.from('authorization_user_rules').select('user_id,module,action,effect').eq('user_id', profile.id),
+            supabase.from('authorization_user_scopes').select('user_id,module,visibility_scope').eq('user_id', profile.id),
+            supabase.from('authorization_policy').select('policy_version,legacy_user_auto_approve_enabled,legacy_user_auto_approve_owner,legacy_user_auto_approve_cutoff').eq('singleton', true).single(),
+        ]);
+        const firstError = roleResult.error || overrideResult.error || scopeResult.error || stateResult.error;
+        if (firstError) throw firstError;
+        setRoleRules((roleResult.data || []) as RolePermissionRule[]);
+        setUserRules((overrideResult.data || []) as UserPermissionRule[]);
+        setUserScopes((scopeResult.data || []) as UserScopeRule[]);
+        setPolicyState(stateResult.data as AuthorizationPolicyState);
+    }, []);
 
-    const hasAccess = (module: string, action: 'view' | 'edit' | 'delete' | 'manage'): boolean => {
-        if (!currentUser) return false;
-        if (currentUser.role === 'Super Admin') return true;
-        if (currentUser.role === 'Administrator' && action !== 'manage') return true;
-        if (currentUser.role === 'Guest' && action !== 'view') return false;
+    const refreshUsersListFor = useCallback(async (profile: User, rules: RolePermissionRule[] = roleRules, overrides: UserPermissionRule[] = userRules, scopes: UserScopeRule[] = userScopes) => {
+        if (!supabase) return;
+        const canManageUsers = resolveAccessDecision({
+            user: profile,
+            module: 'Settings - User Management',
+            action: 'manage_users',
+            roleRules: rules,
+            userRules: overrides,
+            userScopes: scopes,
+            policyVersion: policyState?.policy_version || 0,
+        }).allowed;
+        if (!canManageUsers) {
+            setUsersList([]);
+            return;
+        }
+        const { data, error } = await supabase.from('users').select(PROFILE_COLUMNS).order('id', { ascending: true });
+        if (error) throw error;
+        setUsersList((data || []) as User[]);
+    }, [policyState?.policy_version, roleRules, userRules, userScopes]);
 
-        if (currentUser.permissions_override && typeof currentUser.permissions_override === 'object') {
-            const moduleOverride = currentUser.permissions_override[module];
-            if (moduleOverride && typeof moduleOverride[`can_${action}`] === 'boolean') {
-                return moduleOverride[`can_${action}`];
+    const bootstrapSession = useCallback(async (nextSession: Session | null) => {
+        const requestId = ++bootstrapId.current;
+        setIsAuthReady(false);
+        setAuthorizationError(null);
+        setSession(nextSession);
+        if (!nextSession?.user) {
+            clearAuthorizationState();
+            setIsAuthReady(true);
+            return;
+        }
+        try {
+            const profile = await fetchProfile(nextSession.user.id);
+            if (requestId !== bootstrapId.current) return;
+            setCurrentUser(profile);
+            await fetchPolicy(profile);
+            if (requestId !== bootstrapId.current) return;
+        } catch (error: any) {
+            if (requestId !== bootstrapId.current) return;
+            clearAuthorizationState();
+            setSession(null);
+            setAuthorizationError(error?.message || 'Unable to load authorization policy.');
+            if (supabase) await supabase.auth.signOut();
+        } finally {
+            if (requestId === bootstrapId.current) setIsAuthReady(true);
+        }
+    }, [clearAuthorizationState, fetchPolicy, fetchProfile]);
+
+    useEffect(() => {
+        if (!supabase) {
+            setAuthorizationError('Supabase is not configured.');
+            setIsAuthReady(true);
+            return;
+        }
+        supabase.auth.getSession().then(({ data, error }) => {
+            if (error) {
+                setAuthorizationError(error.message);
+                setIsAuthReady(true);
+                return;
             }
+            void bootstrapSession(data.session);
+        });
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+            void bootstrapSession(nextSession);
+        });
+        return () => listener.subscription.unsubscribe();
+    }, [bootstrapSession]);
+
+    useEffect(() => {
+        if (!currentUser || !policyState) return;
+        void refreshUsersListFor(currentUser).catch(error => console.error('Unable to load authorized user directory:', error));
+    }, [currentUser, policyState, refreshUsersListFor]);
+
+    useEffect(() => {
+        if (!supabase || !currentUser) return;
+        const channel = supabase.channel(`authorization-${currentUser.id}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'authorization_policy' }, () => void fetchPolicy(currentUser))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'authorization_user_rules', filter: `user_id=eq.${currentUser.id}` }, () => void fetchPolicy(currentUser))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'authorization_user_scopes', filter: `user_id=eq.${currentUser.id}` }, () => void fetchPolicy(currentUser))
+            .subscribe();
+        return () => { void supabase.removeChannel(channel); };
+    }, [currentUser, fetchPolicy]);
+
+    const signIn = useCallback(async (identifier: string, password: string) => {
+        if (!supabase) throw new Error('Supabase is not configured.');
+        let email = identifier.trim();
+        if (!email.includes('@')) {
+            const { data, error } = await supabase.rpc('resolve_login_identifier', { p_identifier: email });
+            if (error) throw new Error('Unable to resolve this username.');
+            if (!data) throw new Error('Invalid credentials.');
+            email = data;
         }
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw new Error('Invalid credentials.');
+    }, []);
 
-        if (rolesConfigs && rolesConfigs.length > 0) {
-            const roleDef = rolesConfigs.find(c => c.role === currentUser.role && c.module === module);
-            if (roleDef && typeof (roleDef as any)[`can_${action}`] === 'boolean') {
-                return !!(roleDef as any)[`can_${action}`];
-            }
+    const logout = useCallback(async () => {
+        clearAuthorizationState();
+        setSession(null);
+        if (supabase) await supabase.auth.signOut();
+    }, [clearAuthorizationState]);
+
+    const getAccessDecision = useCallback((module: string, action: AccessAction | LegacyAction, recordOperatingUnit?: string | null) => resolveAccessDecision({
+        user: currentUser,
+        module,
+        action: normalizeAction(action),
+        roleRules,
+        userRules,
+        userScopes,
+        policyVersion: policyState?.policy_version || 0,
+        recordOperatingUnit,
+    }), [currentUser, policyState?.policy_version, roleRules, userRules, userScopes]);
+
+    const hasAccess = useCallback((module: string, action: AccessAction | LegacyAction, recordOperatingUnit?: string | null) => (
+        getAccessDecision(module, action, recordOperatingUnit).allowed
+    ), [getAccessDecision]);
+
+    const getVisibilityScope = useCallback((module: string): 'All' | 'Own OU' => (
+        getAccessDecision(module, 'view').scope
+    ), [getAccessDecision]);
+
+    const refreshPermissions = useCallback(async () => {
+        if (!currentUser) return;
+        await fetchPolicy(currentUser);
+    }, [currentUser, fetchPolicy]);
+
+    const refreshUser = useCallback(async () => {
+        if (!session?.user) return;
+        const profile = await fetchProfile(session.user.id);
+        setCurrentUser(profile);
+        await fetchPolicy(profile);
+    }, [fetchPolicy, fetchProfile, session?.user]);
+
+    const refreshUsersList = useCallback(async () => {
+        if (!currentUser) return;
+        await refreshUsersListFor(currentUser);
+    }, [currentUser, refreshUsersListFor]);
+
+    const rolesConfigs = useMemo<RoleConfig[]>(() => {
+        const grouped = new Map<string, RoleConfig>();
+        for (const rule of roleRules) {
+            const key = `${rule.role}::${rule.module}`;
+            const existing = grouped.get(key) || {
+                role: rule.role,
+                module: rule.module,
+                can_view: false,
+                can_edit: false,
+                can_delete: false,
+                can_manage: false,
+                visibility_scope: rule.visibility_scope || 'Own OU',
+            };
+            if (rule.action === 'view') existing.can_view = rule.allowed;
+            if (rule.action === 'edit') existing.can_edit = rule.allowed;
+            if (rule.action === 'delete') existing.can_delete = rule.allowed;
+            if (rule.action === 'manage_settings') existing.can_manage = rule.allowed;
+            grouped.set(key, existing);
         }
-
-        if (action === 'view') return true; 
-        return false;
-    };
-
-    const getVisibilityScope = (module: string): 'All' | 'Own OU' => {
-        if (!currentUser) return 'Own OU';
-
-        // 1. Individual User Visibility Override (explicitly set in User Management)
-        if (currentUser.visibility_scope === 'Own OU') return 'Own OU';
-        if (currentUser.visibility_scope === 'All OUs') return 'All';
-
-        // 2. Role-Level Configuration (from User Role Control Center)
-        if (rolesConfigs && rolesConfigs.length > 0) {
-            const roleDef = rolesConfigs.find(c => c.role === currentUser.role && c.module === module);
-            if (roleDef && roleDef.visibility_scope) {
-                return (roleDef.visibility_scope === 'All OUs') ? 'All' : 'Own OU';
-            }
-        }
-
-        // LOD deliberately fails closed until its configured scope is available.
-        if (module === 'Level of Development' || module === 'Gender and Development') return 'Own OU';
-
-        // 3. Legacy fallbacks retained for modules that have not moved to strict scope configuration.
-        if (['Super Admin', 'Administrator'].includes(currentUser.role)) return 'All';
-        if (['Management'].includes(currentUser.role)) {
-            return 'All';
-        }
-        
-        return 'Own OU';
-    };
-
-    const fetchCurrentUser = async () => {
-        if (!supabase || !currentUser?.id) return;
-        const { data } = await supabase.from('users').select('*').eq('id', currentUser.id).single();
-        if (data) {
-            setCurrentUser(data);
-        }
-    };
+        return [...grouped.values()];
+    }, [roleRules]);
 
     return (
-        <AuthContext.Provider value={{ 
-            currentUser, login, logout, usersList, setUsersList, rolesConfigs, 
-            hasAccess, getVisibilityScope, refreshUsersList: usersSync.refresh, refreshUser: fetchCurrentUser, refreshPermissions: fetchRolesConfigs,
-            isAuthReady
+        <AuthContext.Provider value={{
+            currentUser,
+            session,
+            signIn,
+            logout,
+            usersList,
+            setUsersList,
+            rolesConfigs,
+            roleRules,
+            userRules,
+            userScopes,
+            policyState,
+            hasAccess,
+            getAccessDecision,
+            getVisibilityScope,
+            refreshUsersList,
+            refreshUser,
+            refreshPermissions,
+            isAuthReady,
+            authorizationError,
         }}>
             {children}
         </AuthContext.Provider>
@@ -125,9 +279,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
+    if (!context) throw new Error('useAuth must be used within an AuthProvider');
     return context;
 };
-// --- End of AuthContext.tsx ---

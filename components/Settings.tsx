@@ -71,36 +71,33 @@ const Settings: React.FC<SettingsProps> = ({
     const { currentUser, hasAccess } = useAuth();
     const [activeTab, setActiveTab] = useState<TabName>(getInitialSettingsTab);
 
-    // We keep these legacy admin checks as absolute fallbacks for settings only
-    const isAdmin = currentUser?.role === 'Administrator' || currentUser?.role === 'Super Admin';
-    const isSuperAdmin = currentUser?.role === 'Super Admin';
-    const isGuest = currentUser?.role === 'Guest';
+    const canManageUsers = hasAccess('Settings - User Management', 'manage_users');
+    const canManageAccess = hasAccess('Settings - Access Control', 'manage_permissions');
+    const canManageDrive = hasAccess('Settings - Google Drive', 'manage_settings');
+    const canManageDcf = hasAccess('Settings - DCF and Status', 'manage_settings');
+    const canManageLod = hasAccess('Settings - LOD', 'manage_settings');
+    const canAccessSystem = hasAccess('Settings - System', 'view');
+    const canViewAudit = hasAccess('Settings - Audit and Security', 'view');
+    const canManageArchive = hasAccess('Settings - Archive', 'manage_settings');
 
     useEffect(() => {
-        if (isSuperAdmin && window.location.hash.includes('drive=')) {
+        if (canManageDrive && window.location.hash.includes('drive=')) {
             setActiveTab('drive');
         }
-    }, [isSuperAdmin]);
-
-    // Use granular rules from user overrides/roles config where applicable
-    const canAccessSystem = !isGuest && (hasAccess('System Management', 'view') || isAdmin);
+    }, [canManageDrive]);
 
     const isTabAllowed = (name: TabName): boolean => {
         if (name === 'profile') return true;
-        if (isGuest) return false;
-
         switch (name) {
-            case 'management':
-            case 'dcf':
-            case 'lod':
-            case 'logs':
-            case 'archive':
-                return isAdmin;
-            case 'control_center':
-            case 'drive':
-                return isSuperAdmin;
+            case 'management': return canManageUsers;
+            case 'control_center': return canManageAccess;
+            case 'drive': return canManageDrive;
+            case 'dcf': return canManageDcf;
+            case 'lod': return canManageLod;
             case 'system':
                 return canAccessSystem;
+            case 'logs': return canViewAudit;
+            case 'archive': return canManageArchive;
             default:
                 return false;
         }
@@ -110,7 +107,7 @@ const Settings: React.FC<SettingsProps> = ({
         if (!isTabAllowed(activeTab)) {
             setActiveTab('profile');
         }
-    }, [activeTab, isAdmin, isSuperAdmin, isGuest, canAccessSystem]);
+    }, [activeTab, canManageUsers, canManageAccess, canManageDrive, canManageDcf, canManageLod, canAccessSystem, canViewAudit, canManageArchive]);
 
     if (!currentUser) return null;
 
@@ -133,20 +130,20 @@ const Settings: React.FC<SettingsProps> = ({
         <div className="settings-page animate-fadeIn">
              <PageHeader title="Settings" metadata="Manage your profile, access controls, integrations, and system preferences." />
 
-             {!isGuest && <SystemHealthCard />}
+             {hasAccess('Settings - System', 'view') && <SystemHealthCard />}
 
              <section className="settings-panel">
                 <div className="settings-tabs">
                     <nav className="settings-tabs__list" aria-label="Settings sections" role="tablist">
                         <TabButton name="profile" label="User Profile" />
-                        {isAdmin && <TabButton name="management" label="Users Management" />}
-                        {isSuperAdmin && <TabButton name="control_center" label="User Control Center" />}
-                        {isSuperAdmin && <TabButton name="drive" label="Google Drive Storage" />}
-                        {isAdmin && <TabButton name="dcf" label="DCF Management" />}
-                        {isAdmin && <TabButton name="lod" label="LOD Management" />}
+                        {canManageUsers && <TabButton name="management" label="Users Management" />}
+                        {canManageAccess && <TabButton name="control_center" label="User Control Center" />}
+                        {canManageDrive && <TabButton name="drive" label="Google Drive Storage" />}
+                        {canManageDcf && <TabButton name="dcf" label="DCF Management" />}
+                        {canManageLod && <TabButton name="lod" label="LOD Management" />}
                         {canAccessSystem && <TabButton name="system" label="System Management" />}
-                        {isAdmin && <TabButton name="logs" label="User Logs" />}
-                        {isAdmin && <TabButton name="archive" label="Archive Management" />}
+                        {canViewAudit && <TabButton name="logs" label="User Logs" />}
+                        {canManageArchive && <TabButton name="archive" label="Archive Management" />}
                     </nav>
                 </div>
 
@@ -159,19 +156,19 @@ const Settings: React.FC<SettingsProps> = ({
                         />
                     )}
                     
-                    {activeTab === 'control_center' && isSuperAdmin && (
+                    {activeTab === 'control_center' && canManageAccess && (
                         <UserControlCenterTab />
                     )}
 
-                    {activeTab === 'drive' && isSuperAdmin && (
+                    {activeTab === 'drive' && canManageDrive && (
                         <GoogleDriveStorageTab />
                     )}
 
-                    {activeTab === 'management' && isAdmin && (
+                    {activeTab === 'management' && canManageUsers && (
                         <UserManagementTab />
                     )}
 
-                    {activeTab === 'dcf' && isAdmin && (
+                    {activeTab === 'dcf' && canManageDcf && (
                         <DCFManagementTab 
                             subprojects={subprojects} setSubprojects={setSubprojects}
                             activities={activities} setActivities={setActivities}
@@ -184,7 +181,7 @@ const Settings: React.FC<SettingsProps> = ({
                         />
                     )}
 
-                    {activeTab === 'lod' && isAdmin && (
+                    {activeTab === 'lod' && canManageLod && (
                         <LODManagementTab />
                     )}
 
@@ -195,7 +192,7 @@ const Settings: React.FC<SettingsProps> = ({
                         />
                     )}
 
-                    {activeTab === 'logs' && isAdmin && (
+                    {activeTab === 'logs' && canViewAudit && (
                         <UserLogsTab 
                             subprojects={subprojects}
                             activities={activities}
@@ -206,7 +203,7 @@ const Settings: React.FC<SettingsProps> = ({
                         />
                     )}
 
-                    {activeTab === 'archive' && isAdmin && (
+                    {activeTab === 'archive' && canManageArchive && (
                         <ArchiveManagementTab />
                     )}
                 </div>

@@ -6,7 +6,7 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const user = await requireIpoEditor(body.user_id);
+    const user = await requireIpoEditor(request, body.user_id);
     const fileRowId = Number(body.file_row_id);
     if (!Number.isFinite(fileRowId)) throw new Error("A valid Gallery image is required.");
     return jsonResponse({

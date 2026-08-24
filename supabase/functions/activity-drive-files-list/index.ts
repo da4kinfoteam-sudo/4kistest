@@ -6,12 +6,12 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json();
-    await requireUser(body.user_id);
+    const user = await requireUser(request, body.user_id, "Activities");
     const activityId = Number(body.activity_id);
     if (!Number.isFinite(activityId)) throw new Error("A valid activity is required.");
 
     return jsonResponse({
-      files: await listActivityFiles(activityId)
+      files: await listActivityFiles(activityId, user)
     });
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : "Unable to list Activity files.", 400);
