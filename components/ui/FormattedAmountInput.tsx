@@ -1,39 +1,26 @@
 import React, { useEffect, useState } from 'react';
+import {
+    addGroupingSeparators,
+    formatEditableAmount,
+    isFormattedAmountDraft,
+    parseFormattedAmount,
+    stripAmountFormatting,
+} from '../../lib/formattedAmount';
+
+export { parseFormattedAmount } from '../../lib/formattedAmount';
 
 interface FormattedAmountInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> {
     value: number;
     onValueChange: (value: number) => void;
     emptyWhenZero?: boolean;
+    allowNegative?: boolean;
 }
-
-const amountFormatter = new Intl.NumberFormat('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-});
-
-const stripAmountFormatting = (value: string) => value.replace(/,/g, '').trim();
-
-const formatEditableAmount = (value: number, emptyWhenZero = false) => {
-    if (emptyWhenZero && !value) return '';
-    return amountFormatter.format(Number.isFinite(value) ? value : 0);
-};
-
-const addGroupingSeparators = (value: string) => {
-    if (!value) return '';
-    const [integerPart, decimalPart] = value.split('.');
-    const groupedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return decimalPart !== undefined ? `${groupedInteger}.${decimalPart}` : groupedInteger;
-};
-
-export const parseFormattedAmount = (value: string) => {
-    const parsed = Number.parseFloat(stripAmountFormatting(value));
-    return Number.isFinite(parsed) ? parsed : 0;
-};
 
 export const FormattedAmountInput: React.FC<FormattedAmountInputProps> = ({
     value,
     onValueChange,
     emptyWhenZero = false,
+    allowNegative = false,
     onBlur,
     onFocus,
     ...props
@@ -49,10 +36,10 @@ export const FormattedAmountInput: React.FC<FormattedAmountInputProps> = ({
 
     const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const rawValue = stripAmountFormatting(event.target.value);
-        if (!/^\d*\.?\d{0,2}$/.test(rawValue)) return;
+        if (!isFormattedAmountDraft(rawValue, allowNegative)) return;
 
         setDisplayValue(addGroupingSeparators(rawValue));
-        onValueChange(parseFormattedAmount(rawValue));
+        if (rawValue !== '-') onValueChange(parseFormattedAmount(rawValue));
     };
 
     const handleFocus = (event: React.FocusEvent<HTMLInputElement>) => {
@@ -62,7 +49,8 @@ export const FormattedAmountInput: React.FC<FormattedAmountInputProps> = ({
 
     const handleBlur = (event: React.FocusEvent<HTMLInputElement>) => {
         setIsFocused(false);
-        setDisplayValue(formatEditableAmount(parseFormattedAmount(displayValue), emptyWhenZero));
+        const normalizedValue = displayValue === '-' ? 0 : parseFormattedAmount(displayValue);
+        setDisplayValue(formatEditableAmount(normalizedValue, emptyWhenZero));
         onBlur?.(event);
     };
 

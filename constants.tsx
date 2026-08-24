@@ -82,6 +82,7 @@ export interface RoleConfig {
     can_view: boolean;
     can_edit: boolean;
     can_delete: boolean;
+    can_manage?: boolean;
     visibility_scope?: VisibilityScope;
 }
 
@@ -96,6 +97,7 @@ export const appModules = [
     'IPO Management',
     'Marketing Database',
     'Level of Development',
+    'Gender and Development',
     'Commodity Mapping',
     'References',
     'System Management'
@@ -206,6 +208,9 @@ export interface Subproject extends BaseEntity {
     startDate: string;
     estimatedCompletionDate: string;
     actualCompletionDate?: string;
+    actualMaleBeneficiaries?: number | null;
+    actualFemaleBeneficiaries?: number | null;
+    actualFourPsBeneficiaries?: number | null;
     lat?: number;
     lng?: number;
     fundingYear?: number;
@@ -233,6 +238,9 @@ export interface Commodity {
     particular: string;
     value: number;
     yield?: number;
+    potentialExpansionArea?: number;
+    numberOfFarmers?: number;
+    numberOfTrees?: number;
     isScad?: boolean;
     marketingPercentage?: number;
     foodSecurityPercentage?: number;
@@ -769,51 +777,6 @@ export interface ElcacArea {
     barangay: string;
 }
 
-// LOD Interfaces
-export interface LodSection {
-    id: number;
-    title: string;
-    description?: string;
-    order: number;
-}
-
-export interface LodQuestion {
-    id: number;
-    section_id: number;
-    text: string;
-    weight: number;
-    order: number;
-    choices?: LodChoice[];
-}
-
-export interface LodChoice {
-    id: number;
-    question_id: number;
-    text: string;
-    points: number;
-    order: number;
-}
-
-export interface LodAssessment {
-    id: number;
-    ipo_id: number;
-    year: number;
-    total_score: number;
-    computed_level: number;
-    manual_level?: number;
-    remarks?: string;
-    created_at?: string;
-    updated_at?: string;
-}
-
-export interface LodAnswer {
-    id: number;
-    assessment_id: number;
-    question_id: number;
-    choice_id: number;
-    points_earned: number;
-}
-
 // Data Lists
 export const operatingUnits = [
     'NPMO',
@@ -968,6 +931,7 @@ export interface LodSection {
     order: number;
     weight: number;
     created_at?: string;
+    is_active?: boolean;
 }
 
 export interface LodQuestion {
@@ -984,6 +948,7 @@ export interface LodQuestion {
     is_specific_answer_mode?: boolean;
     specific_answer_label?: string;
     created_at?: string;
+    is_active?: boolean;
 }
 
 export interface LodChoice {
@@ -993,6 +958,7 @@ export interface LodChoice {
     points: number;
     order: number;
     created_at?: string;
+    is_active?: boolean;
 }
 
 export interface LodAssessment {
@@ -1000,21 +966,46 @@ export interface LodAssessment {
     ipo_id: number;
     year: number;
     total_score: number;
-    computed_level: number;
+    computed_level: number | null;
     manual_level?: number | null;
     remarks?: string | null;
     is_carried_over?: boolean;
     is_dropped?: boolean;
-    assessed_by?: string | null;
+    is_complete?: boolean;
+    answered_question_count?: number;
+    required_question_count?: number;
+    manual_override_reason?: string | null;
+    questionnaire_version_id?: number | null;
+    carried_over_from_assessment_id?: number | null;
+    carried_over_from_year?: number | null;
+    carried_over_level?: number | null;
+    carried_over_total_score?: number | null;
+    assessed_by?: number | string | null;
     assessor_name?: string | null;
     updated_at?: string;
+}
+
+export interface LodQuestionnaireVersion {
+    id: number;
+    version_number: number;
+    effective_year: number;
+    label: string;
+    config: {
+        sections: LodSection[];
+        questions: LodQuestion[];
+        choices: LodChoice[];
+        levels: LodLevelConfig[];
+    };
+    created_by?: number | string | null;
+    created_by_name?: string | null;
+    created_at?: string;
 }
 
 export interface LodAnswer {
     id: number;
     assessment_id: number;
     question_id: number;
-    choice_id: number;
+    choice_id: number | null;
     points_earned: number;
     remarks?: string;
     actual_value?: number | null;

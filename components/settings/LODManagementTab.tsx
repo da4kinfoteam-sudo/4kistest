@@ -5,6 +5,9 @@ import { LodSection, LodQuestion, LodChoice, LodLevelConfig } from '../../consta
 import { useLogAction } from '../../hooks/useLogAction';
 import * as XLSX from 'xlsx';
 import { ConfirmDialog, LoadingState } from '../ui/enterprise';
+import { validateLodLevelConfigs } from '../../lib/lodScoring';
+import { notifyLodDataChanged } from '../../lib/lodDataSync';
+import { useAuth } from '../../contexts/AuthContext';
 
 // DnD Kit Imports
 import {
@@ -67,11 +70,13 @@ const SortableItem: React.FC<SortableItemProps> = ({ id, children, disabled }) =
 
 const LODManagementTab: React.FC = () => {
     const { logAction } = useLogAction();
+    const { currentUser } = useAuth();
     const [sections, setSections] = useState<LodSection[]>([]);
     const [questions, setQuestions] = useState<LodQuestion[]>([]);
     const [choices, setChoices] = useState<LodChoice[]>([]);
     const [levelConfigs, setLevelConfigs] = useState<LodLevelConfig[]>([]);
     const [loading, setLoading] = useState(true);
+    const [effectiveYear, setEffectiveYear] = useState(new Date().getFullYear());
 
     // --- LOD Score Computation State ---
     const [editingLevels, setEditingLevels] = useState<LodLevelConfig[]>([]);
@@ -135,18 +140,21 @@ const LODManagementTab: React.FC = () => {
             const { data: lData } = await supabase.from('lod_level_configs').select('*').order('level', { ascending: true });
 
             if (sData) {
-                setSections(sData);
-                setEditingSections(sData);
+                const activeSections = sData.filter(section => section.is_active !== false);
+                setSections(activeSections);
+                setEditingSections(activeSections);
             }
             if (qData) {
-                setQuestions(qData);
-                setEditingQuestions(qData);
+                const activeQuestions = qData.filter(question => question.is_active !== false);
+                setQuestions(activeQuestions);
+                setEditingQuestions(activeQuestions);
                 // Lock all existing questions by default
-                setLockedQuestionIds(new Set(qData.map(q => q.id)));
+                setLockedQuestionIds(new Set(activeQuestions.map(q => q.id)));
             }
             if (cData) {
-                setChoices(cData);
-                setEditingChoices(cData);
+                const activeChoices = cData.filter(choice => choice.is_active !== false);
+                setChoices(activeChoices);
+                setEditingChoices(activeChoices);
             }
             if (lData) {
                 setLevelConfigs(lData);
@@ -223,16 +231,39 @@ const LODManagementTab: React.FC = () => {
         setEditingLevels(newLevels);
     };
 
+    const saveConfiguration = async () => {
+        if (!supabase) throw new Error('Database connection is unavailable.');
+        const validationIssues = validateLodLevelConfigs(editingLevels);
+        if (validationIssues.length > 0) {
+            throw new Error(validationIssues.map(issue => issue.message).join(' '));
+        }
+        const { data, error } = await supabase.rpc('save_lod_questionnaire_configuration', {
+            p_sections: editingSections,
+            p_questions: editingQuestions,
+            p_choices: editingChoices,
+            p_levels: editingLevels,
+            p_effective_year: effectiveYear,
+            p_created_by: currentUser?.id ?? null,
+            p_created_by_name: currentUser?.fullName || currentUser?.email || null,
+        });
+        if (error) throw error;
+        return data;
+    };
+
     const handleSaveLevels = async () => {
         if (!supabase) return;
-        const { error } = await supabase.from('lod_level_configs').upsert(editingLevels);
-        if (error) {
-            openConfirm('Error', 'Error saving levels: ' + error.message, () => {}, 'danger');
-        } else {
-            setLevelConfigs(editingLevels);
+        setLoading(true);
+        try {
+            await saveConfiguration();
+            await fetchData();
             setIsEditingLevels(false);
             logAction('Updated LOD Level Ranges', '');
-            openConfirm('Success', 'Level ranges saved successfully!', () => {}, 'success');
+            notifyLodDataChanged({ reason: 'settings' });
+            openConfirm('Success', `Level ranges saved as a configuration effective ${effectiveYear}.`, () => {}, 'success');
+        } catch (error: any) {
+            openConfirm('Error', error?.message || 'Unable to save LOD level ranges.', () => {}, 'danger');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -283,78 +314,12 @@ const LODManagementTab: React.FC = () => {
         setLoading(true);
         
         try {
-            // 1. Save Sections
-            // Separate new sections (negative ID) from existing ones
-            const sectionsToInsert = editingSections.filter(s => s.id < 0).map(({ id, ...rest }) => rest);
-            const sectionsToUpdate = editingSections.filter(s => s.id >= 0);
-
-            let allSavedSections: LodSection[] = [...sectionsToUpdate];
-            if (sectionsToInsert.length > 0) {
-                const { data: insertedSections, error: sInsError } = await supabase.from('lod_sections').insert(sectionsToInsert).select();
-                if (sInsError) throw sInsError;
-                if (insertedSections) allSavedSections = [...allSavedSections, ...insertedSections];
-            }
-            
-            if (sectionsToUpdate.length > 0) {
-                const { error: sUpError } = await supabase.from('lod_sections').upsert(sectionsToUpdate);
-                if (sUpError) throw sUpError;
-            }
-
-            // 2. Save Questions
-            // We need to map temporary section IDs to real ones for new questions
-            const updatedQuestions = editingQuestions.map(q => {
-                if (q.section_id < 0) {
-                    const tempSection = editingSections.find(s => s.id === q.section_id);
-                    const realSection = allSavedSections.find(s => s.code === tempSection?.code);
-                    return { ...q, section_id: realSection?.id || q.section_id };
-                }
-                return q;
-            });
-
-            const questionsToInsert = updatedQuestions.filter(q => q.id < 0).map(({ id, ...rest }) => rest);
-            const questionsToUpdate = updatedQuestions.filter(q => q.id >= 0);
-
-            let allSavedQuestions: LodQuestion[] = [...questionsToUpdate];
-            if (questionsToInsert.length > 0) {
-                const { data: insertedQuestions, error: qInsError } = await supabase.from('lod_questions').insert(questionsToInsert).select();
-                if (qInsError) throw qInsError;
-                if (insertedQuestions) allSavedQuestions = [...allSavedQuestions, ...insertedQuestions];
-            }
-
-            if (questionsToUpdate.length > 0) {
-                const { error: qUpError } = await supabase.from('lod_questions').upsert(questionsToUpdate);
-                if (qUpError) throw qUpError;
-            }
-
-            // 3. Save Choices
-            // Map temporary question IDs to real ones
-            const updatedChoices = editingChoices.map(c => {
-                if (c.question_id < 0) {
-                    const tempQuestion = editingQuestions.find(q => q.id === c.question_id);
-                    const realQuestion = allSavedQuestions.find(q => q.code === tempQuestion?.code);
-                    return { ...c, question_id: realQuestion?.id || c.question_id };
-                }
-                return c;
-            });
-
-            const choicesToInsert = updatedChoices.filter(c => c.id < 0).map(({ id, ...rest }) => rest);
-            const choicesToUpdate = updatedChoices.filter(c => c.id >= 0);
-
-            if (choicesToInsert.length > 0) {
-                const { error: cInsError } = await supabase.from('lod_choices').insert(choicesToInsert);
-                if (cInsError) throw cInsError;
-            }
-
-            if (choicesToUpdate.length > 0) {
-                const { error: cUpError } = await supabase.from('lod_choices').upsert(choicesToUpdate);
-                if (cUpError) throw cUpError;
-            }
-
-            // Refresh data to get real IDs and clean state
+            await saveConfiguration();
             await fetchData();
             setIsEditingQuestionnaire(false);
             logAction('Updated LOD Questionnaire Structure', '');
-            openConfirm('Success', 'Questionnaire saved successfully!', () => {}, 'success');
+            notifyLodDataChanged({ reason: 'settings' });
+            openConfirm('Success', `Questionnaire saved as a configuration effective ${effectiveYear}.`, () => {}, 'success');
         } catch (error: any) {
             console.error('Save Error:', error);
             openConfirm('Error', 'Error saving questionnaire: ' + error.message, () => {}, 'danger');
@@ -394,28 +359,16 @@ const LODManagementTab: React.FC = () => {
         setExpandedSectionId(tempId);
     };
 
-    const handleDeleteSection = async (id: number) => {
+    const handleDeleteSection = (id: number) => {
         openConfirm(
             'Delete Section',
             'Are you sure you want to delete this section and all its questions? This action cannot be undone.',
-            async () => {
-                if (id < 0) {
-                    setEditingSections(prev => prev.filter(s => s.id !== id));
-                    setEditingQuestions(prev => prev.filter(q => q.section_id !== id));
-                    const qIds = editingQuestions.filter(q => q.section_id === id).map(q => q.id);
-                    setEditingChoices(prev => prev.filter(c => !qIds.includes(c.question_id)));
-                    return;
-                }
-
-                if (!supabase) return;
-                const { error } = await supabase.from('lod_sections').delete().eq('id', id);
-                if (!error) {
-                    setEditingSections(prev => prev.filter(s => s.id !== id));
-                    setEditingQuestions(prev => prev.filter(q => q.section_id !== id));
-                    const qIds = questions.filter(q => q.section_id === id).map(q => q.id);
-                    setEditingChoices(prev => prev.filter(c => !qIds.includes(c.question_id)));
-                    setIsEditingQuestionnaire(true);
-                }
+            () => {
+                const questionIds = editingQuestions.filter(question => question.section_id === id).map(question => question.id);
+                setEditingSections(previous => previous.filter(section => section.id !== id));
+                setEditingQuestions(previous => previous.filter(question => question.section_id !== id));
+                setEditingChoices(previous => previous.filter(choice => !questionIds.includes(choice.question_id)));
+                setIsEditingQuestionnaire(true);
             },
             'danger'
         );
@@ -450,24 +403,14 @@ const LODManagementTab: React.FC = () => {
         });
     };
 
-    const handleDeleteQuestion = async (id: number) => {
+    const handleDeleteQuestion = (id: number) => {
         openConfirm(
             'Delete Question',
             'Are you sure you want to delete this question? This action cannot be undone.',
-            async () => {
-                if (id < 0) {
-                    setEditingQuestions(prev => prev.filter(q => q.id !== id));
-                    setEditingChoices(prev => prev.filter(c => c.question_id !== id));
-                    return;
-                }
-
-                if (!supabase) return;
-                const { error } = await supabase.from('lod_questions').delete().eq('id', id);
-                if (!error) {
-                    setEditingQuestions(prev => prev.filter(q => q.id !== id));
-                    setEditingChoices(prev => prev.filter(c => c.question_id !== id));
-                    setIsEditingQuestionnaire(true);
-                }
+            () => {
+                setEditingQuestions(previous => previous.filter(question => question.id !== id));
+                setEditingChoices(previous => previous.filter(choice => choice.question_id !== id));
+                setIsEditingQuestionnaire(true);
             },
             'danger'
         );
@@ -489,18 +432,9 @@ const LODManagementTab: React.FC = () => {
         setIsEditingQuestionnaire(true);
     };
 
-    const handleDeleteChoice = async (id: number) => {
-        if (id < 0) {
-            setEditingChoices(prev => prev.filter(c => c.id !== id));
-            return;
-        }
-
-        if (!supabase) return;
-        const { error } = await supabase.from('lod_choices').delete().eq('id', id);
-        if (!error) {
-            setEditingChoices(prev => prev.filter(c => c.id !== id));
-            setIsEditingQuestionnaire(true);
-        }
+    const handleDeleteChoice = (id: number) => {
+        setEditingChoices(previous => previous.filter(choice => choice.id !== id));
+        setIsEditingQuestionnaire(true);
     };
 
     // --- EXCEL INTEGRATION ---
@@ -717,6 +651,17 @@ const LODManagementTab: React.FC = () => {
                         <p className="lod-management-card__description">Set the score ranges for each Level of Development (1-5).</p>
                     </div>
                     <div className="lod-management-card__actions">
+                        <label className="form-field lod-management-effective-year">
+                            <span className="form-label">Effective year</span>
+                            <input
+                                type="number"
+                                min="1900"
+                                max="2200"
+                                value={effectiveYear}
+                                onChange={event => setEffectiveYear(Number(event.target.value))}
+                                className="form-control form-control--compact"
+                            />
+                        </label>
                         {isEditingLevels ? (
                             <>
                                 <button type="button" onClick={handleCancelLevels} className="btn btn-secondary">Cancel</button>

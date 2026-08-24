@@ -6,7 +6,7 @@ import { supabase } from '../../supabaseClient';
 import { useUserAccess } from '../mainfunctions/TableHooks';
 import useLocalStorageState from '../../hooks/useLocalStorageState';
 import { getDcfModuleKeyForSourceType, normalizePolicyMonth, useDcfPolicyGuard } from '../../hooks/useDcfPolicyGuard';
-import { Undo2, Loader2, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, WalletCards, Landmark, Banknote, Scale, Lock } from 'lucide-react';
+import { Undo2, Loader2, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronRight, WalletCards, Landmark, Banknote, Scale, Lock, Search, X } from 'lucide-react';
 import { getProgramManagementPhysicalDateBasis, resolvePhysicalAccomplishmentSubmittedAt, valuesDiffer } from '../../lib/physicalAccomplishmentTimestamp';
 import { resolveDisbursementEntries, summarizeDisbursements } from '../../lib/disbursementUtils';
 import { getBudgetLineAmount } from '../../lib/budgetLineAdjustments';
@@ -16,6 +16,11 @@ import { ConfirmDialog, LoadingState } from '../ui/enterprise';
 import { DcfScopeFilterPanel, type DcfScopeFilterValue, useDcfScopeFilters } from '../ui/DcfScopeFilters';
 import { FinancialAmountCell, FinancialMonthCell, formatFinancialMonth, normalizeFinancialMonthValue } from './FinancialInlineEditors';
 import { FinancialActualsDialog } from './FinancialActualsDialog';
+import { getActualObligationValidationError, hasActualObligationRecords } from '../../lib/financialObligationUtils';
+import {
+ replaceFinancialObligationRecords,
+ type FinancialObligationEntityType,
+} from '../../lib/financialObligationSync';
 import { getActivityDisplayTitle } from '../../lib/entityIdentity';
 
 interface Props {
@@ -130,7 +135,7 @@ const getInitialObligations = (existingArr: ObligationRecord[] | undefined, date
  if (existingArr && existingArr.length > 0) return existingArr;
 
  // Fallback for truly legacy single-entry fields
- if (amount > 0) {
+ if (amount !== 0) {
  return [{
  id: Date.now() + Math.floor(Math.random() * 1000),
  date: date || '',
@@ -223,7 +228,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  uacsCodes,
  onSelectSubproject, onSelectActivity,
  onSelectOfficeReq, onSelectStaffingReq, onSelectOtherExpense,
- onDataScopeChange
+ onDataScopeChange,
 }) => {
  const { canEdit } = useUserAccess('Accomplishment - Financial');
  const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
@@ -237,6 +242,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  });
  const { selectedYear, selectedOu, selectedTier, selectedFundType } = dcfFilters.value;
  const [category, setCategory] = useState<FinancialCategory>('All');
+ const [searchQuery, setSearchQuery] = useState('');
 
  const [isLoading, setIsLoading] = useState(false);
  const [originalItems, setOriginalItems] = useState<FinancialItem[]>([]);
@@ -400,6 +406,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  tableName: 'financial_obligations' | 'financial_disbursements',
  groups: Array<{ entityType: string; ids: number[] }>
  ) => {
+ if (!supabase) return [];
  const chunkSize = 100;
  const queries = groups.flatMap(group => {
  const chunks: number[][] = [];
@@ -439,8 +446,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  : null;
 
  if (itemId) return rowItemId?.toString() === itemId;
- if (sourceType === 'Staffing') return rowItemId === null || rowItemId === undefined || rowItemId === '';
- return true;
+ return rowItemId === null || rowItemId === undefined || rowItemId === '';
  };
 
  const getObligations = (sourceType: string, parentId: number, detailId?: number) => {
@@ -739,12 +745,24 @@ const FinancialAccomplishment: React.FC<Props> = ({
  }, [selectedYear, selectedOu, selectedTier, selectedFundType, subprojects, activities, officeReqs, staffingReqs, otherProgramExpenses]);
 
 
- const visibleItems = useMemo(() => items.filter(item => {
+ const categoryItems = useMemo(() => items.filter(item => {
  if (category === 'All') return true;
  if (category === 'Capital Outlay') return item.objectType === 'CO';
  if (category === 'MOOE') return item.objectType === 'MOOE';
  return item.sourceType === 'Staffing';
  }), [category, items]);
+
+ const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+ const visibleItems = useMemo(() => {
+ if (!normalizedSearchQuery) return categoryItems;
+ return categoryItems.filter(item => [
+ item.uacsCode,
+ item.sourceName,
+ item.budgetParticular,
+ item.expenseParticular,
+ getContextDescription(item),
+ ].some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearchQuery)));
+ }, [categoryItems, normalizedSearchQuery]);
 
  const categories: FinancialCategory[] = ['All', 'Capital Outlay', 'MOOE', 'Staffing Requirements'];
 
@@ -838,14 +856,14 @@ const FinancialAccomplishment: React.FC<Props> = ({
 
  // --- 2.1 Grand Total Calculation ---
  const grandTotals = useMemo(() => {
- return visibleItems.reduce((acc, item) => ({
+ return categoryItems.reduce((acc, item) => ({
  targetObli: acc.targetObli + getTargetObligationForTotals(item),
  actualObli: acc.actualObli + toFiniteNumber(item.actualObligationAmount),
  unobligated: acc.unobligated + getUnobligatedAmount(item),
  targetDisb: acc.targetDisb + getTargetDisbursementForTotals(item),
  actualDisb: acc.actualDisb + toFiniteNumber(item.actualDisbursementAmount)
  }), { targetObli: 0, actualObli: 0, unobligated: 0, targetDisb: 0, actualDisb: 0 });
- }, [visibleItems]);
+ }, [categoryItems]);
 
  const summaryCards = useMemo(() => {
  const selectedYearNumber = Number(selectedYear);
@@ -1086,9 +1104,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  };
 
  const syncObligationsToCentralTable = async (item: FinancialItem) => {
- if (!supabase) return;
-
- const entityType = item.sourceType === 'Subproject' ? 'subproject_detail' :
+ const entityType: FinancialObligationEntityType = item.sourceType === 'Subproject' ? 'subproject_detail' :
  item.sourceType === 'Activity' ? 'activity_expense' :
  item.sourceType === 'Staffing' ? 'staffing_expense' :
  item.sourceType === 'Office' ? 'office_requirement' : 'other_program_expense';
@@ -1098,42 +1114,12 @@ const FinancialAccomplishment: React.FC<Props> = ({
  ? staffingExpenseItemId(item.detailId)
  : item.detailId?.toString() || null;
 
- // 1. Delete existing records for this specific item
- let deleteQuery = supabase.from('financial_obligations')
- .delete()
- .eq('entity_type', entityType)
- .eq('parent_id', parentId);
-
- if (itemId === null) {
- deleteQuery = deleteQuery.is('item_id', null);
- } else {
- deleteQuery = deleteQuery.eq('item_id', itemId);
- }
-
- const { error: deleteError } = await deleteQuery;
-
- if (deleteError) {
- console.error("Error deleting old obligations:", deleteError);
- throw deleteError;
- }
-
- if (!item.obligations || item.obligations.length === 0) return;
-
- // 2. Insert new records
- const payload = item.obligations.map(o => ({
- entity_type: entityType,
- parent_id: parentId,
- item_id: itemId,
- obligation_date: o.date,
- amount: toFiniteNumber(o.amount),
- remarks: o.remarks || ''
- }));
-
- const { error: insertError } = await supabase.from('financial_obligations').insert(payload);
- if (insertError) {
- console.error("Error inserting obligations:", insertError);
- throw insertError;
- }
+ await replaceFinancialObligationRecords({
+ entityType,
+ parentId,
+ itemId,
+ records: item.obligations || [],
+ });
  };
 
  const syncDisbursementsToCentralTable = async (item: FinancialItem) => {
@@ -1237,7 +1223,9 @@ const FinancialAccomplishment: React.FC<Props> = ({
  actualObligationDate: item.actualObligationMonth,
  actualObligationAmount: item.actualObligationAmount,
  actualDisbursementDate: item.actualDisbursementMonth,
- actualDisbursementAmount: item.actualDisbursementAmount
+ actualDisbursementAmount: item.actualDisbursementAmount,
+ obligations: item.obligations,
+ disbursements: item.disbursements,
  };
  // Update targets if Proposed
  if (includeTargets && item.status === 'Proposed') {
@@ -1275,6 +1263,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  actualObligationAmount: item.actualObligationAmount,
  actualDisbursementDate: disbursementSummary.latestDate || item.actualDisbursementMonth,
  actualDisbursementAmount: disbursementSummary.total,
+ obligations: item.obligations || [],
  disbursements: item.disbursements || []
  };
  SHORT_MONTHS.forEach(m => {
@@ -1373,7 +1362,12 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const { error: updateError } = await supabase.from('other_program_expenses').update(payload).eq('id', item.sourceId);
  if (updateError) throw updateError;
  }
- commitSourceState = () => setOtherProgramExpenses(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
+ commitSourceState = () => setOtherProgramExpenses(prev => prev.map(o => o.id === item.sourceId ? {
+ ...o,
+ ...payload,
+ obligations: item.obligations || [],
+ disbursements: item.disbursements || [],
+ } : o));
  } else if (item.sourceType === 'Office') {
  const payload: any = {
  actualObligationDate: item.actualObligationMonth,
@@ -1570,9 +1564,14 @@ const FinancialAccomplishment: React.FC<Props> = ({
  amount: toFiniteNumber(record.amount),
  date: normalizeFinancialMonthValue(record.date, item.fundYear),
  }));
- const invalidRecord = normalizedRecords.find(record => record.amount <= 0 || !record.date);
- if (invalidRecord) {
- setActualsDialogError('Each entry requires an amount greater than zero and a month/year.');
+ const obligationError = actualsDialog.kind === 'obligation'
+ ? getActualObligationValidationError(normalizedRecords)
+ : '';
+ const invalidDisbursement = actualsDialog.kind === 'disbursement'
+ ? normalizedRecords.find(record => record.amount <= 0 || !record.date)
+ : undefined;
+ if (obligationError || invalidDisbursement) {
+ setActualsDialogError(obligationError || 'Each disbursement entry requires an amount greater than zero and a month/year.');
  return;
  }
  if (!(await ensureFinancialItemAllowed(item))) {
@@ -1671,12 +1670,30 @@ const FinancialAccomplishment: React.FC<Props> = ({
  );
  })}
  </section>
+ <div className="financial-accomplishment-table-controls">
  <div className="financial-accomplishment-category-tabs" role="tablist" aria-label="Financial category">
  {categories.map(option => (
  <button key={option} id={`financial-category-${categories.indexOf(option)}`} type="button" role="tab" tabIndex={category === option ? 0 : -1} onClick={() => setCategory(option)} onKeyDown={event => handleCategoryKeyDown(event, option)} className={category === option ? 'is-active' : ''} aria-selected={category === option} aria-controls="financial-accomplishment-table-panel">
  <span>{option}</span>
  </button>
  ))}
+ </div>
+ <label className="financial-accomplishment-search">
+ <Search aria-hidden="true" />
+ <span className="sr-only">Search financial items</span>
+ <input
+ type="search"
+ value={searchQuery}
+ onChange={event => setSearchQuery(event.target.value)}
+ placeholder="Search particulars, code, or parent item"
+ aria-label="Search particulars, UACS code, or parent item"
+ />
+ {searchQuery && (
+ <button type="button" onClick={() => setSearchQuery('')} aria-label="Clear financial item search" title="Clear search">
+ <X aria-hidden="true" />
+ </button>
+ )}
+ </label>
  </div>
  <div id="financial-accomplishment-table-panel" className="data-table-card financial-accomplishment-table-card" role="tabpanel">
  <div className="data-table-scroll financial-accomplishment-table-scroll custom-scrollbar">
@@ -1747,7 +1764,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  </thead>
  <tbody className="fac-table-body">
  {groupedItems.map((typeGroup) => {
- const isTypeExpanded = expandedObjectTypes.includes(typeGroup.objectType);
+ const isTypeExpanded = !!normalizedSearchQuery || expandedObjectTypes.includes(typeGroup.objectType);
  const objectTypeTotalTargetObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalTargetObli), 0);
  const objectTypeTotalActualObli = typeGroup.uacsGroups.reduce((sum, group) => sum + toFiniteNumber(group.totalActualObli), 0);
  const objectTypeTotalUnobligated = typeGroup.uacsGroups.reduce((sum, group) => sum + group.items.reduce((itemSum, item) => itemSum + getUnobligatedAmount(item), 0), 0);
@@ -1777,7 +1794,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
 
  {/* Level 2: UACS Groups */}
  {isTypeExpanded && typeGroup.uacsGroups.map((group) => {
- const isExpanded = expandedGroups.includes(group.key);
+ const isExpanded = !!normalizedSearchQuery || expandedGroups.includes(group.key);
  const groupUnobligated = group.items.reduce((sum, item) => sum + getUnobligatedAmount(item), 0);
  // Determine if all items have same month to display in group header
  return (
@@ -1824,7 +1841,7 @@ const FinancialAccomplishment: React.FC<Props> = ({
  const typedSourceGroups = sourceGroups as { sourceId: number, sourceName: string, items: FinancialItem[], targetObligationAmount: number, actualObligationAmount: number, targetDisbursementAmount: number, actualDisbursementAmount: number }[];
  if (typedSourceGroups.length === 0) return null;
  const subId = `${group.key}-${subKey}`;
- const isSubExpanded = expandedSubGroups.includes(subId);
+ const isSubExpanded = !!normalizedSearchQuery || expandedSubGroups.includes(subId);
  const subGroupTotalTargetObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.targetObligationAmount), 0);
  const subGroupTotalActualObli = typedSourceGroups.reduce((sum, sourceGroup) => sum + toFiniteNumber(sourceGroup.actualObligationAmount), 0);
  const subGroupTotalUnobligated = typedSourceGroups.reduce((sum, sourceGroup) => sum + sourceGroup.items.reduce((itemSum, item) => itemSum + getUnobligatedAmount(item), 0), 0);
@@ -1930,11 +1947,11 @@ const FinancialAccomplishment: React.FC<Props> = ({
  <td className="fac-col-actual-obligation">
  <button
  type="button"
- className={`fac-actuals-trigger ${item.actualObligationAmount > 0 ? 'has-value' : ''}`}
+ className={`fac-actuals-trigger ${hasActualObligationRecords(item) ? 'has-value' : ''}`}
  onClick={() => openActualsDialog(item, 'obligation')}
- aria-label={`${item.actualObligationAmount > 0 ? 'Manage' : 'Add'} actual obligations for ${item.sourceName}`}
+ aria-label={`${hasActualObligationRecords(item) ? 'Manage' : 'Add'} actual obligations for ${item.sourceName}`}
  >
- {item.actualObligationAmount > 0 ? formatCurrency(item.actualObligationAmount) : '+ Add obligation'}
+ {hasActualObligationRecords(item) ? formatCurrency(item.actualObligationAmount) : '+ Add obligation'}
  </button>
  </td>
 

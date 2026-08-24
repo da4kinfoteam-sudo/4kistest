@@ -37,6 +37,7 @@ import {
     updateActivityDriveFileMetadata,
     DriveUploadSection
 } from '../lib/googleDriveStorage';
+import { getActivityDisplayTitle, resolveActivityIpos } from '../lib/entityIdentity';
 import {
     DriveUploadModal,
     EntityFilesList,
@@ -46,7 +47,6 @@ import {
     getPersistedDriveUploadSection
 } from './ui/DriveMediaSections';
 import {
-    RecordBackLink,
     RecordDetailAside,
     RecordDetailGrid,
     RecordDetailMain,
@@ -58,13 +58,10 @@ import {
     formatRecordMetricCurrency,
     formatRecordMetricNumber
 } from './ui/RecordDetailLayout';
-import { getActivityDisplayTitle, resolveActivityIpos } from '../lib/entityIdentity';
 
 interface ActivityDetailProps {
     activity: Activity;
     ipos: IPO[];
-    onBack: () => void;
-    previousPageName: string;
     onUpdateActivity: (updatedActivity: Activity) => void;
     uacsCodes: { [key: string]: { [key: string]: { [key: string]: string } } };
     referenceActivities?: ReferenceActivity[];
@@ -119,7 +116,7 @@ const MonitoringPreviewLine: React.FC<{ label: string; value?: string | null }> 
     </div>
 );
 
-export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, onBack, previousPageName, onSelectIpo, onEdit, uacsCodes, referenceActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], onOpenMonitoringReport }) => {
+export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, onSelectIpo, onEdit, uacsCodes, referenceActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], onOpenMonitoringReport }) => {
     const { currentUser } = useAuth();
     const { canEdit } = useUserAccess('Activities');
     const { canEdit: canEditFinancial } = useUserAccess('Accomplishment - Financial');
@@ -417,7 +414,6 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                 />
             )}
 
-            <RecordBackLink onClick={onBack}>Back to {previousPageName}</RecordBackLink>
 
             <RecordHeader
                 title={getActivityDisplayTitle(activity, referenceActivities, ipos)}
@@ -648,8 +644,8 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                                                             <td className="data-table__primary">{exp.expenseParticular}</td>
                                                             <td>{formatMonthYear(obligationSummary.date)}</td>
                                                             <td>{formatMonthYear(disbursementSummary.date)}</td>
-                                                            <td className="data-table__numeric data-table__positive">
-                                                                {obligationSummary.amount > 0 ? formatCurrency(obligationSummary.amount) : '-'}
+                                                            <td className={`data-table__numeric ${obligationSummary.amount < 0 ? 'data-table__adjustment' : 'data-table__positive'}`}>
+                                                                {(exp.obligations?.length || 0) > 0 || obligationSummary.amount !== 0 ? formatCurrency(obligationSummary.amount) : '-'}
                                                             </td>
                                                             <td className="data-table__numeric data-table__positive">
                                                                 {disbursementSummary.amount > 0 ? formatCurrency(disbursementSummary.amount) : '-'}

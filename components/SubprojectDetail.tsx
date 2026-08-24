@@ -17,6 +17,8 @@ import { resolveIpoByIdOrName } from '../lib/entityIdentity';
 import { isMonthTargetOverdue } from '../lib/dateStatus';
 import { ConfirmDialog } from './ui/enterprise';
 import { getActualDisbursementSummary, getActualObligationSummary, hasFinancialActuals } from '../lib/financialActualSummary';
+import { getActualObligationValidationError, hasActualObligationRecords } from '../lib/financialObligationUtils';
+import { fetchFinancialObligationsForParent, replaceFinancialObligationRecords } from '../lib/financialObligationSync';
 import {
     BudgetItemAdjustmentHistory,
     ensureOriginalBudgetSnapshot,
@@ -69,7 +71,6 @@ import {
     getPersistedDriveUploadSection
 } from './ui/DriveMediaSections';
 import {
-    RecordBackLink,
     RecordDetailAside,
     RecordDetailGrid,
     RecordDetailMain,
@@ -85,8 +86,7 @@ import {
 interface SubprojectDetailProps {
     subproject: Subproject;
     ipos: IPO[];
-    onBack: () => void;
-    previousPageName: string;
+    onEditModeChange?: (mode: 'none' | 'details' | 'commodity' | 'budget' | 'accomplishment') => void;
     onUpdateSubproject: (updatedSubproject: Subproject) => void;
     particularTypes: { [key: string]: string[] };
     uacsCodes: { [key: string]: { [key: string]: { [key: string]: string } } };
@@ -154,7 +154,7 @@ const budgetItemFieldLabels: Record<string, string> = {
     numberOfUnits: 'Number of Units'
 };
 
-const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, onBack, previousPageName, onUpdateSubproject, particularTypes, uacsCodes, commodityCategories, refCommodities, refLivestock }) => {
+const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, onEditModeChange, onUpdateSubproject, particularTypes, uacsCodes, commodityCategories, refCommodities, refLivestock }) => {
     const { currentUser } = useAuth();
     const { canEdit } = useUserAccess('Subprojects');
     const { canEdit: canEditFinancial } = useUserAccess('Accomplishment - Financial');
@@ -166,6 +166,12 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
 
     // Edit Modes: 'full' (legacy), 'details' (exclusive), 'commodity' (exclusive), 'budget' (exclusive), 'accomplishment'
     const [editMode, setEditMode] = useState<'none' | 'full' | 'details' | 'commodity' | 'budget' | 'accomplishment'>('none');
+
+    useEffect(() => {
+        onEditModeChange?.(editMode === 'full' ? 'details' : editMode);
+    }, [editMode, onEditModeChange]);
+
+    useEffect(() => () => onEditModeChange?.('none'), [onEditModeChange]);
 
     const [editedSubproject, setEditedSubproject] = useState(subproject);
     const [activeTab, setActiveTab] = useState<'details' | 'commodity' | 'budget'>('details');
@@ -352,19 +358,41 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     }, []);
 
     useEffect(() => {
+        let cancelled = false;
         setEditedSubproject(subproject);
-        // Map details and preserve ID for tracking, plus virtualize logic
-        setDetailItems((subproject.details || []).map(d => ensureOriginalBudgetSnapshot({
-            ...d,
-            obligations: (d.obligations && d.obligations.length > 0) ? d.obligations : (
-                ((d.actualObligationAmount || 0) > 0) ? [{
-                    id: Date.now() + Math.random(),
-                    date: d.actualObligationDate || '',
-                    amount: d.actualObligationAmount || 0,
-                    remarks: 'Legacy Record'
-                }] : []
-            )
-        })));
+        const applyObligationRows = (centralRows: Awaited<ReturnType<typeof fetchFinancialObligationsForParent>> | null) => {
+            const hydratedDetails = (subproject.details || []).map(d => {
+                const centralObligations = centralRows?.filter(row => row.itemId === String(d.id)) || [];
+                return ensureOriginalBudgetSnapshot({
+                    ...d,
+                    obligations: centralObligations.length > 0
+                        ? centralObligations
+                        : (d.obligations && d.obligations.length > 0)
+                            ? d.obligations
+                            : (Number(d.actualObligationAmount) !== 0)
+                                ? [{
+                                    id: Date.now() + Math.random(),
+                                    date: d.actualObligationDate || '',
+                                    amount: d.actualObligationAmount || 0,
+                                    remarks: 'Legacy Record'
+                                }]
+                                : [],
+                });
+            });
+            if (!cancelled) setDetailItems(hydratedDetails);
+        };
+
+        setDetailItems((subproject.details || []).map(d => ensureOriginalBudgetSnapshot(d)));
+        if (supabase && subproject.id > 0) {
+            void fetchFinancialObligationsForParent({ entityType: 'subproject_detail', parentId: subproject.id })
+                .then(rows => applyObligationRows(rows))
+                .catch(error => {
+                    console.error('Failed to load authoritative subproject obligations:', error);
+                    applyObligationRows(null);
+                });
+        } else {
+            applyObligationRows(null);
+        }
 
         if (editMode === 'details') setActiveTab('details');
         if (editMode === 'commodity') setActiveTab('commodity');
@@ -373,6 +401,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
         // Reset local editing states
         setEditingDetailIndex(null);
         resetCurrentDetail();
+        return () => { cancelled = true; };
     }, [subproject, editMode]);
 
     useEffect(() => {
@@ -673,6 +702,12 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
         setEditedSubproject(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
     };
 
+    const handleBeneficiaryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        const nextValue = value === '' ? null : Math.max(0, Math.trunc(Number(value)));
+        setEditedSubproject(prev => ({ ...prev, [name]: Number.isFinite(nextValue) ? nextValue : null }));
+    };
+
     const handleDetailChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setBudgetItemFormMessage(null);
@@ -842,7 +877,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     const handleRemoveDetail = async (indexToRemove: number) => {
         const item = detailItems[indexToRemove];
         const isSavedLine = !!(item.id && (subproject.details || []).some(detail => detail.id === item.id));
-        const hasActuals = ((item.obligations?.length || 0) > 0) || ((item.disbursements?.length || 0) > 0) || Number(item.actualObligationAmount) > 0 || Number(item.actualDisbursementAmount) > 0;
+        const hasActuals = hasActualObligationRecords(item) || ((item.disbursements?.length || 0) > 0) || Number(item.actualDisbursementAmount) > 0;
         if (isSavedLine || hasActuals) {
             const reason = requestAdjustmentReason('cancelling this budget item');
             if (!reason) return;
@@ -1007,6 +1042,16 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+
+        if (editMode === 'accomplishment') {
+            const obligationError = detailItems
+                .map(detail => getActualObligationValidationError(detail.obligations || []))
+                .find(Boolean);
+            if (obligationError) {
+                alert(obligationError);
+                return;
+            }
+        }
 
         if (editMode !== 'none' && editMode !== 'full') {
             const { decision, action } = getEditModeDecision(editMode);
@@ -1175,8 +1220,8 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
 
         // Sync obligations to central table if supabase is available
         if (supabase) {
-             syncSubprojectObligations(subproject.id, normalizedCleanDetails as SubprojectDetailType[]);
-             syncSubprojectDisbursements(subproject.id, normalizedCleanDetails as SubprojectDetailType[]);
+             await syncSubprojectObligations(subproject.id, normalizedCleanDetails as SubprojectDetailType[]);
+             await syncSubprojectDisbursements(subproject.id, normalizedCleanDetails as SubprojectDetailType[]);
         }
 
         setEditMode('none');
@@ -1186,36 +1231,20 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
         if (!supabase) return;
         const entityType = 'subproject_detail';
 
-        // Delete all for this parent first
-        await supabase.from('financial_obligations')
-            .delete()
-            .eq('entity_type', entityType)
-            .eq('parent_id', parentId);
-
-        // Insert all from all detail items
-        const syncPayload: any[] = [];
-        details.forEach(item => {
+        for (const item of details) {
             if (item.obligations && item.obligations.length > 0) {
                 // Update legacy fields for fallback reporting
                 const latestOb = [...item.obligations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                 item.actualObligationAmount = item.obligations.reduce((sum, o) => sum + (o.amount || 0), 0);
                 item.actualObligationDate = latestOb.date;
 
-                item.obligations.forEach(o => {
-                    syncPayload.push({
-                        entity_type: entityType,
-                        parent_id: parentId,
-                        item_id: item.id?.toString() || null,
-                        obligation_date: o.date,
-                        amount: o.amount || 0,
-                        remarks: o.remarks || ''
-                    });
-                });
             }
-        });
-
-        if (syncPayload.length > 0) {
-            await supabase.from('financial_obligations').insert(syncPayload);
+            await replaceFinancialObligationRecords({
+                entityType,
+                parentId,
+                itemId: item.id ?? null,
+                records: item.obligations || [],
+            });
         }
     };
 
@@ -1923,6 +1952,18 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                         <legend className="form-legend">Gender and Inclusivity</legend>
                                         <div className="form-grid form-grid--compact">
                                             <div>
+                                                <label className="form-label form-label--compact">Male</label>
+                                                <input type="number" min="0" step="1" name="actualMaleBeneficiaries" value={editedSubproject.actualMaleBeneficiaries ?? ''} onChange={handleBeneficiaryChange} className={commonInputClasses} placeholder="Not reported" />
+                                            </div>
+                                            <div>
+                                                <label className="form-label form-label--compact">Female</label>
+                                                <input type="number" min="0" step="1" name="actualFemaleBeneficiaries" value={editedSubproject.actualFemaleBeneficiaries ?? ''} onChange={handleBeneficiaryChange} className={commonInputClasses} placeholder="Not reported" />
+                                            </div>
+                                            <div>
+                                                <label className="form-label form-label--compact">4Ps Beneficiary</label>
+                                                <input type="number" min="0" step="1" name="actualFourPsBeneficiaries" value={editedSubproject.actualFourPsBeneficiaries ?? ''} onChange={handleBeneficiaryChange} className={commonInputClasses} placeholder="Not reported" />
+                                            </div>
+                                            <div>
                                                 <label className="form-label form-label--compact">PWD</label>
                                                 <input type="number" name="actualPWD" value={editedSubproject.actualPWD || ''} onChange={handleNumericChange} className={commonInputClasses} placeholder="0" />
                                             </div>
@@ -2091,7 +2132,6 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                     onClose={() => setUploadModal(null)}
                 />
             )}
-            <RecordBackLink onClick={onBack}>Back to {previousPageName}</RecordBackLink>
 
             <RecordHeader
                 title={subproject.name}
@@ -2247,7 +2287,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                                             {getBudgetLineTag(detail)}
                                                         </span>
                                                     ) : (
-                                                        <span className="detail-empty">-</span>
+                                                        <span>-</span>
                                                     )}
                                                 </td>
                                                 <td>{formatMonthYear(detail.deliveryDate)}</td>
@@ -2339,7 +2379,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                                                         <tr key={d.id}>
                                                             <td className="data-table__primary">{d.particulars}</td>
                                                             <td className="data-table__numeric">{formatCurrency(d.pricePerUnit * d.numberOfUnits)}</td>
-                                                            <td className="data-table__numeric data-table__info">{formatCurrency(obligationSummary.amount)}</td>
+                                                            <td className={`data-table__numeric ${obligationSummary.amount < 0 ? 'data-table__adjustment' : 'data-table__info'}`}>{formatCurrency(obligationSummary.amount)}</td>
                                                             <td className="data-table__numeric data-table__positive">{formatCurrency(disbursementSummary.amount)}</td>
                                                         </tr>
                                                     );
@@ -2356,6 +2396,9 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                             <div>
                                 <h4 className="detail-section-title">Gender and Inclusivity</h4>
                                 <div className="detail-dl">
+                                    <DetailItem label="Male" value={subproject.actualMaleBeneficiaries ?? 'No Data'} />
+                                    <DetailItem label="Female" value={subproject.actualFemaleBeneficiaries ?? 'No Data'} />
+                                    <DetailItem label="4Ps Beneficiary" value={subproject.actualFourPsBeneficiaries ?? 'No Data'} />
                                     <DetailItem label="PWD" value={subproject.actualPWD} />
                                     <DetailItem label="Muslim" value={subproject.actualMuslim} />
                                     <DetailItem label="LGBTQ+" value={subproject.actualLGBTQ} />

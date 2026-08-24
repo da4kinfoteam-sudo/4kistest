@@ -24,6 +24,8 @@ import {
     summarizeBudgetAdjustments,
     writeBudgetItemAdjustmentHistory
 } from '../lib/budgetLineAdjustments';
+import { getActualObligationValidationError, hasActualObligationRecords } from '../lib/financialObligationUtils';
+import { fetchFinancialObligationsForParent, replaceFinancialObligationRecords } from '../lib/financialObligationSync';
 import {
     findDuplicateActivityTitle,
     getActivityDisplayTitle,
@@ -211,15 +213,16 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
     };
 
     useEffect(() => {
+        let cancelled = false;
         if (activity) {
-            let processedActivity = {
-                ...activity,
-                activity_title: activity.activity_title || (activity.type === 'Training' ? activity.name : ''),
-            };
-            // Virtualize legacy obligations for each expense on load if missing
-            if (processedActivity.expenses) {
-                processedActivity.expenses = processedActivity.expenses.map(exp => {
-                    const hasAmount = (exp.actualObligationAmount || 0) > 0;
+            const applyObligationRows = (centralRows: Awaited<ReturnType<typeof fetchFinancialObligationsForParent>> | null) => {
+                const processedActivity: Activity = {
+                    ...activity,
+                    activity_title: activity.activity_title || (activity.type === 'Training' ? activity.name : ''),
+                    expenses: (activity.expenses || []).map(exp => {
+                    const centralObligations = centralRows?.filter(row => row.itemId === String(exp.id)) || [];
+                    if (centralObligations.length > 0) return { ...exp, obligations: centralObligations };
+                    const hasAmount = Number(exp.actualObligationAmount) !== 0;
                     const hasNoObligations = !exp.obligations || exp.obligations.length === 0;
                     if (hasAmount && hasNoObligations) {
                         return {
@@ -233,11 +236,26 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                         };
                     }
                     return exp;
-                });
+                    }),
+                };
+                if (cancelled) return;
+                setFormData(processedActivity);
+                setInitialActivity(processedActivity);
+            };
+
+            setFormData({ ...activity, expenses: activity.expenses || [] });
+            setInitialActivity({ ...activity, expenses: activity.expenses || [] });
+            if (supabase && activity.id > 0) {
+                void fetchFinancialObligationsForParent({ entityType: 'activity_expense', parentId: activity.id })
+                    .then(rows => applyObligationRows(rows))
+                    .catch(error => {
+                        console.error('Failed to load authoritative activity obligations:', error);
+                        applyObligationRows(null);
+                    });
+            } else {
+                applyObligationRows(null);
             }
-            setFormData(processedActivity);
-            setInitialActivity(processedActivity);
-            if (processedActivity.endDate && processedActivity.endDate !== processedActivity.date) {
+            if (activity.endDate && activity.endDate !== activity.date) {
                 setConductType('Multi-day');
             } else {
                 setConductType('Single');
@@ -268,6 +286,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
         }
         
         if (mode === 'expenses') setActiveTab('expenses');
+        return () => { cancelled = true; };
     }, [activity, mode, forcedType, currentUser]);
 
     // Derived States
@@ -589,7 +608,7 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
         const isSavedLine = !!(activity?.expenses || []).some(existing => existing.id === expense.id);
         const hasActuals = ((expense.obligations?.length || 0) > 0)
             || ((expense.disbursements?.length || 0) > 0)
-            || Number(expense.actualObligationAmount) > 0
+            || hasActualObligationRecords(expense)
             || Number(expense.actualDisbursementAmount) > 0;
         if (isSavedLine || hasActuals) {
             await handleExpenseTagChange(expense.id, 'Cancelled');
@@ -670,6 +689,16 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+
+        if (mode === 'accomplishment') {
+            const obligationError = (formData.expenses || [])
+                .map(expense => getActualObligationValidationError(expense.obligations || []))
+                .find(Boolean);
+            if (obligationError) {
+                alert(obligationError);
+                return;
+            }
+        }
 
         if (mode !== 'create' && activity) {
             const action = mode === 'details'
@@ -916,40 +945,24 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
     const syncActivityObligations = async (parentId: number, expenses: ActivityExpense[]) => {
         if (!supabase) return;
         const entityType = 'activity_expense';
-        
-        // Delete old
-        await supabase.from('financial_obligations')
-            .delete()
-            .eq('entity_type', entityType)
-            .eq('parent_id', parentId);
-        
-        // Insert new from all expenses
-        const syncPayload: any[] = [];
-        expenses.forEach(exp => {
+
+        for (const exp of expenses) {
             if (exp.obligations && exp.obligations.length > 0) {
                 // Also update legacy fields for fallback reporting
                 const latestOb = [...exp.obligations].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                 exp.actualObligationAmount = exp.obligations.reduce((sum, o) => sum + (o.amount || 0), 0);
                 exp.actualObligationDate = latestOb.date;
 
-                exp.obligations.forEach(o => {
-                    syncPayload.push({
-                        entity_type: entityType,
-                        parent_id: parentId,
-                        item_id: exp.id?.toString() || null,
-                        obligation_date: o.date,
-                        amount: o.amount || 0,
-                        remarks: o.remarks || ''
-                    });
-                });
             } else {
                 exp.actualObligationAmount = 0;
                 exp.actualObligationDate = null;
             }
-        });
-
-        if (syncPayload.length > 0) {
-            await supabase.from('financial_obligations').insert(syncPayload);
+            await replaceFinancialObligationRecords({
+                entityType,
+                parentId,
+                itemId: exp.id ?? null,
+                records: exp.obligations || [],
+            });
         }
     };
 
@@ -996,7 +1009,6 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
                     {mode === 'create' ? 'Create New Activity' : `Edit ${mode === 'expenses' ? 'Expenses' : mode === 'accomplishment' ? 'Accomplishment' : 'Details'}: ${getActivityDisplayTitle(formData, referenceActivities, ipos)}`}
                 </h1>
                 </div>
-                <button onClick={onBack} className="btn btn-secondary">Back to List</button>
             </div>
 
             <form onSubmit={handleSubmit} className="form-card">

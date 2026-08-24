@@ -35,6 +35,14 @@ An entity folder mapping belongs to the active Google Drive connection that crea
 
 Historical mappings from an older Drive connection remain unchanged. Reconnecting Drive can create a mapping for the new connection without colliding with or reassigning the historical mapping.
 
+New entity folders use the database ID as the stable identity while retaining the readable name:
+
+- IPO: `IPO-{id} - {name}`
+- Subproject: `SP-{id} - {name}`
+- Activity: `ACT-{id} - {name}`
+
+Changing an entity name does not create a replacement folder when that entity already has a valid mapping. The persisted mapping remains authoritative. Name-only Drive folder discovery must not be used to establish entity ownership.
+
 The backend follows this sequence:
 
 1. Look for the canonical mapping using the complete connection-aware identity.
@@ -43,6 +51,16 @@ The backend follows this sequence:
 4. Create/find the Drive hierarchy and attempt to register it.
 5. Treat a concurrent unique conflict as recoverable, then retrieve the canonical row with bounded retries.
 6. Return a user-safe folder preparation message if recovery cannot complete.
+
+### Legacy shared-folder isolation
+
+Older mappings may point multiple same-name entities to one physical Drive folder. Before reusing an existing mapping, the backend checks whether another entity under the same active connection owns the same `folder_id`.
+
+If a collision exists, the next upload for the current entity creates its ID-qualified folder and updates only that entity's folder mapping. Its `gallery_folder_id` and `files_folder_id` are reset so new section folders are created below the new entity folder. The application does not move, rename, copy, delete, or re-upload historical Drive objects, and it does not rewrite historical file rows.
+
+The remaining legacy mapping may continue using the old folder after the conflicting entity moves. This stops future cross-entity uploads while preserving the historical Drive layout.
+
+Existing file ownership always comes from the exact database foreign key (`ipo_id`, `subproject_id`, or `activity_id`). List, preview, metadata update, download, and delete operations continue using the stored file row and `file_id`; they must never infer ownership by folder name or enumerate a shared Drive folder into multiple entities. Drive-only objects without a database file row are not assigned automatically.
 
 Raw PostgreSQL, PostgREST, constraint, and SQLSTATE messages must never be returned to the upload queue.
 
@@ -89,6 +107,7 @@ Maintenance and future ports must not:
 
 - Port the shared `DriveUploadSection` validation and metadata functions.
 - Port connection-aware canonical folder lookup and registration.
+- Port ID-qualified entity folder naming and legacy shared-folder collision isolation.
 - Port short-lived entity/section initialization locks.
 - Port bounded conflict visibility retries and safe public errors.
 - Deploy the three upload functions after the migration:
@@ -131,6 +150,9 @@ Maintenance and future ports must not:
 - Files uploads remain separate from Gallery uploads.
 - One failed file does not roll back successful files.
 - No raw database error appears in the UI.
+- Two same-name IPOs, Subprojects, or Activities create different entity folder IDs and paths.
+- A legacy shared mapping rotates forward for the uploading entity without changing historical file rows.
+- Renaming an entity with an existing valid mapping does not create a new folder.
 - Desktop/mobile layouts remain bounded and responsive.
 - `npm run lint` and `npm run build` pass.
 

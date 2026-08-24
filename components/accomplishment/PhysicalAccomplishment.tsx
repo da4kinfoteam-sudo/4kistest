@@ -57,6 +57,9 @@ interface PhysicalItem {
     actualQty: number;
     actualMale?: number;
     actualFemale?: number;
+    actualMaleBeneficiaries?: number | null;
+    actualFemaleBeneficiaries?: number | null;
+    actualFourPsBeneficiaries?: number | null;
     isCompleted?: boolean;
 
     // Meta
@@ -379,6 +382,9 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     unitOfMeasure: 'Project',
                     actualDateStart: sp.actualCompletionDate || '',
                     actualQty: 0,
+                    actualMaleBeneficiaries: sp.actualMaleBeneficiaries ?? null,
+                    actualFemaleBeneficiaries: sp.actualFemaleBeneficiaries ?? null,
+                    actualFourPsBeneficiaries: sp.actualFourPsBeneficiaries ?? null,
                     isParent: true,
                     isLocked: false,
                     status: sp.status,
@@ -636,6 +642,9 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                         hasPhysicalAccomplishment: !!newActualCompletionDate,
                         hasChanged: valuesDiffer(originalItem?.actualDateStart, newActualCompletionDate)
                             || valuesDiffer(originalItem?.catchUpPlanRemarks, item.catchUpPlanRemarks)
+                            || valuesDiffer(sp.actualMaleBeneficiaries, item.actualMaleBeneficiaries)
+                            || valuesDiffer(sp.actualFemaleBeneficiaries, item.actualFemaleBeneficiaries)
+                            || valuesDiffer(sp.actualFourPsBeneficiaries, item.actualFourPsBeneficiaries)
                             || valuesDiffer(sp.status, newStatus)
                             || hasSubprojectDetailActualChange(sp.details, normalizedUpdatedDetails),
                         previousSubmittedAt: sp.physical_accomplishment_submitted_at,
@@ -647,6 +656,9 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                             actualCompletionDate: newActualCompletionDate,
                             estimatedCompletionDate: item.targetDateStart || null,
                             catchUpPlanRemarks: item.catchUpPlanRemarks || null,
+                            actualMaleBeneficiaries: item.actualMaleBeneficiaries ?? null,
+                            actualFemaleBeneficiaries: item.actualFemaleBeneficiaries ?? null,
+                            actualFourPsBeneficiaries: item.actualFourPsBeneficiaries ?? null,
                             status: newStatus,
                             details: normalizedUpdatedDetails,
                             physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
@@ -655,7 +667,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     }
 
                     // Update Context
-                    setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, actualCompletionDate: newActualCompletionDate || undefined, estimatedCompletionDate: item.targetDateStart, catchUpPlanRemarks: item.catchUpPlanRemarks || '', status: newStatus, details: normalizedUpdatedDetails, physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt, updated_at: submittedAt } : s));
+                    setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, actualCompletionDate: newActualCompletionDate || undefined, estimatedCompletionDate: item.targetDateStart, catchUpPlanRemarks: item.catchUpPlanRemarks || '', actualMaleBeneficiaries: item.actualMaleBeneficiaries ?? null, actualFemaleBeneficiaries: item.actualFemaleBeneficiaries ?? null, actualFourPsBeneficiaries: item.actualFourPsBeneficiaries ?? null, status: newStatus, details: normalizedUpdatedDetails, physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt, updated_at: submittedAt } : s));
 
                 } else {
                     // Save Individual Child Row
@@ -904,6 +916,22 @@ const PhysicalAccomplishment: React.FC<Props> = ({
         );
     };
 
+    const renderNullableIntegerInput = (value: number | null | undefined, onChange: (val: number | null) => void, disabled: boolean, label: string) => (
+        <label>
+            <span>{label}</span>
+            <input
+                type="number"
+                min="0"
+                step="1"
+                value={value ?? ''}
+                onChange={(event) => onChange(event.target.value === '' ? null : Math.max(0, Math.trunc(Number(event.target.value))))}
+                disabled={disabled}
+                className={`${commonInputClasses} form-control--numeric`}
+                placeholder="Not reported"
+            />
+        </label>
+    );
+
     const renderDueBadge = (item: PhysicalItem) => {
         const status = item.dueStatus || 'On Track';
         return (
@@ -1068,7 +1096,13 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                                 {renderActualNumberInput(`${item.uniqueId}-actual-female`, item.actualFemale || 0, (val) => updateLocalItem(item.uniqueId, { actualFemale: val, actualQty: (item.actualMale || 0) + val }), isLocked)}
                             </div>
                         ) : (
-                            item.isParent && item.sourceType === 'Subproject' ? '-'
+                            item.isParent && item.sourceType === 'Subproject' ? (
+                                <div className="physical-accomplishment-beneficiary-inputs">
+                                    {renderNullableIntegerInput(item.actualMaleBeneficiaries, (val) => updateLocalItem(item.uniqueId, { actualMaleBeneficiaries: val }), isLocked, 'Male')}
+                                    {renderNullableIntegerInput(item.actualFemaleBeneficiaries, (val) => updateLocalItem(item.uniqueId, { actualFemaleBeneficiaries: val }), isLocked, 'Female')}
+                                    {renderNullableIntegerInput(item.actualFourPsBeneficiaries, (val) => updateLocalItem(item.uniqueId, { actualFourPsBeneficiaries: val }), isLocked, '4Ps Beneficiary')}
+                                </div>
+                            )
                             : (item.sourceType === 'Staffing' && item.isParent ? <span className=" ">{item.actualQty} / {item.targetQty}</span>
                                 : renderActualNumberInput(`${item.uniqueId}-actual-qty`, item.actualQty, (val) => updateLocalItem(item.uniqueId, { actualQty: val }), isLocked))
                         )}

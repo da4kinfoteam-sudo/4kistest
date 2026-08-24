@@ -1,4 +1,5 @@
 import type { DisbursementRecord, ObligationRecord } from '../constants';
+import { hasActualObligationRecords } from './financialObligationUtils';
 
 type FinancialActualLine = {
     actualObligationAmount?: number;
@@ -54,4 +55,6 @@ export const getActualDisbursementSummary = (line: FinancialActualLine) => {
 };
 
 export const hasFinancialActuals = (line: FinancialActualLine) =>
-    getActualObligationSummary(line).amount > 0 || getActualDisbursementSummary(line).amount > 0;
+    hasActualObligationRecords(line)
+    || (line.disbursements?.length || 0) > 0
+    || getActualDisbursementSummary(line).amount > 0;

@@ -9,7 +9,7 @@ import Subprojects from './components/Subprojects';
 import { ActivitiesComponent } from './components/Activities';
 import IPOs from './components/IPO';
 import References, { ReferenceUacs, ReferenceParticular } from './components/References';
-import Reports, { ReportsPageState } from './components/Reports';
+import Reports, { ReportTab, ReportsPageState } from './components/Reports';
 import SubprojectDetail from './components/SubprojectDetail';
 import SubprojectEdit from './components/SubprojectEdit';
 import IPODetail from './components/IPODetail';
@@ -32,7 +32,11 @@ import MarketLinkageEdit from './components/resources/MarketLinkageEdit';
 import MarketLinkageDetail from './components/resources/MarketLinkageDetail';
 import CommodityMappingPage from './components/resources/CommodityMappingPage';
 import LODPage from './components/LOD/LODPage';
-import LODDetails from './components/LOD/LODDetails';
+import LODDetailsRoute from './components/LOD/LODDetailsRoute';
+import GadPimmePage from './components/GAD/GadPimmePage';
+import GadPimmeDetailsRoute from './components/GAD/GadPimmeDetailsRoute';
+import { buildGadPimmeDetailPath } from './lib/gadPimmeAccess';
+import { requestAppNavigation } from './lib/navigationGuards';
 import AIChatbot from './components/AIChatbot'; // Import Chatbot
 import { EmptyState, ErrorState, LoadingState } from './components/ui/enterprise';
 
@@ -45,6 +49,10 @@ import { useDcfPolicyGuard } from './hooks/useDcfPolicyGuard';
 import { DataScope, getDataScopeKey, loadScopedAppData } from './lib/scopedDataFetch';
 import { clearUserCache, getScopeCacheMeta, readScopedCache, writeScopedCache } from './lib/localScopedCache';
 import { normalizeStaffingExpenses } from './lib/staffingExpenseIdentity';
+import {
+    FINANCIAL_OBLIGATIONS_CHANGED_EVENT,
+    type FinancialObligationChange,
+} from './lib/financialObligationSync';
 import { emptyIpoLinkedDcfRecords, fetchIpoLinkedDcfRecords, IpoLinkedDcfRecords } from './lib/ipoLinkedDcfRecords';
 import { fetchWorkflowEntityById, fetchWorkflowIpos } from './lib/workflowLookups';
 import {
@@ -56,10 +64,15 @@ import {
 } from './lib/entityIdentity';
 import {
     getCanonicalModuleRoute,
+    getDashboardSourceView,
     getNavigationPageTitle,
+    getReportSourceView,
+    getReportTabFromSourceView,
     isDashboardPagePath,
     isProgramManagementPagePath,
     isReferencePagePath,
+    resolveAppBreadcrumbs,
+    resolveAppReturnContext,
     resolveDashboardPage,
     resolveProgramManagementPage,
     resolveReferencePage,
@@ -68,7 +81,7 @@ import {
     initialUacsCodes, initialParticularTypes, Subproject, IPO, Activity, User,
     OfficeRequirement, StaffingRequirement, OtherProgramExpense, SystemSettings, defaultSystemSettings,
     Deadline, PlanningSchedule, ReferenceActivity, MarketingPartner, GidaArea, ElcacArea, RefCommodity, RefLivestock, RefEquipment,
-    RefInput, RefInfrastructure, RefTrainingReference, ActivityMonitoringAction, ActivityMonitoringReport, operatingUnits
+    RefInput, RefInfrastructure, RefTrainingReference, ActivityMonitoringAction, ActivityMonitoringReport, operatingUnits, ouToRegionMap
 } from './constants';
 import {
     sampleActivities, sampleMarketingPartners, sampleOfficeRequirements, sampleOtherProgramExpenses, sampleReferenceUacsList,
@@ -115,23 +128,18 @@ const buildDetailPath = (path: string, id?: number | string | null) => {
     return `${path}?id=${encodeURIComponent(String(id))}`;
 };
 
-// Helper to format page names for "Back to..." buttons
-const getPageName = (path: string) => {
-    const routePath = parseAppRoute(path).path;
-    const navigationTitle = getNavigationPageTitle(routePath);
-    if (navigationTitle) return navigationTitle;
-    if (routePath === '/') return 'Dashboard';
-    if (routePath === '/ipo-detail') return 'IPO Details';
-    if (routePath === '/ipo') return 'IPO List';
-    if (routePath === '/activity-detail') return 'Activity Details';
-    if (routePath === '/program-management') return 'Program Management';
-    if (routePath === '/marketing-database') return 'Marketing Database';
-    if (routePath === '/marketing-profile-detail') return 'Partner Profile';
-    
-    // Generic formatter: remove slash, replace hyphens with spaces, capitalize words
-    return routePath.substring(1)
-        .replace(/-/g, ' ')
-        .replace(/\b\w/g, char => char.toUpperCase());
+const appendPathParams = (
+    path: string,
+    values: Array<[string, string | number | null | undefined]>,
+) => {
+    const [basePath, query = ''] = path.split('?');
+    const params = new URLSearchParams(query);
+    values.forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') params.delete(key);
+        else params.set(key, String(value));
+    });
+    const serialized = params.toString();
+    return serialized ? `${basePath}?${serialized}` : basePath;
 };
 
 const AccessDenied: React.FC<{ onBackToHome: () => void }> = ({ onBackToHome }) => (
@@ -298,6 +306,30 @@ const AppContent: React.FC = () => {
     // Financial Records - loaded at startup and refreshed manually
     const [allFinancialObligations, setAllFinancialObligations, financialObligationsSync] = useSupabaseTable<any>('financial_obligations', [], scopedTableOptions);
     const [allFinancialDisbursements, setAllFinancialDisbursements, financialDisbursementsSync] = useSupabaseTable<any>('financial_disbursements', [], scopedTableOptions);
+
+    useEffect(() => {
+        const handleFinancialObligationChange = (event: Event) => {
+            const { entityType, parentId, itemId, records } = (event as CustomEvent<FinancialObligationChange>).detail;
+            setAllFinancialObligations(previous => [
+                ...previous.filter(row => !(
+                    row.entity_type === entityType
+                    && Number(row.parent_id) === parentId
+                    && (row.item_id === null || row.item_id === undefined || row.item_id === '' ? null : String(row.item_id)) === itemId
+                )),
+                ...records.map(record => ({
+                    id: record.id,
+                    entity_type: entityType,
+                    parent_id: parentId,
+                    item_id: itemId,
+                    obligation_date: record.date,
+                    amount: record.amount,
+                    remarks: record.remarks,
+                })),
+            ]);
+        };
+        window.addEventListener(FINANCIAL_OBLIGATIONS_CHANGED_EVENT, handleFinancialObligationChange);
+        return () => window.removeEventListener(FINANCIAL_OBLIGATIONS_CHANGED_EVENT, handleFinancialObligationChange);
+    }, [setAllFinancialObligations]);
 
     // Hydration Logic
     const obligationsMap = useMemo(() => {
@@ -602,6 +634,7 @@ const AppContent: React.FC = () => {
             refreshPermissions(),
             refreshUser()
         ]);
+        window.dispatchEvent(new CustomEvent('app-data-refreshed'));
     }, [ensureDataScope, refreshPermissions, refreshUser, refreshUsersList]);
 
     const clearLocalCache = useCallback(async () => {
@@ -631,6 +664,7 @@ const AppContent: React.FC = () => {
     const [selectedOtherExpense, setSelectedOtherExpense] = useState<OtherProgramExpense | null>(null);
     const [isDirectRouteLookupLoading, setIsDirectRouteLookupLoading] = useState(false);
     const directRouteLookupKeyRef = useRef<string | null>(null);
+    const directRouteCacheRef = useRef<Map<string, { id: number }>>(new Map());
     const [selectedMarketingPartner, setSelectedMarketingPartner] = useState<MarketingPartner | null>(null);
     const [selectedMarketingLinkageKey, setSelectedMarketingLinkageKey] = useState<string | number | null>(null);
     const [selectedLodYear, setSelectedLodYear] = useState<number | null>(null);
@@ -641,6 +675,60 @@ const AppContent: React.FC = () => {
         error: string | null;
     } | null>(null);
     const ipoLinkedDcfCacheRef = useRef<Map<string, IpoLinkedDcfRecords>>(new Map());
+    const [activityEditMode, setActivityEditMode] = useState<'create' | 'details' | 'expenses' | 'accomplishment'>('create');
+    const [subprojectDetailMode, setSubprojectDetailMode] = useState<'none' | 'details' | 'commodity' | 'budget' | 'accomplishment'>('none');
+
+    useEffect(() => {
+        const routeId = getRouteId(routeParams);
+        if (routePath === '/ipo-detail' && routeId !== null) {
+            const routeIpo = ipos.find(ipo => ipo.id === routeId) || null;
+            if (routeIpo && selectedIpo?.id !== routeIpo.id) setSelectedIpo(routeIpo);
+        }
+
+        if (['/marketing-profile-detail', '/marketing-profile-edit', '/marketing-linkage-edit', '/marketing-linkage-detail'].includes(routePath) && routeId !== null) {
+            const routePartner = marketingPartners.find(partner => Number(partner.id) === routeId) || null;
+            if (routePartner && Number(selectedMarketingPartner?.id) !== Number(routePartner.id)) setSelectedMarketingPartner(routePartner);
+            const linkageKey = routeParams.get('linkageKey');
+            if (linkageKey !== null && String(selectedMarketingLinkageKey) !== linkageKey) setSelectedMarketingLinkageKey(linkageKey);
+        }
+
+        if (routePath === '/activity-edit') {
+            const requestedMode = routeParams.get('action');
+            if (['details', 'expenses', 'accomplishment'].includes(requestedMode || '') && activityEditMode !== requestedMode) {
+                setActivityEditMode(requestedMode as 'details' | 'expenses' | 'accomplishment');
+            }
+        }
+
+        if (routePath === '/activity-monitoring-report') {
+            const activityId = Number(routeParams.get('activityId'));
+            const ipoId = Number(routeParams.get('ipoId'));
+            if (!Number.isFinite(activityId) || !Number.isFinite(ipoId)) return;
+            const activity = activities.find(item => item.id === activityId);
+            const ipo = ipos.find(item => item.id === ipoId);
+            if (!activity || !ipo) return;
+            const reportId = Number(routeParams.get('reportId'));
+            const report = Number.isFinite(reportId)
+                ? activityMonitoringReports.find(item => Number(item.id) === reportId) || null
+                : null;
+            if (selectedMonitoringReportContext?.activity.id !== activity.id
+                || selectedMonitoringReportContext?.ipo.id !== ipo.id
+                || Number(selectedMonitoringReportContext?.report?.id || 0) !== Number(report?.id || 0)) {
+                setSelectedMonitoringReportContext({ activity, ipo, report });
+            }
+        }
+    }, [
+        activities,
+        activityEditMode,
+        activityMonitoringReports,
+        ipos,
+        marketingPartners,
+        routeParams,
+        routePath,
+        selectedIpo?.id,
+        selectedMarketingLinkageKey,
+        selectedMarketingPartner?.id,
+        selectedMonitoringReportContext,
+    ]);
 
     useEffect(() => {
         const id = getRouteId(routeParams);
@@ -652,30 +740,280 @@ const AppContent: React.FC = () => {
                 case '/program-management/office-detail': return { table: 'office_requirements' as const, module: 'Program Management', items: officeReqs, select: setSelectedOfficeReq };
                 case '/program-management/staffing-detail': return { table: 'staffing_requirements' as const, module: 'Program Management', items: staffingReqs, select: setSelectedStaffingReq };
                 case '/program-management/other-expense-detail': return { table: 'other_program_expenses' as const, module: 'Program Management', items: otherProgramExpenses, select: setSelectedOtherExpense };
+                case '/ipo-detail': return { table: 'ipos' as const, module: 'IPO Management', items: ipos, select: setSelectedIpo };
+                case '/marketing-profile-detail':
+                case '/marketing-profile-edit':
+                case '/marketing-linkage-edit':
+                case '/marketing-linkage-detail':
+                    return { table: 'marketing_partners' as const, module: 'Marketing Database', items: marketingPartners, select: setSelectedMarketingPartner };
+                case '/activity-edit':
+                    return routeParams.get('action')
+                        ? { table: 'activities' as const, module: 'Activities', items: activities, select: setSelectedActivity }
+                        : null;
                 default: return null;
             }
         })();
         if (!target || !hasAccess(target.module, 'view') || target.items.some(item => item.id === id)) return;
         const lookupKey = `${target.table}:${id}:${currentUser.id}`;
+        const cachedRecord = directRouteCacheRef.current.get(lookupKey);
+        if (cachedRecord) {
+            (target.select as React.Dispatch<React.SetStateAction<any>>)(cachedRecord);
+            return;
+        }
         if (directRouteLookupKeyRef.current === lookupKey) return;
         directRouteLookupKeyRef.current = lookupKey;
         let cancelled = false;
         setIsDirectRouteLookupLoading(true);
+        const visibilityScope = getVisibilityScope(target.module);
         void fetchWorkflowEntityById<any>(target.table, id, {
-            canViewAllOperatingUnits: getVisibilityScope(target.module) === 'All',
-            operatingUnit: currentUser.operatingUnit
+            canViewAllOperatingUnits: visibilityScope === 'All',
+            operatingUnit: currentUser.operatingUnit,
+            region: currentUser.operatingUnit ? ouToRegionMap[currentUser.operatingUnit] : null,
         }).then(record => {
-            if (!cancelled && record) (target.select as React.Dispatch<React.SetStateAction<any>>)(record);
+            if (!cancelled && record) {
+                directRouteCacheRef.current.set(lookupKey, record);
+                (target.select as React.Dispatch<React.SetStateAction<any>>)(record);
+            }
         }).catch(error => {
             console.error(`Failed to resolve ${target.table} route ${id}:`, error);
         }).finally(() => {
             if (!cancelled) setIsDirectRouteLookupLoading(false);
         });
         return () => { cancelled = true; };
-    }, [activities, currentUser, getVisibilityScope, hasAccess, officeReqs, otherProgramExpenses, routeParams, routePath, staffingReqs, subprojects]);
+    }, [activities, currentUser, getVisibilityScope, hasAccess, ipos, marketingPartners, officeReqs, otherProgramExpenses, routeParams, routePath, staffingReqs, subprojects]);
+
+    useEffect(() => {
+        if (routePath !== '/activity-monitoring-report' || !currentUser) return;
+        const activityId = Number(routeParams.get('activityId'));
+        const ipoId = Number(routeParams.get('ipoId'));
+        if (!Number.isFinite(activityId) || !Number.isFinite(ipoId)) return;
+
+        const selectedActivityRecord = selectedMonitoringReportContext?.activity.id === activityId
+            ? selectedMonitoringReportContext.activity
+            : activities.find(item => item.id === activityId) || null;
+        const selectedIpoRecord = selectedMonitoringReportContext?.ipo.id === ipoId
+            ? selectedMonitoringReportContext.ipo
+            : ipos.find(item => item.id === ipoId) || null;
+        if (selectedActivityRecord && selectedIpoRecord) return;
+        if (!hasAccess('Activities', 'view') || !hasAccess('IPO Management', 'view')) return;
+
+        const lookupKey = `monitoring:${activityId}:${ipoId}:${currentUser.id}`;
+        if (directRouteLookupKeyRef.current === lookupKey) return;
+        directRouteLookupKeyRef.current = lookupKey;
+        let cancelled = false;
+        setIsDirectRouteLookupLoading(true);
+
+        const activityCacheKey = `activities:${activityId}:${currentUser.id}`;
+        const ipoCacheKey = `ipos:${ipoId}:${currentUser.id}`;
+        const activityVisibility = getVisibilityScope('Activities');
+        const ipoVisibility = getVisibilityScope('IPO Management');
+        const userRegion = currentUser.operatingUnit ? ouToRegionMap[currentUser.operatingUnit] : null;
+
+        const activityPromise = selectedActivityRecord
+            || directRouteCacheRef.current.get(activityCacheKey)
+            || fetchWorkflowEntityById<Activity>('activities', activityId, {
+                canViewAllOperatingUnits: activityVisibility === 'All',
+                operatingUnit: currentUser.operatingUnit,
+            });
+        const ipoPromise = selectedIpoRecord
+            || directRouteCacheRef.current.get(ipoCacheKey)
+            || fetchWorkflowEntityById<IPO>('ipos', ipoId, {
+                canViewAllOperatingUnits: ipoVisibility === 'All',
+                region: userRegion,
+            });
+
+        void Promise.all([Promise.resolve(activityPromise), Promise.resolve(ipoPromise)])
+            .then(([activity, ipo]) => {
+                if (cancelled || !activity || !ipo) return;
+                directRouteCacheRef.current.set(activityCacheKey, activity);
+                directRouteCacheRef.current.set(ipoCacheKey, ipo);
+                const reportId = Number(routeParams.get('reportId'));
+                const report = Number.isFinite(reportId)
+                    ? activityMonitoringReports.find(item => Number(item.id) === reportId) || null
+                    : null;
+                setSelectedMonitoringReportContext({ activity, ipo, report });
+            })
+            .catch(error => {
+                console.error(`Failed to resolve monitoring route ${activityId}/${ipoId}:`, error);
+            })
+            .finally(() => {
+                if (!cancelled) setIsDirectRouteLookupLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [activities, activityMonitoringReports, currentUser, getVisibilityScope, hasAccess, ipos, routeParams, routePath, selectedMonitoringReportContext]);
+
+    useEffect(() => {
+        const routeId = getRouteId(routeParams);
+        let normalizedPath: string | null = null;
+        if (routeId === null) {
+            const selectedId = (() => {
+                switch (routePath) {
+                    case '/subproject-detail': return selectedSubproject?.id;
+                    case '/activity-detail': return selectedActivity?.id;
+                    case '/ipo-detail': return selectedIpo?.id;
+                    case '/program-management/office-detail': return selectedOfficeReq?.id;
+                    case '/program-management/staffing-detail': return selectedStaffingReq?.id;
+                    case '/program-management/other-expense-detail': return selectedOtherExpense?.id;
+                    case '/marketing-profile-detail':
+                    case '/marketing-profile-edit':
+                    case '/marketing-linkage-edit':
+                    case '/marketing-linkage-detail':
+                        return selectedMarketingPartner?.id;
+                    case '/activity-edit':
+                        return routeParams.get('action') ? selectedActivity?.id : null;
+                    case '/lod-details': return selectedIpo?.id;
+                    default: return null;
+                }
+            })();
+            if (selectedId !== undefined && selectedId !== null) {
+                normalizedPath = appendPathParams(currentPage, [['id', selectedId]]);
+            }
+        }
+
+        if (routePath === '/activity-monitoring-report' && selectedMonitoringReportContext) {
+            const activityId = Number(routeParams.get('activityId'));
+            const ipoId = Number(routeParams.get('ipoId'));
+            if (!Number.isFinite(activityId) || !Number.isFinite(ipoId)) {
+                normalizedPath = appendPathParams(currentPage, [
+                    ['activityId', selectedMonitoringReportContext.activity.id],
+                    ['ipoId', selectedMonitoringReportContext.ipo.id],
+                    ['reportId', selectedMonitoringReportContext.report?.id],
+                ]);
+            }
+        }
+
+        if (!normalizedPath || normalizedPath === currentPage) return;
+        const historyState = window.history.state || {};
+        window.history.replaceState({ ...historyState, page: normalizedPath }, '', `/#${normalizedPath}`);
+        setCurrentPage(normalizedPath);
+    }, [
+        currentPage,
+        routeParams,
+        routePath,
+        selectedActivity,
+        selectedIpo,
+        selectedMarketingPartner,
+        selectedMonitoringReportContext,
+        selectedOfficeReq,
+        selectedOtherExpense,
+        selectedStaffingReq,
+        selectedSubproject,
+    ]);
     
-    // Activity Edit Mode State
-    const [activityEditMode, setActivityEditMode] = useState<'create' | 'details' | 'expenses' | 'accomplishment'>('create');
+    useEffect(() => {
+        if (routePath !== '/reports') return;
+        const requestedTab = getReportTabFromSourceView(routeParams.get('report')) as ReportTab | null;
+        if (!requestedTab) return;
+        setReportsPageState(previous => previous.activeTab === requestedTab
+            ? previous
+            : { ...previous, activeTab: requestedTab });
+    }, [routeParams, routePath]);
+
+    const breadcrumbs = useMemo(() => {
+        const routeId = getRouteId(routeParams);
+        const monitoringActivityId = Number(routeParams.get('activityId'));
+        const monitoringIpoId = Number(routeParams.get('ipoId'));
+        const originId = Number(routeParams.get('originId'));
+        const resolveRouteItem = <T extends { id: number }>(item: T | null, items: T[]) => {
+            if (routeId === null) return item;
+            if (item?.id === routeId) return item;
+            return items.find(candidate => candidate.id === routeId) || null;
+        };
+        const activeMarketingPartner = routeId !== null
+            ? marketingPartners.find(partner => Number(partner.id) === routeId) || selectedMarketingPartner
+            : selectedMarketingPartner;
+        const activeLinkageKey = routeParams.get('linkageKey') ?? selectedMarketingLinkageKey;
+        const selectedLinkage = activeMarketingPartner?.marketingLinkages?.find((linkage, index) => {
+            const stableKey = linkage.id !== undefined && linkage.id !== null && String(linkage.id) !== ''
+                ? linkage.id
+                : index;
+            return String(stableKey) === String(activeLinkageKey);
+        });
+
+        const activeSubproject = resolveRouteItem(selectedSubproject, visibleSubprojects);
+        const activeActivity = routePath === '/activity-monitoring-report'
+            ? selectedMonitoringReportContext?.activity
+                || (Number.isFinite(monitoringActivityId) ? visibleActivities.find(activity => activity.id === monitoringActivityId) : null)
+                || null
+            : resolveRouteItem(selectedActivity, visibleActivities);
+        const activeIpo = routePath === '/activity-monitoring-report'
+            ? selectedMonitoringReportContext?.ipo
+                || (Number.isFinite(monitoringIpoId) ? ipos.find(ipo => ipo.id === monitoringIpoId) : null)
+                || null
+            : resolveRouteItem(selectedIpo, ipos);
+        const originIpo = routeParams.get('origin') === 'ipo' && Number.isFinite(originId)
+            ? ipos.find(ipo => ipo.id === originId) || null
+            : null;
+        const originActivity = routeParams.get('origin') === 'activity' && Number.isFinite(originId)
+            ? visibleActivities.find(activity => activity.id === originId) || null
+            : null;
+        const activeOfficeRequirement = resolveRouteItem(selectedOfficeReq, visibleOfficeReqs);
+        const activeOtherProgramExpense = resolveRouteItem(selectedOtherExpense, visibleOtherExpenses);
+        const activeStaffingRequirement = resolveRouteItem(selectedStaffingReq, visibleStaffingReqs);
+
+        return resolveAppBreadcrumbs({
+            path: routePath,
+            params: routeParams,
+            role: currentUser?.role,
+            context: {
+                activity: activeActivity ? { id: activeActivity.id, label: activeActivity.name || activeActivity.uid } : null,
+                activityEditMode,
+                gadOperatingUnit: routeParams.get('ou'),
+                gadYear: Number(routeParams.get('year')) || null,
+                ipo: activeIpo ? { id: activeIpo.id, label: activeIpo.name } : null,
+                lodYear: selectedLodYear,
+                marketingLinkageLabel: selectedLinkage
+                    ? selectedLinkage.commodityName || selectedLinkage.ipoName || 'Market Linkage'
+                    : null,
+                marketingPartner: activeMarketingPartner
+                    ? { id: activeMarketingPartner.id, label: activeMarketingPartner.companyName || activeMarketingPartner.uid }
+                    : null,
+                monitoringIpo: activeIpo
+                    ? { id: activeIpo.id, label: activeIpo.name }
+                    : null,
+                originActivity: originActivity
+                    ? { id: originActivity.id, label: originActivity.name || originActivity.uid }
+                    : null,
+                originIpo: originIpo ? { id: originIpo.id, label: originIpo.name } : null,
+                officeRequirement: activeOfficeRequirement
+                    ? { id: activeOfficeRequirement.id, label: activeOfficeRequirement.equipment || activeOfficeRequirement.uid }
+                    : null,
+                otherProgramExpense: activeOtherProgramExpense
+                    ? { id: activeOtherProgramExpense.id, label: activeOtherProgramExpense.particulars || activeOtherProgramExpense.uid }
+                    : null,
+                staffingRequirement: activeStaffingRequirement
+                    ? { id: activeStaffingRequirement.id, label: activeStaffingRequirement.personnelPosition || activeStaffingRequirement.uid }
+                    : null,
+                subproject: activeSubproject ? { id: activeSubproject.id, label: activeSubproject.name || activeSubproject.uid } : null,
+                subprojectDetailMode,
+            },
+        });
+    }, [
+        activityEditMode,
+        currentUser?.role,
+        routeParams,
+        routePath,
+        selectedActivity,
+        selectedIpo,
+        selectedLodYear,
+        selectedMarketingLinkageKey,
+        selectedMarketingPartner,
+        selectedMonitoringReportContext,
+        selectedOfficeReq,
+        selectedOtherExpense,
+        selectedStaffingReq,
+        selectedSubproject,
+        subprojectDetailMode,
+        visibleActivities,
+        visibleOfficeReqs,
+        visibleOtherExpenses,
+        visibleStaffingReqs,
+        visibleSubprojects,
+        ipos,
+        marketingPartners,
+    ]);
+
+    const returnContext = useMemo(() => resolveAppReturnContext(routeParams), [routeParams]);
     
     // Navigation History Stack
     const [historyStack, setHistoryStack] = useState<string[]>([]);
@@ -814,6 +1152,7 @@ const AppContent: React.FC = () => {
 
     const navigateTo = (page: string, options: NavigationOptions = {}) => {
         const current = currentPageRef.current;
+        if (!requestAppNavigation(current, page)) return;
         const stack = historyStackRef.current;
         const newStack = [...stack, current];
         if (page === '/reports' && options.resetReports) {
@@ -838,6 +1177,13 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         const handlePopState = (event: PopStateEvent) => {
             const leavingPage = parseAppRoute(currentPageRef.current).path;
+            const nextPage = event.state?.page || window.location.hash.replace('#', '') || '/';
+            if (!requestAppNavigation(currentPageRef.current, nextPage)) {
+                const current = currentPageRef.current;
+                const stack = historyStackRef.current;
+                window.history.pushState({ page: current, stack }, '', `/#${current}`);
+                return;
+            }
             
             if (leavingPage === '/subproject-detail') setSelectedSubproject(null);
             if (leavingPage === '/activity-detail') setSelectedActivity(null);
@@ -847,7 +1193,6 @@ const AppContent: React.FC = () => {
             if (leavingPage === '/program-management/staffing-detail') setSelectedStaffingReq(null);
             if (leavingPage === '/program-management/other-expense-detail') setSelectedOtherExpense(null);
             if (leavingPage === '/marketing-profile-detail') {
-                const nextPage = event.state?.page || window.location.hash.replace('#', '') || '/';
                 if (!['/marketing-profile-edit', '/marketing-linkage-edit', '/marketing-linkage-detail'].includes(nextPage)) {
                     setSelectedMarketingPartner(null);
                     setSelectedMarketingLinkageKey(null);
@@ -996,14 +1341,63 @@ const AppContent: React.FC = () => {
     }, [refCommodities, refLivestock]);
 
     // Navigation Handlers
+    const getCurrentSourceParams = (): Array<[string, string | null]> => {
+        const existingSource = resolveAppReturnContext(routeParams);
+        if (existingSource) {
+            return [
+                ['source', routeParams.get('source')],
+                ['sourceView', routeParams.get('sourceView')],
+            ];
+        }
+        if (routePath === '/reports') {
+            return [
+                ['source', 'report'],
+                ['sourceView', getReportSourceView(reportsPageState.activeTab)],
+            ];
+        }
+        if (isDashboardPagePath(routePath)) {
+            return [
+                ['source', 'dashboard'],
+                ['sourceView', getDashboardSourceView(routePath)],
+            ];
+        }
+        return [];
+    };
+
+    const getCurrentOriginParams = (): Array<[string, string | null]> => {
+        const origin = routeParams.get('origin');
+        const originId = routeParams.get('originId');
+        if (!['ipo', 'activity'].includes(origin || '') || !originId) return [];
+        return [['origin', origin], ['originId', originId]];
+    };
+
+    const buildContextualRecordPath = (
+        path: string,
+        id?: number | string | null,
+        origin?: { type: 'ipo' | 'activity'; id: number | string } | null,
+        extra: Array<[string, string | number | null | undefined]> = [],
+    ) => appendPathParams(buildDetailPath(path, id), [
+        ...getCurrentSourceParams(),
+        ...(origin
+            ? [['origin', origin.type], ['originId', origin.id]] as Array<[string, string | number]>
+            : getCurrentOriginParams()),
+        ...extra,
+    ]);
+
     const handleSelectSubproject = (project: Subproject) => {
         setSelectedSubproject(project);
-        navigateTo(buildDetailPath('/subproject-detail', project.id));
+        const origin = routePath === '/ipo-detail' && selectedIpo
+            ? { type: 'ipo' as const, id: selectedIpo.id }
+            : null;
+        navigateTo(buildContextualRecordPath('/subproject-detail', project.id, origin));
     };
 
     const handleSelectIpo = (ipo: IPO) => {
         setSelectedIpo(ipo);
-        navigateTo('/ipo-detail');
+        const origin = routePath === '/activity-detail' && selectedActivity
+            ? { type: 'activity' as const, id: selectedActivity.id }
+            : null;
+        navigateTo(buildContextualRecordPath('/ipo-detail', ipo.id, origin));
     };
 
     const handleOpenIpoListForAncestralDomain = (adNo: string) => {
@@ -1013,32 +1407,46 @@ const AppContent: React.FC = () => {
 
     const handleSelectActivity = (activity: Activity) => {
         setSelectedActivity(activity);
-        navigateTo(buildDetailPath('/activity-detail', activity.id));
+        const origin = routePath === '/ipo-detail' && selectedIpo
+            ? { type: 'ipo' as const, id: selectedIpo.id }
+            : null;
+        navigateTo(buildContextualRecordPath('/activity-detail', activity.id, origin));
     };
 
     const handleOpenMonitoringReport = (activity: Activity, ipo: IPO, report?: ActivityMonitoringReport | null) => {
+        setSelectedIpo(ipo);
         setSelectedMonitoringReportContext({ activity, ipo, report: report || null });
-        navigateTo('/activity-monitoring-report');
+        const origin = routePath === '/ipo-detail'
+            ? { type: 'ipo' as const, id: ipo.id }
+            : { type: 'activity' as const, id: activity.id };
+        navigateTo(buildContextualRecordPath('/activity-monitoring-report', null, origin, [
+            ['activityId', activity.id],
+            ['ipoId', ipo.id],
+            ['reportId', report?.id],
+        ]));
     };
 
     const handleSelectOfficeReq = (req: OfficeRequirement) => {
         setSelectedOfficeReq(req);
-        navigateTo(buildDetailPath('/program-management/office-detail', req.id));
+        navigateTo(buildContextualRecordPath('/program-management/office-detail', req.id));
     };
 
     const handleSelectStaffingReq = (req: StaffingRequirement) => {
         setSelectedStaffingReq(req);
-        navigateTo(buildDetailPath('/program-management/staffing-detail', req.id));
+        navigateTo(buildContextualRecordPath('/program-management/staffing-detail', req.id));
     };
 
     const handleSelectOtherExpense = (req: OtherProgramExpense) => {
         setSelectedOtherExpense(req);
-        navigateTo(buildDetailPath('/program-management/other-expense-detail', req.id));
+        navigateTo(buildContextualRecordPath('/program-management/other-expense-detail', req.id));
     };
 
     const handleSelectMarketingPartner = (partner: MarketingPartner) => {
         setSelectedMarketingPartner(partner);
-        navigateTo('/marketing-profile-detail');
+        const origin = routePath === '/ipo-detail' && selectedIpo
+            ? { type: 'ipo' as const, id: selectedIpo.id }
+            : null;
+        navigateTo(buildContextualRecordPath('/marketing-profile-detail', partner.id, origin));
     }
     
     // New handler for activity creation
@@ -1089,7 +1497,14 @@ const AppContent: React.FC = () => {
     const handleSelectIpoForLod = (ipo: IPO, year?: number) => {
         setSelectedIpo(ipo);
         setSelectedLodYear(year ?? null);
-        navigateTo('/lod-details');
+        const origin = routePath === '/ipo-detail'
+            ? { type: 'ipo' as const, id: ipo.id }
+            : null;
+        navigateTo(buildContextualRecordPath('/lod-details', ipo.id, origin, [['year', year]]));
+    };
+
+    const handleSelectGadPimmeAssessment = (operatingUnit: string, year: number) => {
+        navigateTo(appendPathParams(buildGadPimmeDetailPath(operatingUnit, year), getCurrentSourceParams()));
     };
 
     const renderPage = () => {
@@ -1106,6 +1521,7 @@ const AppContent: React.FC = () => {
         if (['/trainings', '/other-activities', '/activities', '/activity-edit', '/activity-detail', '/activity-monitoring-report'].includes(routePath)) {
             if (!checkAccess('Activities')) return denied;
         }
+        if (routePath === '/activity-monitoring-report' && !checkAccess('IPO Management')) return denied;
         if (routePath === '/program-management' || routePath.startsWith('/program-management/')) {
             if (!checkAccess('Program Management')) return denied;
         }
@@ -1120,6 +1536,9 @@ const AppContent: React.FC = () => {
         }
         if (['/level-of-development', '/lod-details'].includes(routePath)) {
             if (!checkAccess('Level of Development')) return denied;
+        }
+        if (['/gender-and-development', '/gender-and-development/detail'].includes(routePath)) {
+            if (!checkAccess('Gender and Development')) return denied;
         }
         if (routePath === '/commodity-mapping') {
             if (!checkAccess('Commodity Mapping')) return denied;
@@ -1147,6 +1566,7 @@ const AppContent: React.FC = () => {
                 onSelectSubproject={handleSelectSubproject}
                 onSelectActivity={handleSelectActivity}
                 onSelectMarketingPartner={handleSelectMarketingPartner}
+                onSelectGadAssessment={handleSelectGadPimmeAssessment}
                 setExternalFilters={setExternalFilters}
                 navigateTo={navigateTo}
                 onDataScopeChange={ensureDataScope}
@@ -1277,16 +1697,29 @@ const AppContent: React.FC = () => {
                             onClearExternalFilters={clearExternalFilters}
                             onDataScopeChange={ensureDataScope}
                         />;
-            case '/activity-edit':
-                if (activityEditMode !== 'create' && selectedActivity) {
-                    const activityEditDecision = activityEditMode === 'details'
-                        ? getStatusDecision({ moduleKey: 'activities', item: selectedActivity, action: 'editDetails', hasModuleAccess: hasAccess('Activities', 'edit') })
-                        : activityEditMode === 'expenses'
-                            ? getStatusDecision({ moduleKey: 'activities', item: selectedActivity, action: 'editBudget', hasModuleAccess: hasAccess('Activities', 'edit') })
+            case '/activity-edit': {
+                const routeId = getRouteId(routeParams);
+                const requestedMode = routeParams.get('action');
+                const existingMode = ['details', 'expenses', 'accomplishment'].includes(requestedMode || '')
+                    ? requestedMode as 'details' | 'expenses' | 'accomplishment'
+                    : null;
+                const routeActivity = routeId !== null
+                    ? (selectedActivity?.id === routeId ? selectedActivity : activities.find(item => item.id === routeId) || null)
+                    : selectedActivity;
+                if (existingMode && !routeActivity) {
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading activity..." />;
+                    return <DetailRouteFallback title="Activity unavailable" message="This activity was not found or is outside your visibility scope." actionLabel="Back to Activities" onAction={() => navigateTo('/activities')} />;
+                }
+                const effectiveEditMode = existingMode || activityEditMode;
+                if (effectiveEditMode !== 'create' && routeActivity) {
+                    const activityEditDecision = effectiveEditMode === 'details'
+                        ? getStatusDecision({ moduleKey: 'activities', item: routeActivity, action: 'editDetails', hasModuleAccess: hasAccess('Activities', 'edit') })
+                        : effectiveEditMode === 'expenses'
+                            ? getStatusDecision({ moduleKey: 'activities', item: routeActivity, action: 'editBudget', hasModuleAccess: hasAccess('Activities', 'edit') })
                             : (
-                                getStatusDecision({ moduleKey: 'activities', item: selectedActivity, action: 'editPhysicalAccomplishment', hasModuleAccess: hasAccess('Accomplishment - Physical', 'edit') }).allowed
-                                    ? getStatusDecision({ moduleKey: 'activities', item: selectedActivity, action: 'editPhysicalAccomplishment', hasModuleAccess: hasAccess('Accomplishment - Physical', 'edit') })
-                                    : getStatusDecision({ moduleKey: 'activities', item: selectedActivity, action: 'editFinancialAccomplishment', hasModuleAccess: hasAccess('Accomplishment - Financial', 'edit') })
+                                getStatusDecision({ moduleKey: 'activities', item: routeActivity, action: 'editPhysicalAccomplishment', hasModuleAccess: hasAccess('Accomplishment - Physical', 'edit') }).allowed
+                                    ? getStatusDecision({ moduleKey: 'activities', item: routeActivity, action: 'editPhysicalAccomplishment', hasModuleAccess: hasAccess('Accomplishment - Physical', 'edit') })
+                                    : getStatusDecision({ moduleKey: 'activities', item: routeActivity, action: 'editFinancialAccomplishment', hasModuleAccess: hasAccess('Accomplishment - Financial', 'edit') })
                             );
                     if (!activityEditDecision.allowed) {
                         return (
@@ -1294,19 +1727,21 @@ const AppContent: React.FC = () => {
                                 title="Activity editing is locked"
                                 message={activityEditDecision.message}
                                 actionLabel="Back to Activity Details"
-                                onAction={() => navigateTo(buildDetailPath('/activity-detail', selectedActivity.id))}
+                                onAction={() => navigateTo(buildContextualRecordPath('/activity-detail', routeActivity.id))}
                             />
                         );
                     }
                 }
                 return <ActivityEdit 
-                            mode={activityEditMode}
-                            activity={selectedActivity || undefined}
+                            mode={effectiveEditMode}
+                            activity={routeActivity || undefined}
                             activities={visibleActivities}
                             ipos={activityWorkflowIpos}
-                            onBack={handleBack}
+                            onBack={() => navigateTo(effectiveEditMode === 'create'
+                                ? '/activities'
+                                : buildContextualRecordPath('/activity-detail', routeActivity?.id))}
                             onUpdateActivity={(updated) => {
-                                if (activityEditMode === 'create') {
+                                if (effectiveEditMode === 'create') {
                                      setActivities(prev => [...prev, updated]);
                                 } else {
                                      setActivities(prev => prev.map(a => a.id === updated.id ? updated : a));
@@ -1321,6 +1756,7 @@ const AppContent: React.FC = () => {
                                 undefined
                             }
                         />;
+            }
             case '/subproject-edit':
                 if (selectedSubproject) {
                     const subprojectEditDecision = getStatusDecision({
@@ -1335,7 +1771,7 @@ const AppContent: React.FC = () => {
                                 title="Subproject editing is locked"
                                 message={subprojectEditDecision.message}
                                 actionLabel="Back to Subproject Details"
-                                onAction={() => navigateTo(buildDetailPath('/subproject-detail', selectedSubproject.id))}
+                                onAction={() => navigateTo(buildContextualRecordPath('/subproject-detail', selectedSubproject.id))}
                             />
                         );
                     }
@@ -1347,7 +1783,9 @@ const AppContent: React.FC = () => {
                                 setIpos(action);
                                 setSubprojectWorkflowIpos(action);
                             }}
-                            onBack={handleBack}
+                            onBack={() => navigateTo(selectedSubproject
+                                ? buildContextualRecordPath('/subproject-detail', selectedSubproject.id)
+                                : '/subprojects')}
                             onUpdateSubproject={(updated) => {
                                 if (selectedSubproject) {
                                      setSubprojects(prev => prev.map(p => p.id === updated.id ? updated : p));
@@ -1433,7 +1871,7 @@ const AppContent: React.FC = () => {
                     ? (selectedOfficeReq?.id === routeId ? (routeItem || selectedOfficeReq) : routeItem)
                     : selectedOfficeReq;
                 if (!latestOffice) {
-                    if (routeId === null) return <div>Select an item</div>;
+                    if (routeId === null) return <DetailRouteFallback title="No office requirement selected" message="Open an item from Office Requirements." actionLabel="Back to Office Requirements" onAction={() => navigateTo('/program-management/office-requirements')} />;
                     if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading office requirement..." />;
                     return (
                         <DetailRouteFallback
@@ -1446,7 +1884,6 @@ const AppContent: React.FC = () => {
                 }
                 return <OfficeRequirementDetail 
                             item={latestOffice}
-                            onBack={handleBack}
                             uacsCodes={derivedUacsCodes}
                             onUpdate={(updatedItem) => {
                                 setOfficeReqs(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
@@ -1461,7 +1898,7 @@ const AppContent: React.FC = () => {
                     ? (selectedStaffingReq?.id === routeId ? (routeItem || selectedStaffingReq) : routeItem)
                     : selectedStaffingReq;
                 if (!latestStaff) {
-                    if (routeId === null) return <div>Select an item</div>;
+                    if (routeId === null) return <DetailRouteFallback title="No staffing requirement selected" message="Open an item from Staffing Requirements." actionLabel="Back to Staffing Requirements" onAction={() => navigateTo('/program-management/staffing-requirements')} />;
                     if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading staffing requirement..." />;
                     return (
                         <DetailRouteFallback
@@ -1474,7 +1911,6 @@ const AppContent: React.FC = () => {
                 }
                 return <StaffingRequirementDetail 
                             item={latestStaff}
-                            onBack={handleBack}
                             uacsCodes={derivedUacsCodes}
                             onUpdate={(updatedItem) => {
                                 setStaffingReqs(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
@@ -1489,7 +1925,7 @@ const AppContent: React.FC = () => {
                     ? (selectedOtherExpense?.id === routeId ? (routeItem || selectedOtherExpense) : routeItem)
                     : selectedOtherExpense;
                 if (!latestOther) {
-                    if (routeId === null) return <div>Select an item</div>;
+                    if (routeId === null) return <DetailRouteFallback title="No program expense selected" message="Open an item from Other Expenses." actionLabel="Back to Other Expenses" onAction={() => navigateTo('/program-management/other-expenses')} />;
                     if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading other program expense..." />;
                     return (
                         <DetailRouteFallback
@@ -1502,7 +1938,6 @@ const AppContent: React.FC = () => {
                 }
                 return <OtherExpenseDetail 
                             item={latestOther}
-                            onBack={handleBack}
                             uacsCodes={derivedUacsCodes}
                             onUpdate={(updatedItem) => {
                                 setOtherProgramExpenses(prev => prev.map(i => i.id === updatedItem.id ? updatedItem : i));
@@ -1555,7 +1990,7 @@ const AppContent: React.FC = () => {
                     ? (selectedSubproject?.id === routeId ? (routeItem || selectedSubproject) : routeItem)
                     : selectedSubproject;
                 if (!latestSp) {
-                    if (routeId === null) return <div>Select a subproject</div>;
+                    if (routeId === null) return <DetailRouteFallback title="No subproject selected" message="Open a record from the Subprojects list." actionLabel="Back to Subprojects" onAction={() => navigateTo('/subprojects')} />;
                     if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading subproject..." />;
                     return (
                         <DetailRouteFallback
@@ -1569,8 +2004,7 @@ const AppContent: React.FC = () => {
                 return <SubprojectDetail 
                             subproject={latestSp} 
                             ipos={subprojectWorkflowIpos}
-                            onBack={handleBack} 
-                            previousPageName={getPageName(previousPage)}
+                            onEditModeChange={setSubprojectDetailMode}
                             onUpdateSubproject={(updated) => {
                                 setSubprojects(prev => prev.map(p => p.id === updated.id ? updated : p));
                                 setSelectedSubproject(updated);
@@ -1606,20 +2040,25 @@ const AppContent: React.FC = () => {
                             refLivestock={refLivestock}
                         />;
             }
-            case '/ipo-detail':
-                if (!selectedIpo) return <div>Select an IPO</div>;
+            case '/ipo-detail': {
+                const routeId = getRouteId(routeParams);
+                const latestIpo = routeId !== null
+                    ? (selectedIpo?.id === routeId ? selectedIpo : ipos.find(ipo => ipo.id === routeId) || null)
+                    : selectedIpo;
+                if (!latestIpo) {
+                    if (routeId !== null && (isRouteDataLoading || isDirectRouteLookupLoading)) return <LoadingState label="Loading IPO..." />;
+                    return <DetailRouteFallback title={routeId === null ? 'No IPO selected' : 'IPO not found'} message={routeId === null ? 'Open an IPO from the IPO list.' : 'This IPO is no longer available, or it is outside your current visibility scope.'} actionLabel="Back to IPOs" onAction={() => navigateTo('/ipo')} />;
+                }
                 return <IPODetail 
-                            ipo={selectedIpo} 
+                            ipo={latestIpo}
                             subprojects={ipoDetailLinkedDcfRecords.subprojects}
                             trainings={ipoDetailLinkedDcfRecords.trainings}
                             monitoringActivities={ipoDetailLinkedDcfRecords.monitoringActivities}
                             cachedMonitoringReports={ipoDetailLinkedDcfRecords.monitoringReports}
                             cachedMonitoringActions={ipoDetailLinkedDcfRecords.monitoringActions}
-                            linkedDcfLoading={ipoLinkedDcfState?.ipoId === selectedIpo.id ? ipoLinkedDcfState.loading : false}
-                            linkedDcfError={ipoLinkedDcfState?.ipoId === selectedIpo.id ? ipoLinkedDcfState.error : null}
+                            linkedDcfLoading={ipoLinkedDcfState?.ipoId === latestIpo.id ? ipoLinkedDcfState.loading : false}
+                            linkedDcfError={ipoLinkedDcfState?.ipoId === latestIpo.id ? ipoLinkedDcfState.error : null}
                             marketingPartners={marketingPartners}
-                            onBack={handleBack}
-                            previousPageName={getPageName(previousPage)}
                             onUpdateIpo={(updated) => {
                                 setIpos(prev => prev.map(i => i.id === updated.id ? updated : i));
                                 setSelectedIpo(updated);
@@ -1632,6 +2071,7 @@ const AppContent: React.FC = () => {
                             particularTypes={derivedParticularTypes}
                             commodityCategories={derivedCommodityCategories}
                         />;
+            }
             case '/activity-detail': {
                 const routeId = getRouteId(routeParams);
                 const routeItem = findByRouteId(visibleActivities, routeId);
@@ -1639,7 +2079,7 @@ const AppContent: React.FC = () => {
                     ? (selectedActivity?.id === routeId ? (routeItem || selectedActivity) : routeItem)
                     : selectedActivity;
                 if (!latestAct) {
-                    if (routeId === null) return <div>Select an activity</div>;
+                    if (routeId === null) return <DetailRouteFallback title="No activity selected" message="Open a record from the Activities list." actionLabel="Back to Activities" onAction={() => navigateTo('/activities')} />;
                     if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading activity..." />;
                     return (
                         <DetailRouteFallback
@@ -1653,8 +2093,6 @@ const AppContent: React.FC = () => {
                 return <ActivityDetail
                             activity={latestAct}
                             ipos={activityWorkflowIpos}
-                            onBack={handleBack} 
-                            previousPageName={getPageName(previousPage)}
                             onUpdateActivity={(updated) => {
                                 setActivities(prev => prev.map(a => a.id === updated.id ? updated : a));
                                 setSelectedActivity(updated);
@@ -1662,7 +2100,7 @@ const AppContent: React.FC = () => {
                             onEdit={(mode) => {
                                 setSelectedActivity(latestAct);
                                 setActivityEditMode(mode);
-                                navigateTo('/activity-edit');
+                                navigateTo(buildContextualRecordPath('/activity-edit', latestAct.id, null, [['action', mode]]));
                             }}
                             uacsCodes={derivedUacsCodes}
                             referenceActivities={referenceActivities}
@@ -1672,17 +2110,31 @@ const AppContent: React.FC = () => {
                             onOpenMonitoringReport={handleOpenMonitoringReport}
                         />;
             }
-            case '/activity-monitoring-report':
-                if (!selectedMonitoringReportContext) return <div>Select a monitoring report</div>;
+            case '/activity-monitoring-report': {
+                const activityId = Number(routeParams.get('activityId'));
+                const ipoId = Number(routeParams.get('ipoId'));
+                const activity = selectedMonitoringReportContext?.activity.id === activityId
+                    ? selectedMonitoringReportContext.activity
+                    : (Number.isFinite(activityId) ? visibleActivities.find(item => item.id === activityId) : null);
+                const ipo = selectedMonitoringReportContext?.ipo.id === ipoId
+                    ? selectedMonitoringReportContext.ipo
+                    : (Number.isFinite(ipoId) ? ipos.find(item => item.id === ipoId) : null);
+                if (!activity || !ipo) {
+                    if (isRouteDataLoading || isDirectRouteLookupLoading) return <LoadingState label="Loading monitoring report..." />;
+                    return <DetailRouteFallback title="Monitoring report unavailable" message="The linked activity or IPO is unavailable in your current visibility scope." actionLabel="Back to Activities" onAction={() => navigateTo('/activities')} />;
+                }
+                const reportId = Number(routeParams.get('reportId'));
+                const report = selectedMonitoringReportContext?.report
+                    || (Number.isFinite(reportId) ? activityMonitoringReports.find(item => Number(item.id) === reportId) || null : null);
                 return <ActivityMonitoringReportDetail
-                            activity={selectedMonitoringReportContext.activity}
-                            ipo={selectedMonitoringReportContext.ipo}
-                            initialReport={selectedMonitoringReportContext.report}
-                            initialActions={selectedMonitoringReportContext.report?.id
-                                ? activityMonitoringActions.filter(action => Number(action.monitoring_report_id) === Number(selectedMonitoringReportContext.report?.id))
+                            activity={activity}
+                            ipo={ipo}
+                            initialReport={report}
+                            initialActions={report?.id
+                                ? activityMonitoringActions.filter(action => Number(action.monitoring_report_id) === Number(report.id))
                                 : []}
-                            onBack={handleBack}
                         />;
+            }
             case '/settings':
                 return <Settings 
                             isDarkMode={isDarkMode} 
@@ -1709,63 +2161,122 @@ const AppContent: React.FC = () => {
                             onSelectPartner={handleSelectMarketingPartner}
                             commodityCategories={derivedCommodityCategories}
                         />;
-            case '/marketing-profile-detail':
-                if (!selectedMarketingPartner) return <div>Select a partner</div>;
+            case '/marketing-profile-detail': {
+                const routePartnerId = getRouteId(routeParams);
+                const routePartner = routePartnerId !== null
+                    ? (Number(selectedMarketingPartner?.id) === routePartnerId
+                        ? selectedMarketingPartner
+                        : marketingPartners.find(partner => Number(partner.id) === routePartnerId) || null)
+                    : selectedMarketingPartner;
+                if (!routePartner) {
+                    if (routePartnerId !== null && (isRouteDataLoading || isDirectRouteLookupLoading)) return <LoadingState label="Loading marketing partner..." />;
+                    return <DetailRouteFallback title={routePartnerId === null ? 'No marketing partner selected' : 'Marketing partner not found'} message={routePartnerId === null ? 'Open a partner from the Marketing Database.' : 'This marketing partner is unavailable or outside your visibility scope.'} actionLabel="Back to Marketing Database" onAction={() => navigateTo('/marketing-database')} />;
+                }
                 return <MarketProfileDetail 
-                            partner={selectedMarketingPartner}
+                            partner={routePartner}
                             ipos={ipos}
-                            onBack={handleBack}
                             onEditDetails={() => {
-                                navigateTo('/marketing-profile-edit');
+                                navigateTo(buildContextualRecordPath('/marketing-profile-edit', routePartner.id));
                             }}
                             onAddLinkage={() => {
-                                navigateTo('/marketing-linkage-edit');
+                                navigateTo(buildContextualRecordPath('/marketing-linkage-edit', routePartner.id));
                             }}
                             onSelectLinkage={(linkageKey) => {
                                 setSelectedMarketingLinkageKey(linkageKey);
-                                navigateTo('/marketing-linkage-detail');
+                                navigateTo(buildContextualRecordPath('/marketing-linkage-detail', routePartner.id, null, [['linkageKey', linkageKey]]));
                             }}
                             commodityCategories={derivedCommodityCategories}
                         />;
-            case '/marketing-profile-edit':
-                if (!selectedMarketingPartner) return <div>Select a partner</div>;
+            }
+            case '/marketing-profile-edit': {
+                const routePartnerId = getRouteId(routeParams);
+                const routePartner = routePartnerId !== null
+                    ? (Number(selectedMarketingPartner?.id) === routePartnerId ? selectedMarketingPartner : marketingPartners.find(partner => Number(partner.id) === routePartnerId) || null)
+                    : selectedMarketingPartner;
+                if (!routePartner) {
+                    if (routePartnerId !== null && (isRouteDataLoading || isDirectRouteLookupLoading)) return <LoadingState label="Loading marketing partner..." />;
+                    return <DetailRouteFallback title="Marketing partner unavailable" message="The selected marketing partner was not found or is outside your visibility scope." actionLabel="Back to Marketing Database" onAction={() => navigateTo('/marketing-database')} />;
+                }
                 return <MarketProfileEdit 
-                            partner={selectedMarketingPartner}
-                            onBack={handleBack}
+                            partner={routePartner}
+                            onBack={() => navigateTo(buildContextualRecordPath('/marketing-profile-detail', routePartner.id))}
                             onUpdatePartner={(updated) => {
                                 setMarketingPartners(prev => prev.map(p => p.id === updated.id ? updated : p));
                                 setSelectedMarketingPartner(updated);
                             }}
                             commodityCategories={derivedCommodityCategories}
                         />;
-            case '/marketing-linkage-edit':
-                if (!selectedMarketingPartner) return <div>Select a partner</div>;
+            }
+            case '/marketing-linkage-edit': {
+                const routePartnerId = getRouteId(routeParams);
+                const routePartner = routePartnerId !== null
+                    ? (Number(selectedMarketingPartner?.id) === routePartnerId ? selectedMarketingPartner : marketingPartners.find(partner => Number(partner.id) === routePartnerId) || null)
+                    : selectedMarketingPartner;
+                if (!routePartner) {
+                    if (routePartnerId !== null && (isRouteDataLoading || isDirectRouteLookupLoading)) return <LoadingState label="Loading marketing partner..." />;
+                    return <DetailRouteFallback title="Marketing partner unavailable" message="The selected marketing partner was not found or is outside your visibility scope." actionLabel="Back to Marketing Database" onAction={() => navigateTo('/marketing-database')} />;
+                }
                 return <MarketLinkageEdit 
-                            partner={selectedMarketingPartner}
+                            partner={routePartner}
                             ipos={ipos}
-                            onBack={handleBack}
+                            onBack={() => navigateTo(buildContextualRecordPath('/marketing-profile-detail', routePartner.id))}
                             onUpdatePartner={(updated) => {
                                 setMarketingPartners(prev => prev.map(p => p.id === updated.id ? updated : p));
                                 setSelectedMarketingPartner(updated);
                             }}
                         />;
-            case '/marketing-linkage-detail':
-                if (!selectedMarketingPartner || selectedMarketingLinkageKey === null) return <div>Select a market linkage</div>;
+            }
+            case '/marketing-linkage-detail': {
+                const routePartnerId = getRouteId(routeParams);
+                const routePartner = routePartnerId !== null
+                    ? (Number(selectedMarketingPartner?.id) === routePartnerId ? selectedMarketingPartner : marketingPartners.find(partner => Number(partner.id) === routePartnerId) || null)
+                    : selectedMarketingPartner;
+                const linkageKey = routeParams.get('linkageKey') ?? selectedMarketingLinkageKey;
+                if (!routePartner) {
+                    if (routePartnerId !== null && (isRouteDataLoading || isDirectRouteLookupLoading)) return <LoadingState label="Loading market linkage..." />;
+                    return <DetailRouteFallback title="Marketing partner unavailable" message="The parent marketing partner was not found or is outside your visibility scope." actionLabel="Back to Marketing Database" onAction={() => navigateTo('/marketing-database')} />;
+                }
+                if (linkageKey === null || linkageKey === undefined || !(routePartner.marketingLinkages || []).some((linkage, index) => String(linkage.id ?? index) === String(linkageKey))) {
+                    return <DetailRouteFallback title="Market linkage not found" message="The selected linkage is unavailable for this marketing partner." actionLabel="Back to Marketing Partner" onAction={() => navigateTo(buildContextualRecordPath('/marketing-profile-detail', routePartner.id))} />;
+                }
                 return <MarketLinkageDetail
-                            partner={selectedMarketingPartner}
-                            linkageKey={selectedMarketingLinkageKey}
+                            partner={routePartner}
+                            linkageKey={linkageKey}
                             ipos={ipos}
-                            onBack={handleBack}
+                            onBack={() => navigateTo(buildContextualRecordPath('/marketing-profile-detail', routePartner.id))}
                             onUpdatePartner={(updated) => {
                                 setMarketingPartners(prev => prev.map(p => p.id === updated.id ? updated : p));
                                 setSelectedMarketingPartner(updated);
                             }}
                         />;
+            }
             case '/level-of-development':
-                return <LODPage ipos={ipos} onSelectIpo={handleSelectIpoForLod} />;
+                return <LODPage onSelectIpo={handleSelectIpoForLod} />;
             case '/lod-details':
-                if (!selectedIpo) return <div>Select an IPO</div>;
-                return <LODDetails ipo={selectedIpo} onBack={handleBack} initialYear={selectedLodYear} />;
+                {
+                    const routeId = getRouteId(routeParams);
+                    const routeYear = Number(routeParams.get('year'));
+                    const assessmentYear = Number.isFinite(routeYear) && routeYear > 0 ? routeYear : selectedLodYear;
+                    return <LODDetailsRoute
+                        ipoId={routeId ?? selectedIpo?.id ?? null}
+                        selectedIpo={selectedIpo}
+                        onBack={handleBack}
+                        initialYear={assessmentYear}
+                    />;
+                }
+            case '/gender-and-development':
+                return <GadPimmePage onSelectAssessment={handleSelectGadPimmeAssessment} />;
+            case '/gender-and-development/detail':
+                {
+                    const routeOu = routeParams.get('ou');
+                    const routeYear = Number(routeParams.get('year'));
+                    return <GadPimmeDetailsRoute
+                        operatingUnit={routeOu}
+                        year={Number.isFinite(routeYear) ? routeYear : null}
+                        onBack={() => navigateTo('/gender-and-development')}
+                        onSelectYear={year => routeOu && handleSelectGadPimmeAssessment(routeOu, year)}
+                    />;
+                }
             case '/commodity-mapping':
                 return <CommodityMappingPage subprojects={subprojects} ipos={ipos} />;
             default:
@@ -1783,6 +2294,8 @@ const AppContent: React.FC = () => {
             />
             <div className="app-workspace">
                 <Header 
+                    breadcrumbs={breadcrumbs}
+                    returnContext={returnContext}
                     toggleSidebar={toggleSidebar} 
                     isDarkMode={isDarkMode} 
                     themePreference={themePreference}

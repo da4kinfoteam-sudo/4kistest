@@ -31,6 +31,7 @@ export interface DashboardsPageProps {
     onSelectSubproject?: (project: Subproject) => void;
     onSelectActivity?: (activity: Training | OtherActivity) => void;
     onSelectMarketingPartner?: (partner: MarketingPartner) => void;
+    onSelectGadAssessment?: (operatingUnit: string, year: number) => void;
     setExternalFilters?: (filters: any) => void;
     navigateTo?: (page: string) => void;
     onDataScopeChange?: (scope: Partial<DataScope>) => void;
@@ -218,7 +219,23 @@ const DashboardsPage: React.FC<DashboardsPageProps> = (props) => {
                 {activeTab === 'SCAD' && <SCADDashboard ipos={filteredData.ipos} />}
                 {activeTab === 'Agricultural Interventions' && <AgriculturalInterventionsDashboard subprojects={filteredData.subprojects} ipos={filteredData.ipos} />}
                 {activeTab === 'Commodities' && <CommodityDashboard subprojects={filteredData.subprojects} ipos={filteredData.ipos} onSelectSubproject={props.onSelectSubproject} />}
-                {activeTab === 'GAD' && <GADDashboard trainings={filteredData.trainings} otherActivities={filteredData.otherActivities} ipos={filteredData.ipos} subprojects={filteredData.subprojects} />}
+                {activeTab === 'GAD' && (
+                    <GADDashboard
+                        subprojects={financialSourceData.subprojects}
+                        trainings={financialSourceData.trainings}
+                        otherActivities={financialSourceData.otherActivities}
+                        officeReqs={financialSourceData.officeReqs}
+                        staffingReqs={financialSourceData.staffingReqs}
+                        otherProgramExpenses={financialSourceData.otherProgramExpenses}
+                        ipos={financialSourceData.ipos}
+                        selectedYear={selectedYear}
+                        selectedOu={selectedOu}
+                        selectedTier={selectedTier}
+                        selectedFundType={selectedFundType}
+                        navigateTo={props.navigateTo}
+                        onSelectAssessment={props.onSelectGadAssessment}
+                    />
+                )}
                 {activeTab === 'IPO Level of Development' && <IPOLevelDashboard ipos={filteredData.ipos} selectedYear={selectedYear} onSelectLodIpo={props.onSelectLodIpo} />}
                 {activeTab === 'Nutrition' && <NutritionDashboard />}
                 {activeTab === 'Farm Productivity and Income' && (

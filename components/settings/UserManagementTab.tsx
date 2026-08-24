@@ -7,8 +7,8 @@ import { Shield, Save, X as XIcon, Info, Users, UserCog } from 'lucide-react';
 import { ConfirmDialog } from '../ui/enterprise';
 
 const commonInputClasses = "form-control";
-const isGuestWriteField = (role: string | undefined, field: 'can_view' | 'can_edit' | 'can_delete') => (
-    role === 'Guest' && (field === 'can_edit' || field === 'can_delete')
+const isGuestWriteField = (role: string | undefined, field: 'can_view' | 'can_edit' | 'can_delete' | 'can_manage') => (
+    role === 'Guest' && field !== 'can_view'
 );
 
 const UserManagementTab: React.FC = () => {
@@ -72,7 +72,7 @@ const UserManagementTab: React.FC = () => {
         }
     };
 
-    const handleTogglePermission = (module: string, field: 'can_view' | 'can_edit' | 'can_delete') => {
+    const handleTogglePermission = (module: string, field: 'can_view' | 'can_edit' | 'can_delete' | 'can_manage') => {
         if (isGuestWriteField(editingUser?.role, field)) return;
         setUserOverrides((prev: any) => {
             const newOverrides = { ...prev };
@@ -89,8 +89,9 @@ const UserManagementTab: React.FC = () => {
             if (field === 'can_view' && !newOverrides[module].can_view) {
                 newOverrides[module].can_edit = false;
                 newOverrides[module].can_delete = false;
+                newOverrides[module].can_manage = false;
             }
-            if ((field === 'can_edit' || field === 'can_delete') && newOverrides[module][field]) {
+            if ((field === 'can_edit' || field === 'can_delete' || field === 'can_manage') && newOverrides[module][field]) {
                 newOverrides[module].can_view = true;
             }
 
@@ -112,7 +113,7 @@ const UserManagementTab: React.FC = () => {
         const sanitizedOverrides = editingUser.role === 'Guest'
             ? Object.fromEntries(Object.entries(userOverrides).map(([module, override]: [string, any]) => [
                 module,
-                { ...override, can_edit: false, can_delete: false }
+                { ...override, can_edit: false, can_delete: false, can_manage: false }
             ]))
             : userOverrides;
         
@@ -280,18 +281,18 @@ const UserManagementTab: React.FC = () => {
                         <header className="modal-card__header"><div><h3 id="access-overrides-title"><UserCog className="btn-symbol" /> Access Overrides</h3><p>{editingUser.fullName} · {editingUser.role}</p></div><button onClick={() => setIsPermissionModalOpen(false)} className="modal-card__close" aria-label="Close access overrides"><XIcon /></button></header>
                         <div className="modal-card__body">
                             <div className="notice notice--info"><Info className="btn-symbol" /><div><strong>Hierarchy logic</strong><p>Overrides defined here supersede role-level permissions for this account only.</p></div></div>
-                            <div className="data-table-scroll"><table className="data-table user-permissions-table"><thead><tr><th>Target Module</th><th>Status</th><th>View</th><th>Edit</th><th>Delete</th></tr></thead><tbody>
+                            <div className="data-table-scroll"><table className="data-table user-permissions-table"><thead><tr><th>Target Module</th><th>Status</th><th>View</th><th>Edit</th><th>Delete</th><th>Admin Controls</th></tr></thead><tbody>
                                 {appModules.map(module => {
-                                    const roleDefault = roleDefaults.find(r => r.module === module) || { can_view: false, can_edit: false, can_delete: false };
+                                    const roleDefault = roleDefaults.find(r => r.module === module) || { can_view: false, can_edit: false, can_delete: false, can_manage: false };
                                     const hasOverride = userOverrides[module] !== undefined;
                                     const rawEffectiveConfig = hasOverride ? userOverrides[module] : roleDefault;
-                                    const effectiveConfig = editingUser.role === 'Guest' ? { ...rawEffectiveConfig, can_edit: false, can_delete: false } : rawEffectiveConfig;
-                                    const Toggle = ({ field }: { field: 'can_view'|'can_edit'|'can_delete' }) => {
+                                    const effectiveConfig = editingUser.role === 'Guest' ? { ...rawEffectiveConfig, can_edit: false, can_delete: false, can_manage: false } : rawEffectiveConfig;
+                                    const Toggle = ({ field }: { field: 'can_view'|'can_edit'|'can_delete'|'can_manage' }) => {
                                         const val = effectiveConfig[field];
                                         const isLocked = isGuestWriteField(editingUser.role, field);
                                         return <label className={`toggle-control ${isLocked ? 'is-disabled' : ''}`}><input type="checkbox" checked={val} onChange={() => !isLocked && handleTogglePermission(module, field)} disabled={isLocked} aria-label={`${field.replace('can_', '')} ${module}`} /><span className={`toggle-control__track toggle-control__track--${field.replace('can_', '')}`}><span /></span></label>;
                                     };
-                                    return <tr key={module} className={hasOverride ? 'data-table__row--selected' : undefined}><td className="data-table__cell--primary data-table__cell--nowrap">{module}</td><td>{hasOverride ? <><span className="status-badge status-badge--compact status-badge--completed">Overridden</span><button onClick={() => handleClearOverride(module)} className="data-table-reset">Reset</button></> : <span className="data-table__cell--muted">Auto (Default)</span>}</td><td><Toggle field="can_view" /></td><td><Toggle field="can_edit" /></td><td><Toggle field="can_delete" /></td></tr>;
+                                    return <tr key={module} className={hasOverride ? 'data-table__row--selected' : undefined}><td className="data-table__cell--primary data-table__cell--nowrap">{module}</td><td>{hasOverride ? <><span className="status-badge status-badge--compact status-badge--completed">Overridden</span><button onClick={() => handleClearOverride(module)} className="data-table-reset">Reset</button></> : <span className="data-table__cell--muted">Auto (Default)</span>}</td><td><Toggle field="can_view" /></td><td><Toggle field="can_edit" /></td><td><Toggle field="can_delete" /></td><td>{module === 'Level of Development' ? <Toggle field="can_manage" /> : <span className="data-table__cell--muted">N/A</span>}</td></tr>;
                                 })}
                             </tbody></table></div>
                         </div>

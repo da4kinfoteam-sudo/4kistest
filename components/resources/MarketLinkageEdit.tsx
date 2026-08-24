@@ -131,7 +131,6 @@ const MarketLinkageEdit: React.FC<MarketLinkageEditProps> = ({ partner, ipos, on
                     <h1 className="detail-title">Add Market Linkage</h1>
                     <p className="detail-meta">{partner.companyName} | {partner.uid}</p>
                 </div>
-                <button onClick={onBack} className="btn btn-secondary">Back to Profile</button>
             </header>
 
             <form onSubmit={handleSave} className="form-card form-stack form-stack--spacious">

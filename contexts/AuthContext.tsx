@@ -12,7 +12,7 @@ interface AuthContextType {
     usersList: User[];
     setUsersList: React.Dispatch<React.SetStateAction<User[]>>;
     rolesConfigs: RoleConfig[];
-    hasAccess: (module: string, action: 'view' | 'edit' | 'delete') => boolean;
+    hasAccess: (module: string, action: 'view' | 'edit' | 'delete' | 'manage') => boolean;
     getVisibilityScope: (module: string) => 'All' | 'Own OU';
     refreshUsersList: () => Promise<void>;
     refreshUser: () => Promise<void>;
@@ -53,10 +53,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.removeItem('currentUserSession');
     };
 
-    const hasAccess = (module: string, action: 'view' | 'edit' | 'delete'): boolean => {
+    const hasAccess = (module: string, action: 'view' | 'edit' | 'delete' | 'manage'): boolean => {
         if (!currentUser) return false;
-        if (['Super Admin', 'Administrator'].includes(currentUser.role)) return true;
-        if (currentUser.role === 'Guest' && (action === 'edit' || action === 'delete')) return false;
+        if (currentUser.role === 'Super Admin') return true;
+        if (currentUser.role === 'Administrator' && action !== 'manage') return true;
+        if (currentUser.role === 'Guest' && action !== 'view') return false;
 
         if (currentUser.permissions_override && typeof currentUser.permissions_override === 'object') {
             const moduleOverride = currentUser.permissions_override[module];
@@ -67,8 +68,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (rolesConfigs && rolesConfigs.length > 0) {
             const roleDef = rolesConfigs.find(c => c.role === currentUser.role && c.module === module);
-            if (roleDef && typeof roleDef[`can_${action}`] === 'boolean') {
-                return !!roleDef[`can_${action}`];
+            if (roleDef && typeof (roleDef as any)[`can_${action}`] === 'boolean') {
+                return !!(roleDef as any)[`can_${action}`];
             }
         }
 
@@ -78,15 +79,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const getVisibilityScope = (module: string): 'All' | 'Own OU' => {
         if (!currentUser) return 'Own OU';
-        
-        // 1. Admin Bypass
-        if (['Super Admin', 'Administrator'].includes(currentUser.role)) return 'All';
 
-        // 2. Individual User Visibility Override (explicitly set in User Management)
+        // 1. Individual User Visibility Override (explicitly set in User Management)
         if (currentUser.visibility_scope === 'Own OU') return 'Own OU';
         if (currentUser.visibility_scope === 'All OUs') return 'All';
 
-        // 3. Role-Level Configuration (from User Role Control Center)
+        // 2. Role-Level Configuration (from User Role Control Center)
         if (rolesConfigs && rolesConfigs.length > 0) {
             const roleDef = rolesConfigs.find(c => c.role === currentUser.role && c.module === module);
             if (roleDef && roleDef.visibility_scope) {
@@ -94,7 +92,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         }
 
-        // 4. System Defaults (Legacy Fallbacks)
+        // LOD deliberately fails closed until its configured scope is available.
+        if (module === 'Level of Development' || module === 'Gender and Development') return 'Own OU';
+
+        // 3. Legacy fallbacks retained for modules that have not moved to strict scope configuration.
+        if (['Super Admin', 'Administrator'].includes(currentUser.role)) return 'All';
         if (['Management'].includes(currentUser.role)) {
             return 'All';
         }

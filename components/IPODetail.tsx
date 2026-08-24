@@ -3,13 +3,12 @@
 import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
 import {
     AlertCircle,
-    ArrowLeft,
     CalendarDays,
     Check,
-    ChevronRight,
     Coins,
     Edit3,
     ExternalLink,
+    Filter,
     Layers,
     Loader2,
     MapPin,
@@ -30,9 +29,12 @@ import { formatMarketQuantityTotals, getIpoMarketSalesRows, summarizeIpoMarketSa
 import { getActivityDisplayTitle } from '../lib/entityIdentity';
 import LocationPicker, { parseLocation } from './LocationPicker';
 import { useAuth } from '../contexts/AuthContext';
-import { useUserAccess, usePagination } from './mainfunctions/TableHooks';
+import { useUserAccess } from './mainfunctions/TableHooks';
 import { useIpoHistory } from '../hooks/useIpoHistory';
 import { supabase } from '../supabaseClient';
+import { getLodEffectiveState } from '../lib/lodScoring';
+import { subscribeToLodDataChanges } from '../lib/lodDataSync';
+import { commodityCapacityToFormValue, getCommodityCapacityValues } from '../lib/commodityProfile';
 import {
     deleteIpoDriveFile,
     formatFileSize,
@@ -53,7 +55,8 @@ import {
     GalleryViewToggle,
     getPersistedDriveUploadSection
 } from './ui/DriveMediaSections';
-import { ConfirmDialog, DataTablePagination } from './ui/enterprise';
+import { ConfirmDialog } from './ui/enterprise';
+import { ColumnFilterDialog, TableColumnFilters, TableFilterField, TruncatedTableCell } from './ui/MajorDataTable';
 import {
     RecordDetailAside,
     RecordDetailGrid,
@@ -75,8 +78,6 @@ interface IPODetailProps {
     linkedDcfLoading?: boolean;
     linkedDcfError?: string | null;
     marketingPartners: MarketingPartner[];
-    onBack: () => void;
-    previousPageName: string;
     onUpdateIpo: (updatedIpo: IPO) => void;
     onSelectSubproject: (subproject: Subproject) => void;
     onSelectActivity: (activity: Training) => void;
@@ -168,13 +169,6 @@ const DetailItem: React.FC<{ label: string; value?: string | number | React.Reac
     </div>
 );
 
-const MonitoringPreviewLine: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
-    <div className="monitoring-report-preview__line">
-        <span className="monitoring-report-preview__label">{label}</span>
-        <p className="monitoring-report-preview__snippet">{value?.trim() || `No ${label.toLowerCase()} recorded.`}</p>
-    </div>
-);
-
 const OverviewMetric: React.FC<{
     label: string;
     value: string;
@@ -205,14 +199,25 @@ const getCommodityNeedAnnualVolume = (need: CommodityNeed) => {
     return MARKET_VOLUME_MONTHS.reduce((sum, month) => sum + toSafeNumber((need as any)[`volume${month}`]), 0);
 };
 
-const getMatchedBuyerCommodityNeeds = (partner: MarketingPartner, ipo: IPO) => {
-    const ipoCommodityNames = new Set((ipo.commodities || []).map(commodity => commodity.particular.toLowerCase()));
-    return (partner.commodityNeeds || []).filter(need => ipoCommodityNames.has(need.name.toLowerCase()));
-};
-
 const getMarketLinkageCommodityLabel = (link: MarketLinkage) => (
     link.commodityName ? `${link.commodityName}${link.commodityType ? ` (${link.commodityType})` : ''}` : 'Unassigned'
 );
+
+const getLodAssessmentSource = (assessment: LodAssessment) => {
+    if (assessment.is_dropped) return 'Dropped';
+    if (assessment.is_complete) return 'Computed assessment';
+    if (assessment.is_carried_over) return assessment.carried_over_from_year
+        ? `Carry-over from ${assessment.carried_over_from_year}`
+        : 'Carry-over';
+    if (assessment.manual_level != null) return 'Manual override';
+    return 'Questionnaire in progress';
+};
+
+const formatDateRange = (startDate?: string | null, endDate?: string | null) => {
+    if (!startDate) return 'N/A';
+    const formattedStart = formatDate(startDate);
+    return endDate && endDate !== startDate ? `${formattedStart} to ${formatDate(endDate)}` : formattedStart;
+};
 
 // Helper for Region Normalization
 const normalizeRegionName = (inputRegion: string) => {
@@ -242,26 +247,6 @@ const normalizeRegionName = (inputRegion: string) => {
     return map[inputRegion] || inputRegion;
 };
 
-// Pagination Controls Component
-const PaginationControls: React.FC<{
-    currentPage: number;
-    totalPages: number;
-    onPageChange: (page: number) => void;
-    itemsPerPage: number;
-    onItemsPerPageChange: (val: number) => void;
-    totalItems: number;
-}> = ({ currentPage, totalPages, onPageChange, itemsPerPage, onItemsPerPageChange, totalItems }) => (
-    <DataTablePagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        itemsPerPage={itemsPerPage}
-        onPageChange={onPageChange}
-        onItemsPerPageChange={onItemsPerPageChange}
-        pageSizeOptions={[5, 10, 20]}
-    />
-);
-
 const IpoDetailPanel: React.FC<{
     title: string;
     description?: string;
@@ -275,7 +260,30 @@ const IpoDetailPanel: React.FC<{
     </RecordPanel>
 );
 
-type IpoSectionModalKey = 'subprojects' | 'activities' | 'gallery' | 'galleryUpload' | 'filesUpload';
+type IpoSectionModalKey = 'gallery' | 'galleryUpload' | 'filesUpload' | 'monitoringReport' | 'marketLinkage';
+type IpoTableKey = 'subprojects' | 'activities' | 'monitoring' | 'market' | 'history';
+
+const IpoTableFilterButton: React.FC<{
+    label: string;
+    count: number;
+    onClick: () => void;
+}> = ({ label, count, onClick }) => (
+    <button
+        type="button"
+        className={`btn btn-secondary btn-compact major-table-filter-button${count > 0 ? ' is-active' : ''}`}
+        onClick={onClick}
+        aria-label={`Filter ${label}`}
+        title={`Filter ${label}`}
+    >
+        <Filter aria-hidden="true" />
+        <span className="ipo-detail-filter-label">Filter</span>
+        {count > 0 && <span className="major-table-filter-button__count" aria-label={`${count} active filters`}>{count}</span>}
+    </button>
+);
+
+const IpoTableCount: React.FC<{ filtered: number; total: number }> = ({ filtered, total }) => (
+    <span className="ipo-detail-table-count">Showing {filtered.toLocaleString()} of {total.toLocaleString()} records</span>
+);
 
 const IpoSectionModal: React.FC<{
     title: string;
@@ -370,7 +378,7 @@ const IpoSectionModal: React.FC<{
     );
 };
 
-const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, monitoringActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], linkedDcfLoading = false, linkedDcfError = null, marketingPartners, onBack, previousPageName, onUpdateIpo, onSelectSubproject, onSelectActivity, onOpenMonitoringReport, onSelectLodYear, onSelectMarketingPartner, particularTypes, commodityCategories }) => {
+const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, monitoringActivities = [], cachedMonitoringReports = [], cachedMonitoringActions = [], linkedDcfLoading = false, linkedDcfError = null, marketingPartners, onUpdateIpo, onSelectSubproject, onSelectActivity, onOpenMonitoringReport, onSelectLodYear, onSelectMarketingPartner, particularTypes, commodityCategories }) => {
     const { currentUser } = useAuth();
     const { canEdit } = useUserAccess('IPO Management');
     const canDeleteDriveFiles = currentUser?.role === 'Super Admin' || currentUser?.role === 'Administrator';
@@ -380,8 +388,6 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
     const [otherRegisteringBody, setOtherRegisteringBody] = useState('');
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [lodAssessments, setLodAssessments] = useState<LodAssessment[]>([]);
-    const [expandedMarketLinkageId, setExpandedMarketLinkageId] = useState<string | number | null>(null);
-    
     // History Hook
     const { history, addIpoHistory, refreshHistory } = useIpoHistory(ipo.id);
     const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
@@ -391,11 +397,18 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
     const [driveFilePendingDelete, setDriveFilePendingDelete] = useState<IpoDriveFile | null>(null);
     const [driveToast, setDriveToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
     const [sectionModal, setSectionModal] = useState<IpoSectionModalKey | null>(null);
+    const [selectedMonitoringReport, setSelectedMonitoringReport] = useState<ActivityMonitoringReport | null>(null);
+    const [selectedMarketLinkage, setSelectedMarketLinkage] = useState<ReturnType<typeof getIpoMarketSalesRows>[number] | null>(null);
+    const [openTableFilter, setOpenTableFilter] = useState<IpoTableKey | null>(null);
+    const [tableFilters, setTableFilters] = useState<Record<IpoTableKey, TableColumnFilters>>({
+        subprojects: {}, activities: {}, monitoring: {}, market: {}, history: {}
+    });
     const [galleryView, setGalleryView] = useState<GalleryViewMode>(() => {
         const saved = window.localStorage.getItem('4kis-gallery-view:ipo');
         return saved === 'list' || saved === 'carousel' ? saved : 'thumbnail';
     });
     const [monitoringReports, setMonitoringReports] = useState<ActivityMonitoringReport[]>([]);
+    const [monitoringActions, setMonitoringActions] = useState<ActivityMonitoringAction[]>([]);
     const [latestMonitoringActions, setLatestMonitoringActions] = useState<Record<number, ActivityMonitoringAction | undefined>>({});
     const [isMonitoringLoading, setIsMonitoringLoading] = useState(false);
     const [monitoringMessage, setMonitoringMessage] = useState<string | null>(null);
@@ -407,6 +420,9 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         value: '',
         yield: '',
         isScad: false,
+        potentialExpansionArea: '',
+        numberOfFarmers: '',
+        numberOfTrees: '',
         marketingPercentage: '',
         foodSecurityPercentage: '',
         averageIncome: ''
@@ -430,6 +446,10 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
             }
         };
         fetchLOD();
+        const unsubscribe = subscribeToLodDataChanges(detail => {
+            if (!detail.ipoId || Number(detail.ipoId) === Number(ipo.id)) fetchLOD();
+        });
+        return unsubscribe;
     }, [ipo.id]);
 
     const showDriveToast = (type: 'success' | 'error', message: string) => {
@@ -448,9 +468,8 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
     const cachedReportsForIpo = useMemo(() =>
         cachedMonitoringReports
-            .filter(report => Number(report.ipo_id) === Number(ipo.id))
-            .filter(report => monitoringActivityById.has(Number(report.activity_id))),
-    [cachedMonitoringReports, ipo.id, monitoringActivityById]);
+            .filter(report => Number(report.ipo_id) === Number(ipo.id)),
+    [cachedMonitoringReports, ipo.id]);
 
     const buildLatestActionMap = useCallback((reports: ActivityMonitoringReport[], actions: ActivityMonitoringAction[]) => {
         const reportIds = new Set(reports.map(report => Number(report.id)));
@@ -468,6 +487,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
     useEffect(() => {
         setMonitoringReports(cachedReportsForIpo);
+        setMonitoringActions(cachedMonitoringActions);
         setLatestMonitoringActions(buildLatestActionMap(cachedReportsForIpo, cachedMonitoringActions));
     }, [buildLatestActionMap, cachedMonitoringActions, cachedReportsForIpo]);
 
@@ -475,6 +495,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         if (!ipo.id) return;
         if (!supabase) {
             setMonitoringReports(cachedReportsForIpo);
+            setMonitoringActions(cachedMonitoringActions);
             setLatestMonitoringActions(buildLatestActionMap(cachedReportsForIpo, cachedMonitoringActions));
             setMonitoringMessage(cachedReportsForIpo.length > 0 ? 'Showing cached Monitoring Reports.' : null);
             return;
@@ -490,12 +511,12 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                 .order('updated_at', { ascending: false });
             if (error) throw error;
 
-            const visibleReports = ((reports || []) as ActivityMonitoringReport[])
-                .filter(report => monitoringActivityById.has(Number(report.activity_id)));
+            const visibleReports = (reports || []) as ActivityMonitoringReport[];
             setMonitoringReports(visibleReports);
 
             const reportIds = visibleReports.map(report => report.id);
             if (reportIds.length === 0) {
+                setMonitoringActions([]);
                 setLatestMonitoringActions({});
                 return;
             }
@@ -508,9 +529,12 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                 .order('created_at', { ascending: false });
             if (actionError) throw actionError;
 
-            setLatestMonitoringActions(buildLatestActionMap(visibleReports, (actions || []) as ActivityMonitoringAction[]));
+            const visibleActions = (actions || []) as ActivityMonitoringAction[];
+            setMonitoringActions(visibleActions);
+            setLatestMonitoringActions(buildLatestActionMap(visibleReports, visibleActions));
         } catch (error: any) {
             setMonitoringReports(cachedReportsForIpo);
+            setMonitoringActions(cachedMonitoringActions);
             setLatestMonitoringActions(buildLatestActionMap(cachedReportsForIpo, cachedMonitoringActions));
             setMonitoringMessage(cachedReportsForIpo.length > 0
                 ? `Showing cached Monitoring Reports. ${error.message || 'Unable to refresh live data.'}`
@@ -518,7 +542,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         } finally {
             setIsMonitoringLoading(false);
         }
-    }, [buildLatestActionMap, cachedMonitoringActions, cachedReportsForIpo, ipo.id, monitoringActivityById]);
+    }, [buildLatestActionMap, cachedMonitoringActions, cachedReportsForIpo, ipo.id]);
 
     useEffect(() => {
         loadMonitoringReports();
@@ -582,93 +606,124 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
     };
 
     const currentFundYear = String(new Date().getFullYear());
-
-    // --- Subproject Filters & Pagination ---
-    const [spYearFilter, setSpYearFilter] = useState(currentFundYear);
-    const [spStatusFilter, setSpStatusFilter] = useState('All');
-    
-    const filteredSubprojects = useMemo(() => {
-        return subprojects.filter(sp => {
-            if (spYearFilter !== 'All' && sp.fundingYear?.toString() !== spYearFilter) return false;
-            if (spStatusFilter !== 'All' && sp.status !== spStatusFilter) return false;
-            return true;
-        }).sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-    }, [subprojects, spYearFilter, spStatusFilter]);
-
-    const spPagination = usePagination(filteredSubprojects, [spYearFilter, spStatusFilter]);
-    
-    // Set default items per page to 5 for Subprojects
-    useEffect(() => {
-        spPagination.setItemsPerPage(5);
-    }, []);
-
-    // --- Training Filters & Pagination ---
-    const [trYearFilter, setTrYearFilter] = useState(currentFundYear);
-    const [trStatusFilter, setTrStatusFilter] = useState('All');
-
-    const filteredTrainings = useMemo(() => {
-        return trainings.filter(t => {
-            if (trYearFilter !== 'All' && t.fundingYear?.toString() !== trYearFilter) return false;
-            if (trStatusFilter !== 'All' && t.status !== trStatusFilter) return false;
-            return true;
-        }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [trainings, trYearFilter, trStatusFilter]);
-
-    const trPagination = usePagination(filteredTrainings, [trYearFilter, trStatusFilter]);
-
-    // Set default items per page to 5 for Trainings
-    useEffect(() => {
-        trPagination.setItemsPerPage(5);
-    }, []);
-
-    // --- Market Linkages Logic ---
     const ipoLinkages = useMemo(() => {
         return getIpoMarketSalesRows(marketingPartners, ipo);
     }, [marketingPartners, ipo.name]);
-
     const ipoMarketSalesSummary = useMemo(() => summarizeIpoMarketSales(ipoLinkages), [ipoLinkages]);
-
-    const mlPagination = usePagination(ipoLinkages);
-    // Set default items per page to 5 for Linkages
-    useEffect(() => {
-        mlPagination.setItemsPerPage(5);
-    }, []);
-
-    // --- History Pagination ---
-    const histPagination = usePagination(history);
-     useEffect(() => {
-        histPagination.setItemsPerPage(5);
-    }, []);
 
     const galleryFiles = useMemo(() => driveFiles.filter(file => getPersistedDriveUploadSection(file) === 'gallery'), [driveFiles]);
     const documentFiles = useMemo(() => driveFiles.filter(file => getPersistedDriveUploadSection(file) === 'files'), [driveFiles]);
-    const currentFundYearSubprojects = useMemo(
-        () => [...(subprojects || [])]
-            .filter(project => project.fundingYear?.toString() === currentFundYear)
-            .sort((a, b) => new Date(b.startDate || b.created_at || 0).getTime() - new Date(a.startDate || a.created_at || 0).getTime()),
-        [currentFundYear, subprojects]
-    );
-    const subprojectPreview = useMemo(() => currentFundYearSubprojects.slice(0, 4), [currentFundYearSubprojects]);
-    const currentFundYearActivities = useMemo(
-        () => [...(trainings || [])]
-            .filter(activity => activity.fundingYear?.toString() === currentFundYear)
-            .sort((a, b) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime()),
-        [currentFundYear, trainings]
-    );
-    const trainingPreview = useMemo(() => currentFundYearActivities.slice(0, 4), [currentFundYearActivities]);
-    const closeSectionModal = useCallback(() => setSectionModal(null), []);
-    const selectSubprojectFromModal = (subproject: Subproject) => {
+
+    const closeSectionModal = useCallback(() => {
         setSectionModal(null);
-        onSelectSubproject(subproject);
-    };
-    const selectActivityFromModal = (activity: Activity) => {
-        setSectionModal(null);
-        onSelectActivity(activity);
+        setSelectedMonitoringReport(null);
+        setSelectedMarketLinkage(null);
+    }, []);
+
+    const activeFilterCount = useCallback((table: IpoTableKey) => (
+        Object.values(tableFilters[table]).filter(values => Array.isArray(values) && values.length > 0).length
+    ), [tableFilters]);
+
+    const filterMatches = (table: IpoTableKey, key: string, value: unknown) => {
+        const selected = tableFilters[table][key] || [];
+        return selected.length === 0 || selected.includes(String(value ?? ''));
     };
 
-    // Unique Years for Filters
-    const spYears = useMemo(() => Array.from(new Set((subprojects || []).map(s => s.fundingYear))).filter(Boolean).sort().reverse(), [subprojects]);
-    const trYears = useMemo(() => Array.from(new Set((trainings || []).map(t => t.fundingYear))).filter(Boolean).sort().reverse(), [trainings]);
+    const filteredSubprojects = useMemo(() => {
+        const rows = subprojects.filter(project => {
+            const rate = getSubprojectPhysicalRate(project);
+            const completionBand = rate === 0 ? '0%' : rate < 50 ? '1-49%' : rate < 100 ? '50-99%' : '100%';
+            return filterMatches('subprojects', 'fundingYear', project.fundingYear)
+                && filterMatches('subprojects', 'status', project.status)
+                && filterMatches('subprojects', 'location', project.location || 'Not recorded')
+                && filterMatches('subprojects', 'completion', completionBand);
+        });
+        return rows.sort((left, right) => {
+            const leftCurrent = String(left.fundingYear) === currentFundYear ? 1 : 0;
+            const rightCurrent = String(right.fundingYear) === currentFundYear ? 1 : 0;
+            if (leftCurrent !== rightCurrent) return rightCurrent - leftCurrent;
+            return new Date(right.startDate || right.created_at || 0).getTime() - new Date(left.startDate || left.created_at || 0).getTime();
+        });
+    }, [currentFundYear, subprojects, tableFilters.subprojects]);
+
+    const filteredActivities = useMemo(() => {
+        const rows = trainings.filter(activity => (
+            filterMatches('activities', 'fundingYear', activity.fundingYear)
+            && filterMatches('activities', 'status', activity.status)
+            && filterMatches('activities', 'component', activity.component || 'Not recorded')
+            && filterMatches('activities', 'type', activity.type || 'Not recorded')
+        ));
+        return rows.sort((left, right) => {
+            const leftCurrent = String(left.fundingYear) === currentFundYear ? 1 : 0;
+            const rightCurrent = String(right.fundingYear) === currentFundYear ? 1 : 0;
+            if (leftCurrent !== rightCurrent) return rightCurrent - leftCurrent;
+            return new Date(right.date || right.created_at || 0).getTime() - new Date(left.date || left.created_at || 0).getTime();
+        });
+    }, [currentFundYear, tableFilters.activities, trainings]);
+
+    const filteredMonitoringReports = useMemo(() => {
+        const rows = monitoringReports.filter(report => {
+            const activity = monitoringActivityById.get(Number(report.activity_id));
+            return filterMatches('monitoring', 'status', report.status)
+                && filterMatches('monitoring', 'fundingYear', activity?.fundingYear || 'Not recorded')
+                && filterMatches('monitoring', 'component', activity?.component || 'Not recorded')
+                && filterMatches('monitoring', 'reporter', report.reported_by_name || 'Not recorded');
+        });
+        return rows.sort((left, right) => new Date(right.updated_at || 0).getTime() - new Date(left.updated_at || 0).getTime());
+    }, [monitoringActivityById, monitoringReports, tableFilters.monitoring]);
+
+    const filteredMarketLinkages = useMemo(() => {
+        const rows = ipoLinkages.filter(item => (
+            filterMatches('market', 'buyer', item.partner.companyName)
+            && filterMatches('market', 'commodity', item.link.commodityName || 'Unassigned')
+            && filterMatches('market', 'agreementType', item.link.agreementType || 'Not recorded')
+            && filterMatches('market', 'status', item.link.negotiationStatus || 'Not recorded')
+            && filterMatches('market', 'year', item.link.agreementDate ? new Date(item.link.agreementDate).getFullYear() : 'Not recorded')
+        ));
+        return rows.sort((left, right) => new Date(right.link.agreementDate || 0).getTime() - new Date(left.link.agreementDate || 0).getTime());
+    }, [ipoLinkages, tableFilters.market]);
+
+    const filteredHistory = useMemo(() => {
+        const rows = history.filter(entry => (
+            filterMatches('history', 'year', entry.date ? new Date(entry.date).getFullYear() : 'Not recorded')
+            && filterMatches('history', 'event', entry.event)
+            && filterMatches('history', 'user', entry.user)
+        ));
+        return rows.sort((left, right) => new Date(right.date || right.created_at || 0).getTime() - new Date(left.date || left.created_at || 0).getTime());
+    }, [history, tableFilters.history]);
+
+    const tableFilterFields = useMemo<Record<IpoTableKey, TableFilterField[]>>(() => ({
+        subprojects: [
+            { key: 'fundingYear', label: 'Fund Year', values: Array.from(new Set(subprojects.map(item => String(item.fundingYear || '')))).filter(Boolean).sort().reverse() },
+            { key: 'status', label: 'Status', values: Array.from(new Set(subprojects.map(item => item.status))).filter(Boolean).sort() },
+            { key: 'location', label: 'Location', values: Array.from(new Set(subprojects.map(item => item.location || 'Not recorded'))).sort() },
+            { key: 'completion', label: 'Completion', values: ['0%', '1-49%', '50-99%', '100%'] }
+        ],
+        activities: [
+            { key: 'fundingYear', label: 'Fund Year', values: Array.from(new Set(trainings.map(item => String(item.fundingYear || '')))).filter(Boolean).sort().reverse() },
+            { key: 'status', label: 'Status', values: Array.from(new Set(trainings.map(item => item.status))).filter(Boolean).sort() },
+            { key: 'component', label: 'Component', values: Array.from(new Set(trainings.map(item => item.component || 'Not recorded'))).sort() },
+            { key: 'type', label: 'Activity Type', values: Array.from(new Set(trainings.map(item => item.type || 'Not recorded'))).sort() }
+        ],
+        monitoring: [
+            { key: 'status', label: 'Status', values: Array.from(new Set(monitoringReports.map(item => item.status))).sort() },
+            { key: 'fundingYear', label: 'Fund Year', values: Array.from(new Set(monitoringReports.map(item => String(monitoringActivityById.get(Number(item.activity_id))?.fundingYear || 'Not recorded')))).sort().reverse() },
+            { key: 'component', label: 'Component', values: Array.from(new Set(monitoringReports.map(item => monitoringActivityById.get(Number(item.activity_id))?.component || 'Not recorded'))).sort() },
+            { key: 'reporter', label: 'Reporter', values: Array.from(new Set(monitoringReports.map(item => item.reported_by_name || 'Not recorded'))).sort() }
+        ],
+        market: [
+            { key: 'buyer', label: 'Buyer', values: Array.from(new Set(ipoLinkages.map(item => item.partner.companyName))).sort() },
+            { key: 'commodity', label: 'Commodity', values: Array.from(new Set(ipoLinkages.map(item => item.link.commodityName || 'Unassigned'))).sort() },
+            { key: 'agreementType', label: 'Agreement Type', values: Array.from(new Set(ipoLinkages.map(item => item.link.agreementType || 'Not recorded'))).sort() },
+            { key: 'status', label: 'Status', values: Array.from(new Set(ipoLinkages.map(item => item.link.negotiationStatus || 'Not recorded'))).sort() },
+            { key: 'year', label: 'Agreement Year', values: Array.from(new Set(ipoLinkages.map(item => item.link.agreementDate ? String(new Date(item.link.agreementDate).getFullYear()) : 'Not recorded'))).sort().reverse() }
+        ],
+        history: [
+            { key: 'year', label: 'Year', values: Array.from(new Set(history.map(item => item.date ? String(new Date(item.date).getFullYear()) : 'Not recorded'))).sort().reverse() },
+            { key: 'event', label: 'Event', values: Array.from(new Set(history.map(item => item.event))).sort() },
+            { key: 'user', label: 'User', values: Array.from(new Set(history.map(item => item.user))).sort() }
+        ]
+    }), [history, ipoLinkages, monitoringActivityById, monitoringReports, subprojects, trainings]);
 
     // Calculate Statistics for Overview
     const overviewStats = useMemo(() => {
@@ -880,16 +935,19 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
             const { checked } = e.target as HTMLInputElement;
             setCurrentCommodity(prev => ({ ...prev, [name]: checked }));
         } else if (name === 'type') {
-            setCurrentCommodity({
+            setCurrentCommodity(previous => ({
                 type: value,
                 particular: '',
                 value: '',
                 yield: '',
                 isScad: false,
+                potentialExpansionArea: '',
+                numberOfFarmers: previous.numberOfFarmers,
+                numberOfTrees: '',
                 marketingPercentage: '',
                 foodSecurityPercentage: '',
                 averageIncome: ''
-            });
+            }));
         } else {
             if (name === 'marketingPercentage' || name === 'foodSecurityPercentage') {
                 const numValue = parseFloat(value);
@@ -914,11 +972,21 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
             alert(`Please fill out all commodity fields including ${isAnimal ? 'Number of Heads' : 'Area and Yield'}.`);
             return;
         }
+        let capacityFields: Pick<Commodity, 'potentialExpansionArea' | 'numberOfFarmers' | 'numberOfTrees'>;
+        try {
+            capacityFields = getCommodityCapacityValues(currentCommodity.type, currentCommodity);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : 'Invalid commodity capacity value.');
+            return;
+        }
+        const existingCommodity = editingCommodityIndex !== null ? editedIpo.commodities[editingCommodityIndex] : undefined;
         const newCommodity: Commodity = {
+            ...existingCommodity,
             type: currentCommodity.type,
             particular: currentCommodity.particular,
             value: parseFloat(currentCommodity.value),
             yield: isAnimal ? undefined : parseFloat(currentCommodity.yield),
+            ...capacityFields,
             isScad: currentCommodity.isScad,
             marketingPercentage: currentCommodity.marketingPercentage ? parseFloat(currentCommodity.marketingPercentage) : undefined,
             foodSecurityPercentage: currentCommodity.foodSecurityPercentage ? parseFloat(currentCommodity.foodSecurityPercentage) : undefined,
@@ -941,6 +1009,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
         setCurrentCommodity({
             type: '', particular: '', value: '', yield: '', isScad: false,
+            potentialExpansionArea: '', numberOfFarmers: '', numberOfTrees: '',
             marketingPercentage: '', foodSecurityPercentage: '', averageIncome: ''
         });
     };
@@ -953,6 +1022,9 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
             value: String(commodity.value),
             yield: commodity.yield ? String(commodity.yield) : '',
             isScad: commodity.isScad || false,
+            potentialExpansionArea: commodityCapacityToFormValue(commodity.potentialExpansionArea),
+            numberOfFarmers: commodityCapacityToFormValue(commodity.numberOfFarmers),
+            numberOfTrees: commodityCapacityToFormValue(commodity.numberOfTrees),
             marketingPercentage: commodity.marketingPercentage ? String(commodity.marketingPercentage) : '',
             foodSecurityPercentage: commodity.foodSecurityPercentage ? String(commodity.foodSecurityPercentage) : '',
             averageIncome: commodity.averageIncome ? String(commodity.averageIncome) : ''
@@ -964,6 +1036,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
         setEditingCommodityIndex(null);
         setCurrentCommodity({
             type: '', particular: '', value: '', yield: '', isScad: false,
+            potentialExpansionArea: '', numberOfFarmers: '', numberOfTrees: '',
             marketingPercentage: '', foodSecurityPercentage: '', averageIncome: ''
         });
     };
@@ -986,9 +1059,6 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
     }
     
     const commonInputClasses = "form-control";
-    const filterSelectClasses = "form-control data-table-select data-table-select--compact";
-
-
     if (isEditing) {
         return (
              <div className="form-page">
@@ -1098,6 +1168,9 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                             {commodity.isScad && <span className="status-badge status-badge--cyan status-badge--compact">SCAD</span>}
                                         </div>
                                         <div className="form-repeat-card__meta form-repeat-card__meta--inline">
+                                            {commodity.type === 'Crop' && commodity.potentialExpansionArea !== undefined && <span>Expansion: {formatFullNumber(commodity.potentialExpansionArea)} ha</span>}
+                                            {commodity.numberOfFarmers !== undefined && <span>Farmers: {formatFullNumber(commodity.numberOfFarmers)}</span>}
+                                            {commodity.type === 'Crop' && commodity.numberOfTrees !== undefined && <span>Trees: {formatFullNumber(commodity.numberOfTrees)}</span>}
                                             {(commodity.marketingPercentage || 0) > 0 && <span>Marketing: {formatFullNumber(commodity.marketingPercentage)}%</span>}
                                             {(commodity.foodSecurityPercentage || 0) > 0 && <span>Food Security: {formatFullNumber(commodity.foodSecurityPercentage)}%</span>}
                                             {(commodity.averageIncome || 0) > 0 && <span title={formatCurrency(commodity.averageIncome || 0)}>Income: {formatCurrency(commodity.averageIncome || 0)}</span>}
@@ -1142,6 +1215,26 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                 )}
                             </div>
                         </div>
+                        {currentCommodity.type && (
+                            <div className="commodity-capacity-fields form-divider">
+                                {currentCommodity.type === 'Crop' && (
+                                    <div>
+                                        <label className="form-label">Potential Expansion Area (ha)</label>
+                                        <input type="number" name="potentialExpansionArea" value={currentCommodity.potentialExpansionArea} onChange={handleCommodityChange} min="0" step="any" className={commonInputClasses} />
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="form-label">Number of Farmers</label>
+                                    <input type="number" name="numberOfFarmers" value={currentCommodity.numberOfFarmers} onChange={handleCommodityChange} min="0" step="1" className={commonInputClasses} />
+                                </div>
+                                {currentCommodity.type === 'Crop' && (
+                                    <div>
+                                        <label className="form-label">Number of Trees</label>
+                                        <input type="number" name="numberOfTrees" value={currentCommodity.numberOfTrees} onChange={handleCommodityChange} min="0" step="1" className={commonInputClasses} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <div className="commodity-edit-metrics commodity-edit-metrics--allocation">
                             <div>
                                 <label className="form-label">Marketing %</label>
@@ -1242,6 +1335,19 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     </button>
                 </div>
             )}
+            {openTableFilter && (
+                <ColumnFilterDialog
+                    open
+                    title={`Filter ${openTableFilter === 'market' ? 'Market Linkages' : openTableFilter === 'monitoring' ? 'Monitoring Reports' : openTableFilter.charAt(0).toUpperCase() + openTableFilter.slice(1)}`}
+                    fields={tableFilterFields[openTableFilter]}
+                    filters={tableFilters[openTableFilter]}
+                    onApply={filters => {
+                        setTableFilters(previous => ({ ...previous, [openTableFilter]: filters }));
+                        setOpenTableFilter(null);
+                    }}
+                    onClose={() => setOpenTableFilter(null)}
+                />
+            )}
             {driveFilePendingDelete && (
                 <div className="dashboard-modal-backdrop" onClick={() => !deletingDriveFileId && setDriveFilePendingDelete(null)}>
                     <div className="dashboard-modal dashboard-modal--compact" onClick={e => e.stopPropagation()}>
@@ -1270,202 +1376,6 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         </div>
                     </div>
                 </div>
-            )}
-            {sectionModal === 'subprojects' && (
-                <IpoSectionModal
-                    title="Linked Subprojects"
-                    description={ipo.name}
-                    count={filteredSubprojects.length}
-                    onClose={closeSectionModal}
-                >
-                    <div className="ipo-section-modal__toolbar">
-                        <div>
-                            <p className="detail-kicker">Filter linked records</p>
-                            <p className="detail-list-copy">Filters apply only to this IPO's accessible Subprojects.</p>
-                        </div>
-                        <div className="ipo-section-modal__filters">
-                            <label>
-                                <span>Fund Year</span>
-                                <select
-                                    value={spYearFilter}
-                                    onChange={event => setSpYearFilter(event.target.value)}
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Years</option>
-                                    {!spYears.some(year => String(year) === currentFundYear) && (
-                                        <option value={currentFundYear}>{currentFundYear}</option>
-                                    )}
-                                    {spYears.map(year => <option key={year} value={year}>{year}</option>)}
-                                </select>
-                            </label>
-                            <label>
-                                <span>Status</span>
-                                <select
-                                    value={spStatusFilter}
-                                    onChange={event => setSpStatusFilter(event.target.value)}
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Statuses</option>
-                                    <option value="Proposed">Proposed</option>
-                                    <option value="Ongoing">Ongoing</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                </select>
-                            </label>
-                        </div>
-                    </div>
-
-                    {linkedDcfLoading && (
-                        <div className="ipo-linked-dcf-status" role="status">
-                            <Loader2 className="animate-spin" aria-hidden="true" />
-                            <span>Refreshing linked Subprojects...</span>
-                        </div>
-                    )}
-                    {linkedDcfError && (
-                        <div className="ipo-linked-dcf-status ipo-linked-dcf-status--warning" role="status">
-                            <AlertCircle aria-hidden="true" />
-                            <span>{linkedDcfError}</span>
-                        </div>
-                    )}
-
-                    {spPagination.paginatedData.length > 0 ? (
-                        <>
-                            <ul className="detail-list ipo-section-modal__list">
-                                {spPagination.paginatedData.map(project => (
-                                    <li key={project.id} className="detail-list-item">
-                                        <div className="ipo-subproject-preview__main">
-                                            <div className="min-w-0">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => selectSubprojectFromModal(project)}
-                                                    className="detail-list-title table-link text-left"
-                                                >
-                                                    {project.name}
-                                                </button>
-                                                <p className="detail-list-copy">{project.location || 'Location not recorded'}</p>
-                                            </div>
-                                            <span className={getStatusBadge(project.status)}>{project.status}</span>
-                                        </div>
-                                        <div className="detail-list-meta">
-                                            <span title={formatCurrency(calculateTotalBudget(project.details))}>
-                                                <span className="detail-list-meta__label">Budget:</span> {formatCurrency(calculateTotalBudget(project.details))}
-                                            </span>
-                                            <span><span className="detail-list-meta__label">Fund Year:</span> {project.fundingYear || 'N/A'}</span>
-                                            <span><span className="detail-list-meta__label">Timeline:</span> {formatDate(project.startDate)} to {formatDate(project.estimatedCompletionDate)}</span>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                            <PaginationControls
-                                currentPage={spPagination.currentPage}
-                                totalPages={spPagination.totalPages}
-                                onPageChange={spPagination.setCurrentPage}
-                                itemsPerPage={spPagination.itemsPerPage}
-                                onItemsPerPageChange={spPagination.setItemsPerPage}
-                                totalItems={filteredSubprojects.length}
-                            />
-                        </>
-                    ) : (
-                        <p className="detail-empty">No subprojects match the current filters.</p>
-                    )}
-                </IpoSectionModal>
-            )}
-            {sectionModal === 'activities' && (
-                <IpoSectionModal
-                    title="Linked Activities"
-                    description={ipo.name}
-                    count={filteredTrainings.length}
-                    onClose={closeSectionModal}
-                >
-                    <div className="ipo-section-modal__toolbar">
-                        <div>
-                            <p className="detail-kicker">Filter linked records</p>
-                            <p className="detail-list-copy">Filters apply only to this IPO&apos;s accessible Activities.</p>
-                        </div>
-                        <div className="ipo-section-modal__filters">
-                            <label>
-                                <span>Fund Year</span>
-                                <select
-                                    value={trYearFilter}
-                                    onChange={event => setTrYearFilter(event.target.value)}
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Years</option>
-                                    {!trYears.some(year => String(year) === currentFundYear) && (
-                                        <option value={currentFundYear}>{currentFundYear}</option>
-                                    )}
-                                    {trYears.map(year => <option key={year} value={year}>{year}</option>)}
-                                </select>
-                            </label>
-                            <label>
-                                <span>Status</span>
-                                <select
-                                    value={trStatusFilter}
-                                    onChange={event => setTrStatusFilter(event.target.value)}
-                                    className={filterSelectClasses}
-                                >
-                                    <option value="All">All Statuses</option>
-                                    <option value="Proposed">Proposed</option>
-                                    <option value="Ongoing">Ongoing</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                </select>
-                            </label>
-                        </div>
-                    </div>
-
-                    {linkedDcfLoading && (
-                        <div className="ipo-linked-dcf-status" role="status">
-                            <Loader2 className="animate-spin" aria-hidden="true" />
-                            <span>Refreshing linked Activities...</span>
-                        </div>
-                    )}
-                    {linkedDcfError && (
-                        <div className="ipo-linked-dcf-status ipo-linked-dcf-status--warning" role="status">
-                            <AlertCircle aria-hidden="true" />
-                            <span>{linkedDcfError}</span>
-                        </div>
-                    )}
-
-                    {trPagination.paginatedData.length > 0 ? (
-                        <>
-                            <ul className="detail-list ipo-section-modal__list">
-                                {trPagination.paginatedData.map(activity => (
-                                    <li key={activity.id} className="detail-list-item">
-                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="min-w-0">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => selectActivityFromModal(activity)}
-                                                    className="detail-list-title table-link text-left"
-                                                >
-                                                    {activity.name}
-                                                </button>
-                                                <p className="detail-list-copy">{activity.component || 'Component not recorded'}</p>
-                                            </div>
-                                            <span className={getTrainingStatusBadge(activity.status)}>{activity.status}</span>
-                                        </div>
-                                        <div className="detail-list-meta">
-                                            <span><span className="detail-list-meta__label">Fund Year:</span> {activity.fundingYear || 'N/A'}</span>
-                                            <span><span className="detail-list-meta__label">Date:</span> {formatDate(activity.date)}</span>
-                                            <span><span className="detail-list-meta__label">Location:</span> {activity.location || 'Not recorded'}</span>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                            <PaginationControls
-                                currentPage={trPagination.currentPage}
-                                totalPages={trPagination.totalPages}
-                                onPageChange={trPagination.setCurrentPage}
-                                itemsPerPage={trPagination.itemsPerPage}
-                                onItemsPerPageChange={trPagination.setItemsPerPage}
-                                totalItems={filteredTrainings.length}
-                            />
-                        </>
-                    ) : (
-                        <p className="detail-empty">No activities match the current filters.</p>
-                    )}
-                </IpoSectionModal>
             )}
             {sectionModal === 'gallery' && (
                 <IpoSectionModal
@@ -1521,11 +1431,123 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     onClose={closeSectionModal}
                 />
             )}
-            <button type="button" onClick={onBack} className="record-detail-back-link">
-                <ArrowLeft aria-hidden="true" />
-                Back to {previousPageName}
-            </button>
-
+            {sectionModal === 'monitoringReport' && selectedMonitoringReport && (() => {
+                const activity = monitoringActivityById.get(Number(selectedMonitoringReport.activity_id));
+                const reportActions = monitoringActions
+                    .filter(action => Number(action.monitoring_report_id) === Number(selectedMonitoringReport.id) && !action.deleted_at)
+                    .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime());
+                return (
+                    <IpoSectionModal
+                        title="Monitoring Report"
+                        description={activity?.name || `Activity ${selectedMonitoringReport.activity_id}`}
+                        onClose={closeSectionModal}
+                    >
+                        <div className="ipo-monitoring-modal">
+                            <dl className="ipo-monitoring-modal__meta">
+                                <DetailItem label="IPO" value={ipo.name} half />
+                                <DetailItem label="Activity" value={activity?.name || `Activity ${selectedMonitoringReport.activity_id}`} half />
+                                <DetailItem label="Component" value={activity?.component || 'Not recorded'} half />
+                                <DetailItem label="Activity Date" value={formatDate(activity?.date)} half />
+                                <DetailItem label="Status" value={selectedMonitoringReport.status} half />
+                                <DetailItem label="Updated" value={formatDate(selectedMonitoringReport.updated_at)} half />
+                                <DetailItem label="Reporter" value={selectedMonitoringReport.reported_by_name || 'Not recorded'} />
+                            </dl>
+                            {[
+                                ['Findings', selectedMonitoringReport.findings],
+                                ['Issues', selectedMonitoringReport.issues],
+                                ['Recommendations', selectedMonitoringReport.recommendations]
+                            ].map(([label, value]) => (
+                                <section key={label} className="ipo-monitoring-modal__field">
+                                    <h4>{label}</h4>
+                                    <p>{value || 'No information recorded.'}</p>
+                                </section>
+                            ))}
+                            <section className="ipo-monitoring-modal__field">
+                                <h4>Latest Action</h4>
+                                <p>{reportActions[0]?.action_taken || 'No action recorded.'}</p>
+                            </section>
+                            <section className="ipo-monitoring-modal__field">
+                                <h4>Action Timeline</h4>
+                                {reportActions.length > 0 ? (
+                                    <ol className="ipo-monitoring-modal__timeline">
+                                        {reportActions.map(action => (
+                                            <li key={action.id}>
+                                                <span>{formatDate(action.created_at)}</span>
+                                                <strong>{action.action_taken}</strong>
+                                                <small>by {action.created_by_name || 'Unknown user'}</small>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                ) : (
+                                    <p>No actions recorded.</p>
+                                )}
+                            </section>
+                            {activity && onOpenMonitoringReport && (
+                                <div className="dashboard-modal__actions ipo-monitoring-modal__actions">
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={() => {
+                                            closeSectionModal();
+                                            onOpenMonitoringReport(activity, ipo, selectedMonitoringReport);
+                                        }}
+                                    >
+                                        <ExternalLink aria-hidden="true" />
+                                        Open Full Report
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </IpoSectionModal>
+                );
+            })()}
+            {sectionModal === 'marketLinkage' && selectedMarketLinkage && (() => {
+                const selectedCommodityNeed = (selectedMarketLinkage.partner.commodityNeeds || []).find(need =>
+                    String(need.id) === String(selectedMarketLinkage.link.commodityNeedId)
+                ) || (selectedMarketLinkage.partner.commodityNeeds || []).find(need =>
+                    need.name === selectedMarketLinkage.link.commodityName && need.type === selectedMarketLinkage.link.commodityType
+                );
+                return (
+                    <IpoSectionModal
+                        title="Market Linkage"
+                        description={selectedMarketLinkage.partner.companyName}
+                        compact
+                        onClose={closeSectionModal}
+                    >
+                        <dl className="ipo-market-modal__details">
+                            <DetailItem label="Buyer" value={selectedMarketLinkage.partner.companyName} />
+                            <DetailItem label="Commodity" value={getMarketLinkageCommodityLabel(selectedMarketLinkage.link)} half />
+                            <DetailItem label="Agreement Type" value={selectedMarketLinkage.link.agreementType} half />
+                            <DetailItem label="Agreement Date" value={formatDate(selectedMarketLinkage.link.agreementDate)} half />
+                            <DetailItem label="Status" value={selectedMarketLinkage.link.negotiationStatus} half />
+                            <DetailItem label="Quantity" value={`${formatFullNumber(selectedMarketLinkage.quantity)} ${selectedMarketLinkage.unitOfMeasure}`} half />
+                            <DetailItem label="Price" value={`${formatCurrency(selectedMarketLinkage.pricePerUnit)} / ${selectedMarketLinkage.unitOfMeasure}`} half />
+                            <DetailItem label="Sales Value" value={formatCurrency(selectedMarketLinkage.salesValue)} />
+                            {selectedCommodityNeed && (
+                                <DetailItem
+                                    label="Buyer Requirement"
+                                    value={`${formatFullNumber(getCommodityNeedAnnualVolume(selectedCommodityNeed))} Kg/year · ${selectedCommodityNeed.qualityStandard || 'Quality not specified'}`}
+                                />
+                            )}
+                        </dl>
+                        {onSelectMarketingPartner && (
+                            <div className="dashboard-modal__actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={() => {
+                                        closeSectionModal();
+                                        onSelectMarketingPartner(selectedMarketLinkage.partner);
+                                    }}
+                                >
+                                    <ExternalLink aria-hidden="true" />
+                                    Open Buyer Profile
+                                </button>
+                            </div>
+                        )}
+                    </IpoSectionModal>
+                );
+            })()}
             <header className="record-detail-header">
                 <div className="record-detail-header__main">
                     <h1 className="record-detail-header__title">{ipo.name}</h1>
@@ -1592,41 +1614,98 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
 
             <RecordDetailGrid>
                 <RecordDetailMain>
-                    <IpoDetailPanel title="Level of Development" description="Annual maturity scoring based on the IPO's recorded assessments">
+                    <IpoDetailPanel
+                        title="Level of Development"
+                        description="Annual maturity scoring based on the IPO's recorded assessments"
+                        className="ipo-table-panel ipo-lod-panel"
+                        footer={<IpoTableCount filtered={lodAssessments.length} total={lodAssessments.length} />}
+                    >
                         {lodAssessments.length > 0 ? (
-                            <div className="ipo-lod-grid">
-                                {lodAssessments.map(assessment => {
-                                    const isCurrentYear = assessment.year === new Date().getFullYear();
-                                    const level = assessment.manual_level || assessment.computed_level || 'N/A';
-                                    return (
-                                        <button
-                                            key={assessment.id}
-                                            type="button"
-                                            onClick={() => onSelectLodYear?.(ipo, assessment.year)}
-                                            className={`detail-metric detail-metric--button ${isCurrentYear ? 'is-current' : ''}`}
-                                            title={`Open ${assessment.year} LOD assessment`}
-                                        >
-                                            <span className="detail-metric-label">{assessment.year}</span>
-                                            <span className="detail-metric-value">Level {level}</span>
-                                        </button>
-                                    );
-                                })}
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--lod">
+                                    <colgroup>
+                                        <col className="ipo-table-col--lod-year" />
+                                        <col className="ipo-table-col--lod-level" />
+                                        <col className="ipo-table-col--lod-score" />
+                                        <col className="ipo-table-col--lod-answered" />
+                                        <col className="ipo-table-col--lod-source" />
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th>Year</th>
+                                            <th>Level</th>
+                                            <th className="data-table__numeric">Score</th>
+                                            <th className="data-table__numeric">Answered</th>
+                                            <th>Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {lodAssessments.map(assessment => {
+                                            const isCurrentYear = assessment.year === new Date().getFullYear();
+                                            const state = getLodEffectiveState(assessment);
+                                            const openAssessment = () => onSelectLodYear?.(ipo, assessment.year);
+                                            return (
+                                                <tr
+                                                    key={assessment.id}
+                                                    className="ipo-detail-table-row--clickable"
+                                                    onClick={openAssessment}
+                                                    onKeyDown={event => {
+                                                        if (event.key === 'Enter' || event.key === ' ') {
+                                                            event.preventDefault();
+                                                            openAssessment();
+                                                        }
+                                                    }}
+                                                    role="link"
+                                                    tabIndex={0}
+                                                    title={`Open ${assessment.year} LOD assessment`}
+                                                >
+                                                    <td className="data-table__primary">{assessment.year}{isCurrentYear ? ' (Current)' : ''}</td>
+                                                    <td>{state.label}</td>
+                                                    <td className="data-table__numeric">{formatFullNumber(assessment.total_score)}</td>
+                                                    <td className="data-table__numeric">{assessment.answered_question_count ?? 0} / {assessment.required_question_count ?? 0}</td>
+                                                    <td><TruncatedTableCell value={getLodAssessmentSource(assessment)} /></td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
                         ) : (
                             <p className="detail-empty">No assessments available.</p>
                         )}
                     </IpoDetailPanel>
 
-                    <IpoDetailPanel title="Commodities" description="Registered production lines, coverage, and livelihood indicators">
+                    <IpoDetailPanel
+                        title="Commodities"
+                        description="Registered production lines, coverage, and livelihood indicators"
+                        className="ipo-table-panel ipo-commodities-panel"
+                        footer={<IpoTableCount filtered={ipo.commodities?.length || 0} total={ipo.commodities?.length || 0} />}
+                    >
                         {ipo.commodities && ipo.commodities.length > 0 ? (
-                            <div className="data-table-scroll record-detail-table-scroll">
-                                <table className="data-table">
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--commodities">
+                                    <colgroup>
+                                        <col className="ipo-table-col--commodity-name" />
+                                        <col className="ipo-table-col--commodity-type" />
+                                        <col className="ipo-table-col--coverage" />
+                                        <col className="ipo-table-col--yield" />
+                                        <col className="ipo-table-col--expansion-area" />
+                                        <col className="ipo-table-col--farmers" />
+                                        <col className="ipo-table-col--trees" />
+                                        <col className="ipo-table-col--marketing" />
+                                        <col className="ipo-table-col--food-security" />
+                                        <col className="ipo-table-col--income" />
+                                        <col className="ipo-table-col--scad" />
+                                    </colgroup>
                                     <thead>
                                         <tr>
                                             <th>Commodity</th>
                                             <th>Type</th>
                                             <th className="data-table__numeric">Coverage</th>
                                             <th className="data-table__numeric">Avg. Yield</th>
+                                            <th className="data-table__numeric">Potential Expansion Area</th>
+                                            <th className="data-table__numeric">Number of Farmers</th>
+                                            <th className="data-table__numeric">Number of Trees</th>
                                             <th className="data-table__numeric">Marketing</th>
                                             <th className="data-table__numeric">Food Security</th>
                                             <th className="data-table__numeric">Avg. Income</th>
@@ -1636,13 +1715,22 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                                     <tbody>
                                         {ipo.commodities.map((commodity, index) => (
                                             <tr key={`${commodity.particular}-${index}`}>
-                                                <td className="data-table__primary">{commodity.particular}</td>
-                                                <td>{commodity.type}</td>
-                                                <td className="data-table__numeric">
+                                                <td className="data-table__primary"><TruncatedTableCell value={commodity.particular} /></td>
+                                                <td><TruncatedTableCell value={commodity.type} /></td>
+                                                <td className="data-table__numeric" title={`${formatFullNumber(commodity.value)} ${commodity.type === 'Livestock' ? 'heads' : 'ha'}`}>
                                                     {formatFullNumber(commodity.value)} {commodity.type === 'Livestock' ? 'heads' : 'ha'}
                                                 </td>
-                                                <td className="data-table__numeric">
+                                                <td className="data-table__numeric" title={commodity.yield ? `${formatFullNumber(commodity.yield)} kg/ha` : 'N/A'}>
                                                     {commodity.yield ? `${formatFullNumber(commodity.yield)} kg/ha` : 'N/A'}
+                                                </td>
+                                                <td className="data-table__numeric" title={commodity.type === 'Crop' && commodity.potentialExpansionArea !== undefined ? `${formatFullNumber(commodity.potentialExpansionArea)} ha` : undefined}>
+                                                    {commodity.type === 'Crop' && commodity.potentialExpansionArea !== undefined ? `${formatFullNumber(commodity.potentialExpansionArea)} ha` : ''}
+                                                </td>
+                                                <td className="data-table__numeric" title={commodity.numberOfFarmers !== undefined ? formatFullNumber(commodity.numberOfFarmers) : undefined}>
+                                                    {commodity.numberOfFarmers !== undefined ? formatFullNumber(commodity.numberOfFarmers) : ''}
+                                                </td>
+                                                <td className="data-table__numeric" title={commodity.type === 'Crop' && commodity.numberOfTrees !== undefined ? formatFullNumber(commodity.numberOfTrees) : undefined}>
+                                                    {commodity.type === 'Crop' && commodity.numberOfTrees !== undefined ? formatFullNumber(commodity.numberOfTrees) : ''}
                                                 </td>
                                                 <td className="data-table__numeric">{formatFullNumber(commodity.marketingPercentage || 0)}%</td>
                                                 <td className="data-table__numeric">{formatFullNumber(commodity.foodSecurityPercentage || 0)}%</td>
@@ -1674,319 +1762,235 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         </div>
                     )}
 
+
                     <IpoDetailPanel
                         title="Subprojects"
-                        description={`Most recent FY ${currentFundYear} records`}
-                        footer={subprojects.length > 0 ? (
-                            <>
-                                <span>Showing {subprojectPreview.length} of {currentFundYearSubprojects.length.toLocaleString()} FY {currentFundYear} records</span>
-                                <button type="button" className="ipo-detail-view-all" onClick={() => setSectionModal('subprojects')}>
-                                    View all Subprojects
-                                    <ChevronRight aria-hidden="true" />
-                                </button>
-                            </>
-                        ) : null}
+                        description="All linked subprojects"
+                        className="ipo-table-panel"
+                        actions={<IpoTableFilterButton label="Subprojects" count={activeFilterCount('subprojects')} onClick={() => setOpenTableFilter('subprojects')} />}
+                        footer={<IpoTableCount filtered={filteredSubprojects.length} total={subprojects.length} />}
                     >
-                        {subprojectPreview.length > 0 ? (
-                            <>
-                                <ul className="detail-list">
-                                    {subprojectPreview.map(project => (
-                                        <li key={project.id} className="detail-list-item ipo-subproject-preview__item">
-                                            <div className="ipo-subproject-preview__main">
-                                                <div className="min-w-0">
-                                                    <div className="ipo-subproject-preview__eyebrow">
-                                                        <span>{project.uid || `SP-${project.id}`}</span>
-                                                        <span className={getStatusBadge(project.status)}>{project.status}</span>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => onSelectSubproject(project)}
-                                                        className="detail-list-title table-link text-left"
-                                                    >
-                                                        {project.name}
-                                                    </button>
-                                                    <p className="detail-list-copy ipo-subproject-preview__meta">
-                                                        <MapPin aria-hidden="true" />
-                                                        {project.location || 'Location not recorded'}
-                                                        <span aria-hidden="true">·</span>
-                                                        <CalendarDays aria-hidden="true" />
-                                                        {formatDate(project.startDate)} to {formatDate(project.estimatedCompletionDate)}
-                                                    </p>
-                                                </div>
-                                                <div className="ipo-subproject-preview__performance">
-                                                    <span>Physical <strong>{getSubprojectPhysicalRate(project)}%</strong></span>
-                                                    <span className="ipo-progress" aria-hidden="true">
-                                                        <span style={{ width: `${getSubprojectPhysicalRate(project)}%` }} />
-                                                    </span>
-                                                    <strong title={formatCurrency(calculateTotalBudget(project.details))}>
-                                                        {formatCompactCurrency(calculateTotalBudget(project.details))}
-                                                    </strong>
-                                                </div>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </>
-                        ) : (
-                            <p className="detail-empty">No FY {currentFundYear} subprojects are linked to this IPO.</p>
-                        )}
+                        {filteredSubprojects.length > 0 ? (
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--subprojects">
+                                    <colgroup>
+                                        <col className="ipo-table-col--code" />
+                                        <col className="ipo-table-col--name" />
+                                        <col className="ipo-table-col--year" />
+                                        <col className="ipo-table-col--status" />
+                                        <col className="ipo-table-col--location" />
+                                        <col className="ipo-table-col--date" />
+                                        <col className="ipo-table-col--date" />
+                                        <col className="ipo-table-col--physical" />
+                                        <col className="ipo-table-col--budget" />
+                                    </colgroup>
+                                    <thead><tr>
+                                        <th>Code</th>
+                                        <th>Subproject</th>
+                                        <th>FY</th>
+                                        <th>Status</th>
+                                        <th>Location</th>
+                                        <th>Target Completion</th>
+                                        <th>Actual Completion</th>
+                                        <th className="data-table__numeric">Physical</th>
+                                        <th className="data-table__numeric">Budget</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {filteredSubprojects.map(project => (
+                                            <tr key={project.id}>
+                                                <td><TruncatedTableCell value={project.uid || project.id} /></td>
+                                                <td className="data-table__primary"><button type="button" className="table-link" title={project.name} onClick={() => onSelectSubproject(project)}>{project.name}</button></td>
+                                                <td title={String(project.fundingYear || 'N/A')}>{project.fundingYear || 'N/A'}</td>
+                                                <td><span className={getStatusBadge(project.status)}>{project.status}</span></td>
+                                                <td><TruncatedTableCell value={project.location || 'Not recorded'} /></td>
+                                                <td title={formatDate(project.estimatedCompletionDate)}>{formatDate(project.estimatedCompletionDate)}</td>
+                                                <td title={formatDate(project.actualCompletionDate)}>{formatDate(project.actualCompletionDate)}</td>
+                                                <td className="data-table__numeric" title={`${getSubprojectPhysicalRate(project)}%`}>{getSubprojectPhysicalRate(project)}%</td>
+                                                <td className="data-table__numeric" title={formatCurrency(calculateTotalBudget(project.details))}>{formatCompactCurrency(calculateTotalBudget(project.details))}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : <p className="detail-empty">No subprojects match the active filters.</p>}
                     </IpoDetailPanel>
 
                     <IpoDetailPanel
                         title="Activities"
-                        description={`Most recent FY ${currentFundYear} linked activities`}
-                        footer={trainings.length > 0 ? (
-                            <>
-                                <span>Showing {trainingPreview.length} of {currentFundYearActivities.length.toLocaleString()} FY {currentFundYear} records</span>
-                                <button type="button" className="ipo-detail-view-all" onClick={() => setSectionModal('activities')}>
-                                    View all Activities
-                                    <ChevronRight aria-hidden="true" />
-                                </button>
-                            </>
-                        ) : null}
+                        description="All linked trainings and activities"
+                        className="ipo-table-panel"
+                        actions={<IpoTableFilterButton label="Activities" count={activeFilterCount('activities')} onClick={() => setOpenTableFilter('activities')} />}
+                        footer={<IpoTableCount filtered={filteredActivities.length} total={trainings.length} />}
                     >
-
-                        {trainingPreview.length > 0 ? (
-                            <>
-                                <ul className="detail-list">
-                                    {trainingPreview.map(t => (
-                                        <li key={t.id} className="detail-list-item">
-                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                <div className="min-w-0">
-                                                    <button 
-                                                        onClick={() => onSelectActivity(t)}
-                                                        className="detail-list-title text-left focus:outline-none focus:underline"
-                                                    >
-                                                        {getActivityDisplayTitle(t, [], [ipo])}
-                                                    </button>
-                                                    <p className="detail-list-copy">{t.component}</p>
-                                                </div>
-                                                <div className="flex flex-shrink-0 flex-col items-start gap-1 sm:items-end">
-                                                    <span className={getTrainingStatusBadge(t.status)}>{t.status}</span>
-                                                    <p className="detail-list-meta">{formatDate(t.date)}</p>
-                                                </div>
-                                            </div>
-                                            <p className="detail-list-copy mt-2 line-clamp-2">{t.description}</p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </>
-                        ) : (
-                            <p className="detail-empty">No FY {currentFundYear} activities are linked to this IPO.</p>
-                        )}
-                    </IpoDetailPanel>
-                    
-                    <div className="ipo-detail-split-panels">
-                    <IpoDetailPanel title="Monitoring Reports" description="Latest field validation">
-                        {monitoringMessage && <p className="drive-file-card__message" role="status">{monitoringMessage}</p>}
-                        {isMonitoringLoading ? (
-                            <div className="drive-file-card__loading">
-                                <Loader2 className="animate-spin" aria-hidden="true" />
-                                <span>Loading Monitoring Reports...</span>
+                        {filteredActivities.length > 0 ? (
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--activities">
+                                    <colgroup>
+                                        <col className="ipo-table-col--code" />
+                                        <col className="ipo-table-col--name" />
+                                        <col className="ipo-table-col--component" />
+                                        <col className="ipo-table-col--type" />
+                                        <col className="ipo-table-col--year" />
+                                        <col className="ipo-table-col--status" />
+                                        <col className="ipo-table-col--date-range" />
+                                        <col className="ipo-table-col--date-range" />
+                                        <col className="ipo-table-col--location" />
+                                    </colgroup>
+                                    <thead><tr>
+                                        <th>Code</th>
+                                        <th>Activity Name</th>
+                                        <th>Component</th>
+                                        <th>Type</th>
+                                        <th>FY</th>
+                                        <th>Status</th>
+                                        <th>Schedule</th>
+                                        <th>Actual Conduct Date</th>
+                                        <th>Location</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {filteredActivities.map(activity => {
+                                            const schedule = formatDateRange(activity.date, activity.endDate);
+                                            const actualConductDate = formatDateRange(activity.actualDate, activity.actualEndDate);
+                                            return (
+                                            <tr key={activity.id}>
+                                                <td><TruncatedTableCell value={activity.uid || activity.id} /></td>
+                                                <td className="data-table__primary"><button type="button" className="table-link" title={getActivityDisplayTitle(activity, [], [ipo])} onClick={() => onSelectActivity(activity)}>{getActivityDisplayTitle(activity, [], [ipo])}</button></td>
+                                                <td><TruncatedTableCell value={activity.component || 'Not recorded'} /></td>
+                                                <td title={activity.type}>{activity.type}</td>
+                                                <td title={String(activity.fundingYear || 'N/A')}>{activity.fundingYear || 'N/A'}</td>
+                                                <td><span className={getTrainingStatusBadge(activity.status)}>{activity.status}</span></td>
+                                                <td title={schedule}>{schedule}</td>
+                                                <td title={actualConductDate}>{actualConductDate}</td>
+                                                <td><TruncatedTableCell value={activity.location || 'Not recorded'} /></td>
+                                            </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
-                        ) : monitoringReports.length > 0 ? (
-                            <ul className="detail-list">
-                                {monitoringReports.map(report => {
-                                    const activity = monitoringActivityById.get(Number(report.activity_id));
-                                    const latestAction = latestMonitoringActions[report.id];
-                                    if (!activity) return null;
-                                    return (
-                                        <li key={report.id} className="detail-list-item">
-                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                                <div className="min-w-0">
-                                                    <button
-                                                        type="button"
-                                                        className="detail-list-title table-link text-left"
-                                                        onClick={() => onOpenMonitoringReport?.(activity, ipo, report)}
-                                                    >
-                                                        {getActivityDisplayTitle(activity, [], [ipo])}
-                                                    </button>
-                                                    <p className="detail-list-copy">{activity.component} - {formatDate(activity.date)}</p>
-                                                </div>
-                                                <span className={`status-badge status-badge--compact ${report.status === 'Completed' ? 'status-badge--completed' : report.status === 'Ongoing' ? 'status-badge--ongoing' : 'status-badge--pending'}`}>
-                                                    {report.status}
-                                                </span>
-                                            </div>
-                                            <div className="monitoring-report-preview">
-                                                <div className="monitoring-report-preview__meta">
-                                                    <span>Updated {formatDate(report.updated_at)}</span>
-                                                    <span>{report.reported_by_name || 'Reporter not recorded'}</span>
-                                                </div>
-                                                <MonitoringPreviewLine label="Findings" value={report.findings} />
-                                                <MonitoringPreviewLine label="Issues" value={report.issues} />
-                                                <MonitoringPreviewLine label="Recommendations" value={report.recommendations} />
-                                                <MonitoringPreviewLine label="Latest action" value={latestAction?.action_taken} />
-                                            </div>
-                                            <div className="mt-3 flex justify-end">
-                                                <button
-                                                    type="button"
-                                                    className="table-action table-action--primary"
-                                                    onClick={() => onOpenMonitoringReport?.(activity, ipo, report)}
-                                                >
-                                                    <ExternalLink aria-hidden="true" />
-                                                    View Report
-                                                </button>
-                                            </div>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        ) : (
-                            <p className="detail-empty">No monitoring reports are linked to this IPO yet.</p>
-                        )}
+                        ) : <p className="detail-empty">No activities match the active filters.</p>}
                     </IpoDetailPanel>
 
-                    {/* Market Linkages Card (New) */}
-                    <IpoDetailPanel title="Market Linkages" description="Buyers and offtakers">
-                        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                            <OverviewMetric
-                                label="Linked Markets"
-                                value={formatFullNumber(ipoMarketSalesSummary.linkedMarketCount)}
-                            />
-                            <OverviewMetric
-                                label="Total Quantity Sold"
-                                value={formatMarketQuantityTotals(ipoMarketSalesSummary.totalQuantityByUnit)}
-                                fullValue={formatMarketQuantityTotals(ipoMarketSalesSummary.totalQuantityByUnit)}
-                            />
-                            <OverviewMetric
-                                label="Total Sales from Market Linkage"
-                                value={formatCompactCurrency(ipoMarketSalesSummary.totalSales)}
-                                fullValue={formatCurrency(ipoMarketSalesSummary.totalSales)}
-                            />
-                        </div>
-                        {mlPagination.paginatedData.length > 0 ? (
-                            <>
-                                <div className="grid grid-cols-1 gap-4">
-                                    {mlPagination.paginatedData.map((item, idx) => {
-                                        const matchedBuyerNeeds = getMatchedBuyerCommodityNeeds(item.partner, ipo);
-                                        const selectedCommodityNeed = (item.partner.commodityNeeds || []).find(need =>
-                                            String(need.id) === String(item.link.commodityNeedId)
-                                        ) || (item.partner.commodityNeeds || []).find(need =>
-                                            need.name === item.link.commodityName && need.type === item.link.commodityType
-                                        );
-                                        const linkageKey = item.link.id || `${item.partner.id}-${idx}`;
-                                        const isExpanded = expandedMarketLinkageId === linkageKey;
-                                        return (
-                                        <div
-                                            key={linkageKey}
-                                            className="detail-list-item ipo-market-link"
-                                            role="button"
-                                            tabIndex={0}
-                                            aria-expanded={isExpanded}
-                                            onClick={() => setExpandedMarketLinkageId(prev => prev === linkageKey ? null : linkageKey)}
-                                            onKeyDown={(event) => {
-                                                if (event.key === 'Enter' || event.key === ' ') {
-                                                    event.preventDefault();
-                                                    setExpandedMarketLinkageId(prev => prev === linkageKey ? null : linkageKey);
-                                                }
-                                            }}
-                                        >
-                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                                <div className="min-w-0">
-                                                    <button
-                                                        type="button"
-                                                        onClick={(event) => {
-                                                            event.stopPropagation();
-                                                            onSelectMarketingPartner?.(item.partner);
-                                                        }}
-                                                        className="detail-list-title table-link text-left focus:outline-none focus:underline"
-                                                        title="Open buyer profile"
-                                                    >
-                                                        {item.partner.companyName}
-                                                    </button>
-                                                    <p className="ipo-market-link__meta">
-                                                        <span className="ipo-market-link__label">Agreement:</span> {formatFullNumber(item.quantity)} {item.unitOfMeasure} ({item.link.agreedQuantityTimeframe}) @ {formatCurrency(item.pricePerUnit)}/{item.unitOfMeasure}
-                                                    </p>
-                                                    <p className="ipo-market-link__meta">
-                                                        <span className="ipo-market-link__label">Commodity Sold:</span>{' '}
-                                                        <span className={item.link.commodityName ? '' : 'ipo-market-link__missing'}>
-                                                            {getMarketLinkageCommodityLabel(item.link)}
-                                                        </span>
-                                                    </p>
-                                                </div>
-                                                <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                                                    <span className={`status-badge status-badge--compact ${item.link.negotiationStatus === 'Contract Signed' ? 'status-badge--completed' : 'status-badge--pending'}`}>
-                                                        {item.link.negotiationStatus}
-                                                    </span>
-                                                    <span className="ipo-market-link__sales">
-                                                        {formatCurrency(item.salesValue)}
-                                                    </span>
-                                                    <span className="ipo-market-link__toggle">{isExpanded ? 'Collapse' : 'Expand'}</span>
-                                                </div>
-                                            </div>
-                                            {isExpanded && (
-                                                <div className="ipo-market-link__details">
-                                                    <div className="ipo-market-link__facts">
-                                                        <p><span className="ipo-market-link__label">Sales Value:</span> {formatCurrency(item.salesValue)}</p>
-                                                        <p><span className="ipo-market-link__label">Commodity Sold:</span> <span className={item.link.commodityName ? '' : 'ipo-market-link__missing'}>{getMarketLinkageCommodityLabel(item.link)}</span></p>
-                                                        <p><span className="ipo-market-link__label">Type:</span> {item.link.agreementType}</p>
-                                                        <p><span className="ipo-market-link__label">Date:</span> {item.link.agreementDate ? new Date(item.link.agreementDate).toLocaleDateString() : 'N/A'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="detail-kicker">Commodity Bought by Buyer</p>
-                                                        {item.link.commodityName ? (
-                                                            <div className="ipo-market-link__needs">
-                                                                {selectedCommodityNeed ? (
-                                                                    <div className="market-need-card">
-                                                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                            <span className="market-need-card__title">{selectedCommodityNeed.name}</span>
-                                                                            <span className="status-badge status-badge--compact status-badge--neutral">{selectedCommodityNeed.type}</span>
-                                                                        </div>
-                                                                        <p className="market-need-card__copy"><span className="market-need-card__label">Source:</span> {selectedCommodityNeed.sourceProvince || 'Any Province'}, {selectedCommodityNeed.sourceRegion || 'Any Region'}</p>
-                                                                        <p className="market-need-card__copy"><span className="market-need-card__label">Annual Need:</span> {formatFullNumber(getCommodityNeedAnnualVolume(selectedCommodityNeed))} Kg/Yr</p>
-                                                                        <p className="market-need-card__copy"><span className="market-need-card__label">Quality:</span> {selectedCommodityNeed.qualityStandard || 'Not specified'}</p>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="market-need-card">
-                                                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                            <span className="market-need-card__title">{item.link.commodityName}</span>
-                                                                            <span className="status-badge status-badge--compact status-badge--neutral">{item.link.commodityType || 'Unspecified'}</span>
-                                                                        </div>
-                                                                        <p className="market-need-card__copy">Saved from linkage commodity snapshot.</p>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ) : matchedBuyerNeeds.length > 0 ? (
-                                                            <div className="ipo-market-link__needs">
-                                                                {matchedBuyerNeeds.map(need => {
-                                                                    const annualVolume = getCommodityNeedAnnualVolume(need);
-                                                                    return (
-                                                                        <div key={need.id} className="market-need-card">
-                                                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                                                <span className="market-need-card__title">{need.name}</span>
-                                                                                <span className="status-badge status-badge--compact status-badge--neutral">{need.type}</span>
-                                                                            </div>
-                                                                            <p className="market-need-card__copy"><span className="market-need-card__label">Source:</span> {need.sourceProvince || 'Any Province'}, {need.sourceRegion || 'Any Region'}</p>
-                                                                            <p className="market-need-card__copy"><span className="market-need-card__label">Annual Need:</span> {formatFullNumber(annualVolume)} Kg/Yr</p>
-                                                                            <p className="market-need-card__copy"><span className="market-need-card__label">Quality:</span> {need.qualityStandard || 'Not specified'}</p>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        ) : (
-                                                            <p className="detail-empty">No matching commodity requirement is listed for this IPO.</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                        );
-                                    })}
-                                </div>
-                                <PaginationControls 
-                                    currentPage={mlPagination.currentPage}
-                                    totalPages={mlPagination.totalPages}
-                                    onPageChange={mlPagination.setCurrentPage}
-                                    itemsPerPage={mlPagination.itemsPerPage}
-                                    onItemsPerPageChange={mlPagination.setItemsPerPage}
-                                    totalItems={ipoLinkages.length}
-                                />
-                            </>
-                        ) : (
-                            <p className="detail-empty">No marketing linkages established yet.</p>
-                        )}
+                    <IpoDetailPanel
+                        title="Monitoring Reports"
+                        description="Reports linked to this IPO"
+                        className="ipo-table-panel"
+                        actions={<IpoTableFilterButton label="Monitoring Reports" count={activeFilterCount('monitoring')} onClick={() => setOpenTableFilter('monitoring')} />}
+                        footer={<IpoTableCount filtered={filteredMonitoringReports.length} total={monitoringReports.length} />}
+                    >
+                        {isMonitoringLoading ? <p className="detail-empty">Loading monitoring reports...</p> : filteredMonitoringReports.length > 0 ? (
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--monitoring">
+                                    <colgroup>
+                                        <col className="ipo-table-col--monitoring-activity" />
+                                        <col className="ipo-table-col--component" />
+                                        <col className="ipo-table-col--activity-date" />
+                                        <col className="ipo-table-col--status" />
+                                        <col className="ipo-table-col--updated" />
+                                        <col className="ipo-table-col--reporter" />
+                                        <col className="ipo-table-col--latest-action" />
+                                    </colgroup>
+                                    <thead><tr>
+                                        <th>Activity</th>
+                                        <th>Component</th>
+                                        <th>Activity Date</th>
+                                        <th>Status</th>
+                                        <th>Updated</th>
+                                        <th>Reporter</th>
+                                        <th>Latest Action</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {filteredMonitoringReports.map(report => {
+                                            const activity = monitoringActivityById.get(Number(report.activity_id));
+                                            const latestAction = latestMonitoringActions[report.id];
+                                            return (
+                                                <tr key={report.id} className="ipo-monitoring-row" tabIndex={0} role="button" title="Open monitoring report"
+                                                    onClick={() => { setSelectedMonitoringReport(report); setSectionModal('monitoringReport'); }}
+                                                    onKeyDown={event => {
+                                                        if (event.key === 'Enter' || event.key === ' ') {
+                                                            event.preventDefault();
+                                                            setSelectedMonitoringReport(report);
+                                                            setSectionModal('monitoringReport');
+                                                        }
+                                                    }}
+                                                >
+                                                    <td className="data-table__primary"><TruncatedTableCell value={activity ? getActivityDisplayTitle(activity, [], [ipo]) : 'Activity ' + report.activity_id} /></td>
+                                                    <td><TruncatedTableCell value={activity?.component || 'Not recorded'} /></td>
+                                                    <td title={formatDate(activity?.date)}>{formatDate(activity?.date)}</td>
+                                                    <td title={report.status}>{report.status}</td>
+                                                    <td title={formatDate(report.updated_at)}>{formatDate(report.updated_at)}</td>
+                                                    <td><TruncatedTableCell value={report.reported_by_name || 'Not recorded'} /></td>
+                                                    <td><TruncatedTableCell value={latestAction?.action_taken || 'No action recorded'} /></td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : <p className="detail-empty">{monitoringMessage || 'No monitoring reports are linked to this IPO.'}</p>}
                     </IpoDetailPanel>
-                    </div>
+
+                    <IpoDetailPanel
+                        title="Market Linkages"
+                        description="Buyers and offtakers"
+                        className="ipo-table-panel ipo-market-panel"
+                        actions={<IpoTableFilterButton label="Market Linkages" count={activeFilterCount('market')} onClick={() => setOpenTableFilter('market')} />}
+                        footer={<IpoTableCount filtered={filteredMarketLinkages.length} total={ipoLinkages.length} />}
+                    >
+                        <div className="ipo-market-summary">
+                            <OverviewMetric label="Linked Markets" value={formatFullNumber(ipoMarketSalesSummary.linkedMarketCount)} />
+                            <OverviewMetric label="Total Quantity Sold" value={formatMarketQuantityTotals(ipoMarketSalesSummary.totalQuantityByUnit)} fullValue={formatMarketQuantityTotals(ipoMarketSalesSummary.totalQuantityByUnit)} />
+                            <OverviewMetric label="Total Sales" value={formatCompactCurrency(ipoMarketSalesSummary.totalSales)} fullValue={formatCurrency(ipoMarketSalesSummary.totalSales)} />
+                        </div>
+                        {filteredMarketLinkages.length > 0 ? (
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--market">
+                                    <colgroup>
+                                        <col className="ipo-table-col--buyer" />
+                                        <col className="ipo-table-col--commodity" />
+                                        <col className="ipo-table-col--agreement" />
+                                        <col className="ipo-table-col--market-date" />
+                                        <col className="ipo-table-col--quantity" />
+                                        <col className="ipo-table-col--price" />
+                                        <col className="ipo-table-col--sales" />
+                                        <col className="ipo-table-col--market-status" />
+                                        <col className="ipo-table-col--view" />
+                                    </colgroup>
+                                    <thead><tr>
+                                        <th>Buyer</th>
+                                        <th>Commodity</th>
+                                        <th>Agreement</th>
+                                        <th>Date</th>
+                                        <th className="data-table__numeric">Quantity</th>
+                                        <th className="data-table__numeric">Price</th>
+                                        <th className="data-table__numeric">Sales</th>
+                                        <th>Status</th>
+                                        <th>View</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {filteredMarketLinkages.map(item => (
+                                            <tr key={[item.partner.id, item.link.id].join('-')}>
+                                                <td className="data-table__primary"><button type="button" className="table-link" title={item.partner.companyName} onClick={() => onSelectMarketingPartner?.(item.partner)}>{item.partner.companyName}</button></td>
+                                                <td><TruncatedTableCell value={getMarketLinkageCommodityLabel(item.link)} /></td>
+                                                <td title={item.link.agreementType}>{item.link.agreementType}</td>
+                                                <td title={formatDate(item.link.agreementDate)}>{formatDate(item.link.agreementDate)}</td>
+                                                <td className="data-table__numeric" title={`${formatFullNumber(item.quantity)} ${item.unitOfMeasure}`}>{formatFullNumber(item.quantity)} {item.unitOfMeasure}</td>
+                                                <td className="data-table__numeric" title={formatCurrency(item.pricePerUnit)}>{formatCurrency(item.pricePerUnit)}</td>
+                                                <td className="data-table__numeric" title={formatCurrency(item.salesValue)}>{formatCurrency(item.salesValue)}</td>
+                                                <td title={item.link.negotiationStatus}>{item.link.negotiationStatus}</td>
+                                                <td>
+                                                    <button type="button" className="table-link ipo-market-view-link" title="View market linkage" aria-label={'View ' + item.partner.companyName + ' market linkage'}
+                                                        onClick={() => { setSelectedMarketLinkage(item); setSectionModal('marketLinkage'); }}>
+                                                        View linkage
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : <p className="detail-empty">No marketing linkages match the active filters.</p>}
+                    </IpoDetailPanel>
 
                     {/* Gallery Card */}
                     <IpoDetailPanel
@@ -2066,6 +2070,40 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                             showToolbar={false}
                         />
                     </IpoDetailPanel>
+
+                    <IpoDetailPanel
+                        title="History"
+                        description="Recorded changes and activity"
+                        className="ipo-history-panel ipo-table-panel"
+                        actions={<IpoTableFilterButton label="History" count={activeFilterCount('history')} onClick={() => setOpenTableFilter('history')} />}
+                        footer={<IpoTableCount filtered={filteredHistory.length} total={history.length} />}
+                    >
+                        {filteredHistory.length > 0 ? (
+                            <div className="ipo-detail-table-scroll custom-scrollbar">
+                                <table className="data-table ipo-detail-data-table ipo-detail-data-table--history">
+                                    <colgroup>
+                                        <col className="ipo-table-col--history-date" />
+                                        <col className="ipo-table-col--history-event" />
+                                        <col className="ipo-table-col--history-user" />
+                                    </colgroup>
+                                    <thead><tr>
+                                        <th>Date</th>
+                                        <th>Event</th>
+                                        <th>User</th>
+                                    </tr></thead>
+                                    <tbody>
+                                        {filteredHistory.map((entry, index) => (
+                                            <tr key={entry.id || [entry.date, entry.event, index].join('-')}>
+                                                <td title={formatDate(entry.date)}>{formatDate(entry.date)}</td>
+                                                <td className="data-table__primary"><TruncatedTableCell value={entry.event} /></td>
+                                                <td><TruncatedTableCell value={entry.user} /></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : <p className="detail-empty">No historical data matches the active filters.</p>}
+                    </IpoDetailPanel>
                 </RecordDetailMain>
 
                 {/* Right Column */}
@@ -2074,12 +2112,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     <IpoDetailPanel
                         title="IPO Profile"
                         description="Registration and identification"
-                        actions={canEdit ? (
-                            <button type="button" className="btn btn-secondary btn-compact" onClick={() => setIsEditing(true)}>
-                                <Pencil aria-hidden="true" />
-                                Edit
-                            </button>
-                        ) : null}
+                        className="ipo-profile-panel"
                     >
                         <dl className="detail-dl">
                             <DetailItem label="Indigenous Cultural Community" value={ipo.indigenousCulturalCommunity} />
@@ -2103,12 +2136,6 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                     <IpoDetailPanel
                         title="Membership Information"
                         description="Demographics snapshot"
-                        actions={canEdit ? (
-                            <button type="button" className="btn btn-secondary btn-compact" onClick={() => setIsEditing(true)}>
-                                <Pencil aria-hidden="true" />
-                                Edit
-                            </button>
-                        ) : null}
                     >
                         <div className="ipo-membership-overview">
                             <div className="ipo-membership-stat">
@@ -2137,7 +2164,7 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         </div>
                     </IpoDetailPanel>
 
-                    <IpoDetailPanel title="Summary">
+                    <IpoDetailPanel title="Summary" className="ipo-summary-panel">
                         <dl className="ipo-summary-list">
                             <div><dt>Total budget</dt><dd>{formatCompactCurrency(overviewStats.totalAllocation)}</dd></div>
                             <div><dt>Subprojects</dt><dd>{formatFullNumber(subprojects.length)}</dd></div>
@@ -2147,36 +2174,9 @@ const IPODetail: React.FC<IPODetailProps> = ({ ipo, subprojects, trainings, moni
                         </dl>
                     </IpoDetailPanel>
 
-                    <IpoDetailPanel title="History" description="Recent activity">
-                        {histPagination.paginatedData.length > 0 ? (
-                            <>
-                                <div className="detail-timeline">
-                                    <ul className="detail-timeline__list">
-                                        {histPagination.paginatedData.map((entry, index) => (
-                                            <li key={index} className="detail-timeline__item">
-                                                <span className="detail-timeline__marker" aria-hidden="true" />
-                                                <time className="detail-timeline__time">{formatDate(entry.date)}</time>
-                                                <p className="detail-list-title">{entry.event}</p>
-                                                <p className="detail-timeline__byline">by {entry.user}</p>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                                <PaginationControls
-                                    currentPage={histPagination.currentPage}
-                                    totalPages={histPagination.totalPages}
-                                    onPageChange={histPagination.setCurrentPage}
-                                    itemsPerPage={histPagination.itemsPerPage}
-                                    onItemsPerPageChange={histPagination.setItemsPerPage}
-                                    totalItems={history.length}
-                                />
-                            </>
-                        ) : (
-                            <p className="detail-empty">No historical data available for this IPO.</p>
-                        )}
-                    </IpoDetailPanel>
                 </RecordDetailAside>
             </RecordDetailGrid>
+
         </RecordDetailPage>
     );
 };

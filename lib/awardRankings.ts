@@ -196,7 +196,7 @@ export const normalizeAwardSettings = (settings: unknown): AwardRankingSettings 
 
 const toNumber = (value: unknown) => Number(value) || 0;
 
-const safeRate = (actual: number, target: number) => target > 0 ? (actual / target) * 100 : 0;
+const safeRate = (actual: number, target: number) => target !== 0 ? (actual / target) * 100 : 0;
 
 const getFiscalYear = (selectedYear: string) => {
     const parsed = Number(selectedYear);

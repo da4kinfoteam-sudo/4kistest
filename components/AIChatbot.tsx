@@ -982,7 +982,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                             </div>
                         </div>
                         <div className="ai-insight__metric"><div className="ai-insight__label">Total Disbursed</div><div className="ai-insight__value">₱{totalDisbursed.toLocaleString()}</div><div className="ai-insight__comparison is-success">
-                                {totalObligated > 0 ? ((totalDisbursed / totalObligated) * 100).toFixed(1) : 0}% vs Obligated
+                                {totalObligated !== 0 ? ((totalDisbursed / totalObligated) * 100).toFixed(1) : 0}% vs Obligated
                             </div>
                         </div>
                     </div>
@@ -1004,7 +1004,7 @@ const AIChatbot: React.FC<AIChatbotProps> = ({
                         <div className="ai-insight__label">Obligation per Component</div>
                         {Object.entries(componentObligated).map(([name, amt]) => (
                             <div key={name} className="ai-insight__breakdown-row">
-                                <span>{name}</span><span><strong>₱{(amt / 1000000).toFixed(2)}M</strong><small>{totalObligated > 0 ? ((amt / totalObligated) * 100).toFixed(1) : 0}%</small></span>
+                                <span>{name}</span><span><strong>₱{(amt / 1000000).toFixed(2)}M</strong><small>{totalObligated !== 0 ? ((amt / totalObligated) * 100).toFixed(1) : 0}%</small></span>
                             </div>
                         ))}
                     </div>

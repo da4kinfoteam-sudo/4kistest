@@ -469,13 +469,15 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
                     beneficiaryCityMunicipality: beneficiary.cityMunicipality,
                     beneficiaryBarangay: beneficiary.barangay,
                     nameOfAssociationOrganization: beneficiary.names || subproject.indigenousPeopleOrganization || '',
-                    totalNumber: linkedIpos.reduce((sum, ipo) => sum + (Number(ipo.totalMembers) || 0), 0) || '',
+                    totalNumber: subproject.actualMaleBeneficiaries != null && subproject.actualFemaleBeneficiaries != null
+                        ? Number(subproject.actualMaleBeneficiaries) + Number(subproject.actualFemaleBeneficiaries)
+                        : '',
                     indigenousPeople: beneficiary.indigenousPeople,
                     nameOfTribe: beneficiary.tribes,
                     srCitizen: toDisplayNumber(subproject.actualSenior),
                     pwd: toDisplayNumber(subproject.actualPWD),
                     arb: '',
-                    fourPs: '',
+                    fourPs: subproject.actualFourPsBeneficiaries == null ? '' : String(subproject.actualFourPsBeneficiaries),
                     contactNumber: beneficiary.contacts,
                     dateReceived: subproject.actualCompletionDate || '',
                 };

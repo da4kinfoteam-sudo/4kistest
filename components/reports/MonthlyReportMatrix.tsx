@@ -387,7 +387,7 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
             const unutilized = alloc - obli;
             const unpaid = obli - disb;
             const obliRate = alloc > 0 ? (obli / alloc) * 100 : 0;
-            const disbRate = obli > 0 ? (disb / obli) * 100 : 0;
+            const disbRate = obli !== 0 ? (disb / obli) * 100 : 0;
 
             return {
                 key,
@@ -461,7 +461,7 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
 
         if (financialHistoryData.length > 0) {
             const obliRateTotal = financialGrandTotal.alloc > 0 ? (financialGrandTotal.obli / financialGrandTotal.alloc) : 0;
-            const disbRateTotal = financialGrandTotal.obli > 0 ? (financialGrandTotal.disb / financialGrandTotal.obli) : 0;
+            const disbRateTotal = financialGrandTotal.obli !== 0 ? (financialGrandTotal.disb / financialGrandTotal.obli) : 0;
             finRows.push([
                 "Grand Total", financialGrandTotal.alloc, financialGrandTotal.obli, financialGrandTotal.disb,
                 obliRateTotal, disbRateTotal, financialGrandTotal.unutilized, financialGrandTotal.unpaid
@@ -685,7 +685,7 @@ const MonthlyReportMatrix: React.FC<MonthlyReportMatrixProps> = ({ data, financi
                                         {(financialGrandTotal.alloc > 0 ? (financialGrandTotal.obli / financialGrandTotal.alloc * 100) : 0).toFixed(1)}%
                                     </td>
                                     <td className={`${dataCellClass} text-center`}>
-                                        {(financialGrandTotal.obli > 0 ? (financialGrandTotal.disb / financialGrandTotal.obli * 100) : 0).toFixed(1)}%
+                                        {(financialGrandTotal.obli !== 0 ? (financialGrandTotal.disb / financialGrandTotal.obli * 100) : 0).toFixed(1)}%
                                     </td>
                                     <td className={dataCellClass}>{formatCurrencyWhole(financialGrandTotal.unutilized)}</td>
                                     <td className={dataCellClass}>{formatCurrencyWhole(financialGrandTotal.unpaid)}</td>

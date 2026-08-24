@@ -170,12 +170,12 @@ export function FinancialActualsDialog<T extends FinancialRecord>({
               <div className="financial-actuals-dialog__table-wrap custom-scrollbar">
                 <table className="financial-actuals-dialog__table">
                   <thead>
-                    <tr><th>Amount</th><th>Month / Year</th>{!readOnly && <th><span className="sr-only">Delete</span></th>}</tr>
+                    <tr><th className="financial-actuals-dialog__amount-cell">Amount</th><th className="financial-actuals-dialog__month-cell">Month / Year</th>{kind === 'obligation' && <th className="financial-actuals-dialog__remarks-cell">Reason / Remarks</th>}{!readOnly && <th className="financial-actuals-dialog__action-cell"><span className="sr-only">Delete</span></th>}</tr>
                   </thead>
                   <tbody>
                     {draftRecords.map((record, index) => (
                       <tr key={record.id}>
-                        <td>
+                        <td className="financial-actuals-dialog__amount-cell">
                           {readOnly ? (
                             <span className="financial-actuals-dialog__readonly-value">{currencyFormatter.format(Number(record.amount) || 0)}</span>
                           ) : (
@@ -185,10 +185,11 @@ export function FinancialActualsDialog<T extends FinancialRecord>({
                               className="form-input financial-actuals-dialog__amount"
                               aria-label={`${lineItemName} ${kind} ${index + 1} amount`}
                               emptyWhenZero
+                              allowNegative={kind === 'obligation'}
                             />
                           )}
                         </td>
-                        <td>
+                        <td className="financial-actuals-dialog__month-cell">
                           {readOnly ? (
                             <span className="financial-actuals-dialog__readonly-value">{formatFinancialMonth(record.date, fallbackYear)}</span>
                           ) : (
@@ -202,8 +203,24 @@ export function FinancialActualsDialog<T extends FinancialRecord>({
                             />
                           )}
                         </td>
+                        {kind === 'obligation' && (
+                          <td className="financial-actuals-dialog__remarks-cell">
+                            {readOnly ? (
+                              <span className="financial-actuals-dialog__readonly-value">{record.remarks || '—'}</span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={record.remarks || ''}
+                                onChange={event => updateRecord(record.id, { remarks: event.target.value } as Partial<T>)}
+                                className="form-input"
+                                placeholder={Number(record.amount) < 0 ? 'Required for negative adjustment' : 'Optional'}
+                                aria-label={`${lineItemName} ${kind} ${index + 1} reason or remarks`}
+                              />
+                            )}
+                          </td>
+                        )}
                         {!readOnly && (
-                          <td>
+                          <td className="financial-actuals-dialog__action-cell">
                             <button type="button" className="table-action table-action--danger table-action--icon" onClick={() => setDraftRecords(current => current.filter(item => item.id !== record.id))} aria-label={`Delete ${kind} ${index + 1}`} title={`Delete ${kind}`}>
                               <Trash2 aria-hidden="true" />
                             </button>
