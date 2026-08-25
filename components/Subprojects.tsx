@@ -63,7 +63,8 @@ const Subprojects: React.FC<SubprojectsProps> = ({
     onCreateSubproject, uacsCodes, particularTypes, commodityCategories, externalFilters, onClearExternalFilters,
     onDataScopeChange
 }) => {
-    const { currentUser, hasAccess } = useAuth();
+    const { currentUser, getAccessDecision, hasAccess } = useAuth();
+    const hasWorkflowBypass = getAccessDecision('Subprojects', 'edit').source === 'super_admin_invariant';
     const tableStoragePrefix = `subprojects_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Subprojects');
@@ -535,7 +536,7 @@ const Subprojects: React.FC<SubprojectsProps> = ({
 
     const canApprove = () => hasAccess('Subprojects', 'approve');
     const canSubmitWorkflow = (subproject: Subproject) => ['DRAFT', 'REJECTED'].includes(subproject.workflow_status || 'DRAFT')
-        && (subproject.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+        && (subproject.created_by_user_id === currentUser?.id || hasWorkflowBypass);
 
     const handleSubmitWorkflow = async (subproject: Subproject, event: React.MouseEvent) => {
         event.stopPropagation();

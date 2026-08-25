@@ -377,7 +377,7 @@ const DetailedAccomplishmentDataReport: React.FC<DetailedAccomplishmentDataRepor
     onExportReport,
 }) => {
     const { currentUser, hasAccess } = useAuth();
-    const isReportAdmin = hasAccess('Reports', 'manage_settings');
+    const isReportAdmin = hasAccess('Report - Detailed Accomplishment Data', 'manage_settings');
     const [geocodes, setGeocodes] = useState<Record<string, string>>({});
     const [controllerOpen, setControllerOpen] = useState(false);
     const [controllerSearch, setControllerSearch] = useState('');

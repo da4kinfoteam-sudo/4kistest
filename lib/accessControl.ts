@@ -11,7 +11,8 @@ export const ACCESS_ACTIONS = [
   'delete_financial_actual', 'override_physical_lock', 'override_financial_lock',
   'override_period', 'manage_users', 'manage_roles', 'manage_permissions',
   'manage_approver_assignments', 'manage_user_scopes', 'manage_user_overrides',
-  'manage_super_admins', 'manage_settings',
+  'manage_super_admins', 'manage_settings', 'edit_assessment', 'set_manual_level',
+  'manage_controller', 'inline_edit', 'bulk_action',
 ] as const;
 
 export type AccessAction = typeof ACCESS_ACTIONS[number];

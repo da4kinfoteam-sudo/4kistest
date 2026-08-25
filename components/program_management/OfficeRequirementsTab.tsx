@@ -73,11 +73,12 @@ interface OfficeRequirementsTabProps {
 
 export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
     const { locale } = useAuth(); // Assume it exists or just use default
-    const { currentUser, hasAccess } = useAuth();
+    const { currentUser, getAccessDecision, hasAccess } = useAuth();
+    const hasWorkflowBypass = getAccessDecision('Program Management - Office Requirements', 'edit').source === 'super_admin_invariant';
     const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
     const tableStoragePrefix = `programManagement_office_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
-    const { canEdit, canViewAll } = useUserAccess('Program Management');
+    const { canEdit, canViewAll } = useUserAccess('Program Management - Office Requirements');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
     
     // Local State
@@ -540,8 +541,8 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
         return <span className={classes}>{status || 'DRAFT'}</span>;
     };
 
-    const canApprove = () => hasAccess('Program Management', 'approve');
-    const canSubmitWorkflow = (item: OfficeRequirement) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+    const canApprove = () => hasAccess('Program Management - Office Requirements', 'approve');
+    const canSubmitWorkflow = (item: OfficeRequirement) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || hasWorkflowBypass);
     const handleSubmitWorkflow = async (item: OfficeRequirement, event: React.MouseEvent) => { event.stopPropagation(); try { const result = await transitionWorkflow('office_requirements', item.id, item.workflow_status === 'REJECTED' ? 'resubmit' : 'submit'); setItems(previous => previous.map(row => row.id === item.id ? { ...row, ...result } : row)); } catch (error: any) { alert('Failed to submit: ' + (error?.message || 'Unknown error')); } };
 
     const handleApprove = async (id: number, e: React.MouseEvent) => {

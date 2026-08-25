@@ -37,9 +37,14 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({
     onDataScopeChange
 }) => {
     const activeTab = activePage;
+    const permissionModule = activePage === 'Office'
+        ? 'Program Management - Office Requirements'
+        : activePage === 'Staffing'
+            ? 'Program Management - Staffing Requirements'
+            : 'Program Management - Other Program Expenses';
     const dcfFilters = useDcfScopeFilters({
         storageKey: 'program_management_dcf_scope',
-        moduleName: 'Program Management',
+        moduleName: permissionModule,
         onDataScopeChange
     });
 

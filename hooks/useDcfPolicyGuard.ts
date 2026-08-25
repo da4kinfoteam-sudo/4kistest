@@ -140,17 +140,25 @@ export const useDcfPolicyGuard = () => {
             return { allowed: false, code: 'blocked_by_status', message: 'DCF editing policy is still loading.' };
         }
         const resolvedStatus = status || getDcfItemPolicyStatus(moduleKey, item || {});
-        const moduleName = moduleKey === 'subprojects' ? 'Subprojects' : moduleKey === 'activities' ? 'Activities' : 'Program Management';
+        const moduleName = moduleKey === 'subprojects'
+            ? 'Subprojects'
+            : moduleKey === 'activities'
+                ? 'Activities'
+                : moduleKey === 'office_requirements'
+                    ? 'Program Management - Office Requirements'
+                    : moduleKey === 'staffing_requirements'
+                        ? 'Program Management - Staffing Requirements'
+                        : 'Program Management - Other Program Expenses';
         const centralizedAccess = action === 'editPhysicalAccomplishment'
-            ? hasAccess('Accomplishment - Physical', 'edit_physical_actual')
+            ? hasAccess(moduleName, 'edit_physical_actual') && hasAccess('Accomplishment - Physical', 'edit_physical_actual')
             : action === 'editFinancialAccomplishment'
-                ? hasAccess('Accomplishment - Financial', 'edit_financial_actual')
+                ? hasAccess(moduleName, 'edit_financial_actual') && hasAccess('Accomplishment - Financial', 'edit_financial_actual')
                 : action === 'delete'
                     ? hasAccess(moduleName, 'delete')
                     : hasAccess(moduleName, 'edit');
         return canEditDcfSection({
             user: currentUser,
-            hasModuleAccess: centralizedAccess,
+            hasModuleAccess: hasModuleAccess && centralizedAccess,
             policy,
             moduleKey,
             status: resolvedStatus,
@@ -173,10 +181,18 @@ export const useDcfPolicyGuard = () => {
             return { allowed: false, code: 'blocked_by_status', message: 'DCF editing policy is still loading.' };
         }
         const resolvedStatus = status || getDcfItemPolicyStatus(moduleKey, item || {});
-        const moduleName = moduleKey === 'subprojects' ? 'Subprojects' : moduleKey === 'activities' ? 'Activities' : 'Program Management';
+        const moduleName = moduleKey === 'subprojects'
+            ? 'Subprojects'
+            : moduleKey === 'activities'
+                ? 'Activities'
+                : moduleKey === 'office_requirements'
+                    ? 'Program Management - Office Requirements'
+                    : moduleKey === 'staffing_requirements'
+                        ? 'Program Management - Staffing Requirements'
+                        : 'Program Management - Other Program Expenses';
         return canDeleteDcfItem({
             user: currentUser,
-            hasModuleAccess: hasAccess(moduleName, 'delete'),
+            hasModuleAccess: hasModuleAccess && hasAccess(moduleName, 'delete'),
             policy,
             moduleKey,
             status: resolvedStatus,

@@ -72,7 +72,8 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
     onSelectActivity
 }) => {
     const { logAction } = useLogAction();
-    const { currentUser } = useAuth();
+    const { currentUser, getAccessDecision } = useAuth();
+    const hasProtectedOverride = getAccessDecision('Settings - DCF and Status', 'manage_settings').source === 'super_admin_invariant';
 
     // UI State
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Subprojects', 'Activities & Trainings', 'Staffing Requirements', 'Office Requirements', 'Other Program Expenses']));
@@ -203,7 +204,7 @@ const PhysicalStatusManagement: React.FC<PhysicalStatusManagementProps> = ({
         try {
             const reasonedChanges = changes.filter(change => ['Cancelled', 'Unfilled'].includes(change.value));
             let reason: string | undefined;
-            if (reasonedChanges.length && currentUser?.role !== 'Super Admin') {
+            if (reasonedChanges.length && !hasProtectedOverride) {
                 const input = window.prompt(`Reason required for ${reasonedChanges.length} Cancelled/Unfilled status change(s):`);
                 if (!input?.trim()) throw new Error('A reason is required for Cancelled or Unfilled status changes.');
                 reason = input.trim();

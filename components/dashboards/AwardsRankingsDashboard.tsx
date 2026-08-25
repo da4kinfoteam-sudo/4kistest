@@ -218,7 +218,8 @@ const SpecialAwardsTable: React.FC<{
 
 const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data, selectedYear, selectedTier, selectedFundType }) => {
     const { currentUser, hasAccess } = useAuth();
-    const isAdmin = hasAccess('Reports', 'manage_settings');
+    const canManageAwards = hasAccess('Dashboard - Awards and Rankings', 'manage_settings');
+    const canExportAwards = hasAccess('Dashboard - Awards and Rankings', 'export');
     const effectiveYear = Number.isFinite(Number(selectedYear)) ? Number(selectedYear) : new Date().getFullYear();
     const [controllerOpen, setControllerOpen] = useState(false);
     const [quarterDetailMode, setQuarterDetailMode] = useState<QuarterDetailMode>('financial');
@@ -234,7 +235,6 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
     const [error, setError] = useState('');
 
     useEffect(() => {
-        if (!isAdmin) return;
         let cancelled = false;
 
         const loadController = async () => {
@@ -276,7 +276,7 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
         return () => {
             cancelled = true;
         };
-    }, [effectiveYear, isAdmin]);
+    }, [effectiveYear]);
 
     const awardsData = useMemo(
         () => calculateAwardsDashboardData(data, selectedYear, settings, manualScores),
@@ -354,6 +354,10 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
     };
 
     const saveController = async () => {
+        if (!canManageAwards) {
+            setError('You do not have permission to manage Awards and Rankings settings.');
+            return;
+        }
         if (!supabase) {
             setError('Supabase is not configured. Awards controller cannot be saved.');
             return;
@@ -520,15 +524,6 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
         XLSX.writeFile(wb, `Awards_Rankings_FY${awardsData.effectiveYear}.xlsx`);
     };
 
-    if (!isAdmin) {
-        return (
-            <section className="dashboard-panel award-access-panel">
-                <h3 className="dashboard-panel__title">Awards and Rankings</h3>
-                <p className="dashboard-empty">This dashboard is available only to Administrator and Super Admin users.</p>
-            </section>
-        );
-    }
-
     const annualWinner = awardsData.annual.overall[0];
     const financialWinner = awardsData.annual.financial[0];
     const physicalWinner = awardsData.annual.physical[0];
@@ -544,7 +539,7 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
                     {message && <p className="award-message award-message--success">{message}</p>}
                 </div>
                 <div className="award-hero__actions">
-                    <button
+                    {canManageAwards && <button
                         type="button"
                         className="btn btn-secondary btn-responsive"
                         onClick={() => setControllerOpen(prev => !prev)}
@@ -554,15 +549,15 @@ const AwardsRankingsDashboard: React.FC<AwardsRankingsDashboardProps> = ({ data,
                         <SlidersHorizontal className="btn-symbol" aria-hidden="true" />
                         <span className="btn-text">Award Controller</span>
                         <ChevronDown className={`btn-symbol ${controllerOpen ? 'is-open' : ''}`} aria-hidden="true" />
-                    </button>
-                    <button type="button" className="btn btn-primary btn-responsive" onClick={exportWorkbook}>
+                    </button>}
+                    {canExportAwards && <button type="button" className="btn btn-primary btn-responsive" onClick={exportWorkbook}>
                         <Download className="btn-symbol" aria-hidden="true" />
                         <span className="btn-text">Export</span>
-                    </button>
+                    </button>}
                 </div>
             </section>
 
-            {controllerOpen && (
+            {canManageAwards && controllerOpen && (
                 <section id="award-controller" className="award-controller dashboard-panel">
                     <div className="dashboard-panel__header">
                         <div>

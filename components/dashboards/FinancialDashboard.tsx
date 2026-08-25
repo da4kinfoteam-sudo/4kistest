@@ -153,7 +153,7 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({
     data, selectedYearProp, selectedOuProp, selectedTierProp, selectedFundTypeProp,
 }) => {
     const { currentUser, getVisibilityScope } = useAuth();
-    const canViewMatrix = getVisibilityScope('Dashboards') === 'All';
+    const canViewMatrix = getVisibilityScope('Dashboard - Financial') === 'All';
     const selectedYear = selectedYearProp || new Date().getFullYear().toString();
     const selectedOu = selectedOuProp || (canViewMatrix ? 'All' : (currentUser?.operatingUnit || 'All'));
     const selectedTier = selectedTierProp || 'Tier 1';

@@ -48,7 +48,7 @@ const DetailItem: React.FC<{ label: string; value?: string | number | React.Reac
 
 const OfficeRequirementDetail: React.FC<OfficeRequirementDetailProps> = ({ item, uacsCodes, onUpdate }) => {
     const { currentUser } = useAuth();
-    const { canEdit } = useUserAccess('Program Management');
+    const { canEdit } = useUserAccess('Program Management - Office Requirements');
     const { logAction } = useLogAction();
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
     const detailsDecision = getStatusDecision({

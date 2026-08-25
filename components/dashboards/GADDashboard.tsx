@@ -113,11 +113,13 @@ const GADDashboard: React.FC<GADDashboardProps> = ({
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const requestIdRef = useRef(0);
     const year = Number(selectedYear);
-    const canView = hasAccess('Dashboards', 'view') && hasAccess('Gender and Development', 'view');
+    const canView = hasAccess('Dashboards', 'view')
+        && hasAccess('Dashboard - GAD', 'view')
+        && hasAccess('Gender and Development', 'view');
 
     const visibleOus = useMemo(() => {
         if (!currentUser) return [];
-        const dashboardScope = getVisibilityScope('Dashboards');
+        const dashboardScope = getVisibilityScope('Dashboard - GAD');
         const gadScope = getVisibilityScope('Gender and Development');
         const ownOuOnly = dashboardScope === 'Own OU' || gadScope === 'Own OU';
         const scoped = ownOuOnly ? operatingUnits.filter(ou => ou === currentUser.operatingUnit) : [...operatingUnits];
