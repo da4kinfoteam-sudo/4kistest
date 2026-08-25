@@ -39,6 +39,26 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const PROFILE_COLUMNS = 'id,auth_id,username,fullName,email,role,operatingUnit,visibility_scope,assigned_focal_id,requires_approver,approver_id,is_active,deactivated_at,permission_version,password_reset_required,created_at,updated_at';
+const POLICY_PAGE_SIZE = 1000;
+
+const fetchAllRoleRules = async (): Promise<RolePermissionRule[]> => {
+    if (!supabase) throw new Error('Supabase is not configured.');
+    const rows: RolePermissionRule[] = [];
+    for (let from = 0; ; from += POLICY_PAGE_SIZE) {
+        const { data, error } = await supabase
+            .from('authorization_role_rules')
+            .select('role,module,action,allowed,visibility_scope')
+            .order('role', { ascending: true })
+            .order('module', { ascending: true })
+            .order('action', { ascending: true })
+            .range(from, from + POLICY_PAGE_SIZE - 1);
+        if (error) throw error;
+        const page = (data || []) as RolePermissionRule[];
+        rows.push(...page);
+        if (page.length < POLICY_PAGE_SIZE) break;
+    }
+    return rows;
+};
 
 const normalizeAction = (action: AccessAction | LegacyAction): AccessAction => (
     action in legacyActionMap ? legacyActionMap[action as LegacyAction] : action as AccessAction
@@ -78,14 +98,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const fetchPolicy = useCallback(async (profile: User) => {
         if (!supabase) throw new Error('Supabase is not configured.');
         const [roleResult, overrideResult, scopeResult, stateResult] = await Promise.all([
-            supabase.from('authorization_role_rules').select('role,module,action,allowed,visibility_scope'),
+            fetchAllRoleRules(),
             supabase.from('authorization_user_rules').select('user_id,module,action,effect').eq('user_id', profile.id),
             supabase.from('authorization_user_scopes').select('user_id,module,visibility_scope').eq('user_id', profile.id),
             supabase.from('authorization_policy').select('policy_version,legacy_user_auto_approve_enabled,legacy_user_auto_approve_role,legacy_user_auto_approve_modules,legacy_user_auto_approve_owner,legacy_user_auto_approve_cutoff').eq('singleton', true).single(),
         ]);
-        const firstError = roleResult.error || overrideResult.error || scopeResult.error || stateResult.error;
+        const firstError = overrideResult.error || scopeResult.error || stateResult.error;
         if (firstError) throw firstError;
-        setRoleRules((roleResult.data || []) as RolePermissionRule[]);
+        setRoleRules(roleResult);
         setUserRules((overrideResult.data || []) as UserPermissionRule[]);
         setUserScopes((scopeResult.data || []) as UserScopeRule[]);
         setPolicyState(stateResult.data as AuthorizationPolicyState);
