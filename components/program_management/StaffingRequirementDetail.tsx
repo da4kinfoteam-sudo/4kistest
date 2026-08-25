@@ -81,7 +81,7 @@ const getHiringStatusBadge = (status: StaffingRequirement['hiringStatus']) => {
 const StaffingRequirementDetail: React.FC<StaffingRequirementDetailProps> = ({ item, uacsCodes, onUpdate }) => {
     const { currentUser } = useAuth();
     const { logAction } = useLogAction();
-    const { canEdit, canViewAll } = useUserAccess('Program Management');
+    const { canEdit, canViewAll } = useUserAccess('Program Management - Staffing Requirements');
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
     const detailsDecision = getStatusDecision({
         moduleKey: 'staffing_requirements',

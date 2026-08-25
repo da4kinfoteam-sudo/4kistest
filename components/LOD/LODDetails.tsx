@@ -5,7 +5,6 @@ import { supabase } from '../../supabaseClient';
 import { IPO, LodSection, LodQuestion, LodChoice, LodAssessment, LodAnswer, LodLevelConfig, LodQuestionnaireVersion } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLogAction } from '../../hooks/useLogAction';
-import { useUserAccess } from '../mainfunctions/TableHooks';
 import { calculateLodScore, getLodEffectiveState, isLodPublishedState } from '../../lib/lodScoring';
 import { notifyLodDataChanged } from '../../lib/lodDataSync';
 import { buildLodOverrideAuditMetadata } from '../../lib/lodOverrides';
@@ -18,11 +17,11 @@ interface LODDetailsProps {
 }
 
 const LODDetails: React.FC<LODDetailsProps> = ({ ipo, onBack, initialYear }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const { logAction } = useLogAction();
-    const { canEdit, canManage } = useUserAccess('Level of Development');
-    const canManageLod = canEdit && canManage;
-    const isLocked = !canEdit;
+    const canEditAssessment = hasAccess('Level of Development', 'edit_assessment');
+    const canManageLod = hasAccess('Level of Development', 'set_manual_level');
+    const isLocked = !canEditAssessment;
     const loadSequence = useRef(0);
 
     const [selectedYear, setSelectedYear] = useState<number>(initialYear ?? new Date().getFullYear());

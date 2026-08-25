@@ -81,7 +81,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             supabase.from('authorization_role_rules').select('role,module,action,allowed,visibility_scope'),
             supabase.from('authorization_user_rules').select('user_id,module,action,effect').eq('user_id', profile.id),
             supabase.from('authorization_user_scopes').select('user_id,module,visibility_scope').eq('user_id', profile.id),
-            supabase.from('authorization_policy').select('policy_version,legacy_user_auto_approve_enabled,legacy_user_auto_approve_owner,legacy_user_auto_approve_cutoff').eq('singleton', true).single(),
+            supabase.from('authorization_policy').select('policy_version,legacy_user_auto_approve_enabled,legacy_user_auto_approve_role,legacy_user_auto_approve_modules,legacy_user_auto_approve_owner,legacy_user_auto_approve_cutoff').eq('singleton', true).single(),
         ]);
         const firstError = roleResult.error || overrideResult.error || scopeResult.error || stateResult.error;
         if (firstError) throw firstError;

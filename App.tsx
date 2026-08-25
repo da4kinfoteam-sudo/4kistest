@@ -64,13 +64,19 @@ import {
 } from './lib/entityIdentity';
 import {
     getCanonicalModuleRoute,
+    getDashboardPermissionModule,
     getDashboardSourceView,
     getNavigationPageTitle,
+    getProgramManagementPermissionModule,
+    getReferencePermissionModule,
     getReportSourceView,
     getReportTabFromSourceView,
     isDashboardPagePath,
     isProgramManagementPagePath,
     isReferencePagePath,
+    dashboardPages,
+    programManagementPages,
+    referencePages,
     resolveAppBreadcrumbs,
     resolveAppReturnContext,
     resolveDashboardPage,
@@ -81,7 +87,8 @@ import {
     initialUacsCodes, initialParticularTypes, Subproject, IPO, Activity, User,
     OfficeRequirement, StaffingRequirement, OtherProgramExpense, SystemSettings, defaultSystemSettings,
     Deadline, PlanningSchedule, ReferenceActivity, MarketingPartner, GidaArea, ElcacArea, RefCommodity, RefLivestock, RefEquipment,
-    RefInput, RefInfrastructure, RefTrainingReference, ActivityMonitoringAction, ActivityMonitoringReport, operatingUnits, ouToRegionMap
+    RefInput, RefInfrastructure, RefTrainingReference, ActivityMonitoringAction, ActivityMonitoringReport, operatingUnits, ouToRegionMap,
+    reportPermissionModuleByTab, reportPermissionModules
 } from './constants';
 import {
     sampleActivities, sampleMarketingPartners, sampleOfficeRequirements, sampleOtherProgramExpenses, sampleReferenceUacsList,
@@ -501,12 +508,25 @@ const AppContent: React.FC = () => {
     }), [deadlines]);
 
     const buildDefaultDataScope = useCallback((overrides: Partial<DataScope> = {}): DataScope => {
-        const canViewAllOus = currentUser ? getVisibilityScope('Dashboards') !== 'Own OU' : true;
+        const activeScopeModule = isDashboardPagePath(routePath)
+            ? getDashboardPermissionModule(routePath)
+            : routePath === '/reports'
+                ? (reportPermissionModuleByTab[reportsPageState.activeTab] || 'Reports')
+            : (routePath === '/program-management' || routePath.startsWith('/program-management/'))
+                ? getProgramManagementPermissionModule(routePath)
+                : isReferencePagePath(routePath)
+                    ? getReferencePermissionModule(routePath)
+                    : 'Dashboards';
+        const canViewAllOus = currentUser ? getVisibilityScope(activeScopeModule) !== 'Own OU' : true;
         const scopedModules = [
             'Dashboards', 'Reports', 'Subprojects', 'Activities', 'Program Management',
             'IPO Management', 'Marketing Database', 'Accomplishment - Financial',
             'Accomplishment - Physical', 'References', 'Gender and Development',
             'Level of Development', 'Settings - System',
+            ...dashboardPages.flatMap(page => page.module ? [page.module] : []),
+            ...reportPermissionModules,
+            ...programManagementPages.flatMap(page => page.module ? [page.module] : []),
+            ...referencePages.flatMap(page => page.module ? [page.module] : []),
         ];
         return {
             year: overrides.year ?? new Date().getFullYear().toString(),
@@ -521,7 +541,7 @@ const AppContent: React.FC = () => {
             policyVersion: policyState?.policy_version || 0,
             requestedBy: currentUser?.id ?? null
         };
-    }, [currentUser, getVisibilityScope, policyState?.policy_version]);
+    }, [currentUser, getVisibilityScope, policyState?.policy_version, reportsPageState.activeTab, routePath]);
 
     const applyScopedData = useCallback((data: Awaited<ReturnType<typeof loadScopedAppData>>) => {
         replaceSubprojects(data.subprojects);
@@ -739,9 +759,9 @@ const AppContent: React.FC = () => {
             switch (routePath) {
                 case '/subproject-detail': return { table: 'subprojects' as const, module: 'Subprojects', items: subprojects, select: setSelectedSubproject };
                 case '/activity-detail': return { table: 'activities' as const, module: 'Activities', items: activities, select: setSelectedActivity };
-                case '/program-management/office-detail': return { table: 'office_requirements' as const, module: 'Program Management', items: officeReqs, select: setSelectedOfficeReq };
-                case '/program-management/staffing-detail': return { table: 'staffing_requirements' as const, module: 'Program Management', items: staffingReqs, select: setSelectedStaffingReq };
-                case '/program-management/other-expense-detail': return { table: 'other_program_expenses' as const, module: 'Program Management', items: otherProgramExpenses, select: setSelectedOtherExpense };
+                case '/program-management/office-detail': return { table: 'office_requirements' as const, module: 'Program Management - Office Requirements', items: officeReqs, select: setSelectedOfficeReq };
+                case '/program-management/staffing-detail': return { table: 'staffing_requirements' as const, module: 'Program Management - Staffing Requirements', items: staffingReqs, select: setSelectedStaffingReq };
+                case '/program-management/other-expense-detail': return { table: 'other_program_expenses' as const, module: 'Program Management - Other Program Expenses', items: otherProgramExpenses, select: setSelectedOtherExpense };
                 case '/ipo-detail': return { table: 'ipos' as const, module: 'IPO Management', items: ipos, select: setSelectedIpo };
                 case '/marketing-profile-detail':
                 case '/marketing-profile-edit':
@@ -1047,7 +1067,7 @@ const AppContent: React.FC = () => {
     }, [currentUser?.operatingUnit, isReportsLockedToOwnOu]);
 
     useEffect(() => {
-        if (!hasAccess('Reports', 'manage_settings')) {
+        if (!hasAccess('Report - Financial Audit', 'view')) {
             setReportsPageState(prev => prev.activeTab === 'Financial Audit' ? { ...prev, activeTab: 'WFP' } : prev);
         }
     }, [hasAccess]);
@@ -1168,13 +1188,20 @@ const AppContent: React.FC = () => {
 
     useEffect(() => {
         if (!isAuthReady || !currentUser) return;
-        const canonicalRoute = getCanonicalModuleRoute(routePath, currentUser.role);
+        const accessibleParentLanding = routePath === '/dashboards'
+            ? dashboardPages.find(page => hasAccess('Dashboards', 'view') && hasAccess(page.module || 'Dashboards', 'view'))?.route
+            : routePath === '/program-management'
+                ? programManagementPages.find(page => hasAccess('Program Management', 'view') && hasAccess(page.module || 'Program Management', 'view'))?.route
+                : routePath === '/references'
+                    ? referencePages.find(page => hasAccess('References', 'view') && hasAccess(page.module || 'References', 'view'))?.route
+                    : undefined;
+        const canonicalRoute = accessibleParentLanding || getCanonicalModuleRoute(routePath, currentUser.role);
         if (!canonicalRoute || canonicalRoute === routePath) return;
         const stack = historyStackRef.current;
         currentPageRef.current = canonicalRoute;
         setCurrentPage(canonicalRoute);
         window.history.replaceState({ page: canonicalRoute, stack }, '', `/#${canonicalRoute}`);
-    }, [currentUser, isAuthReady, routePath]);
+    }, [currentUser, hasAccess, isAuthReady, routePath]);
 
     useEffect(() => {
         const handlePopState = (event: PopStateEvent) => {
@@ -1514,7 +1541,7 @@ const AppContent: React.FC = () => {
         const denied = <AccessDenied onBackToHome={() => navigateTo('/')} />;
 
         // Phase 6: Guard clauses for module-level access
-        if (isDashboardPagePath(routePath) && !checkAccess('Dashboards')) return denied;
+        if (isDashboardPagePath(routePath) && (!checkAccess('Dashboards') || !checkAccess(getDashboardPermissionModule(routePath)))) return denied;
         if (routePath === '/reports' && !checkAccess('Reports')) return denied;
         
         if (['/subprojects', '/subproject-edit', '/subproject-detail'].includes(routePath)) {
@@ -1525,7 +1552,7 @@ const AppContent: React.FC = () => {
         }
         if (routePath === '/activity-monitoring-report' && !checkAccess('IPO Management')) return denied;
         if (routePath === '/program-management' || routePath.startsWith('/program-management/')) {
-            if (!checkAccess('Program Management')) return denied;
+            if (!checkAccess('Program Management') || !checkAccess(getProgramManagementPermissionModule(routePath))) return denied;
         }
         if (routePath === '/accomplishment/financial' && !checkAccess('Accomplishment - Financial')) return denied;
         if (routePath === '/accomplishment/physical' && !checkAccess('Accomplishment - Physical')) return denied;
@@ -1545,7 +1572,7 @@ const AppContent: React.FC = () => {
         if (routePath === '/commodity-mapping') {
             if (!checkAccess('Commodity Mapping')) return denied;
         }
-        if (isReferencePagePath(routePath) && !checkAccess('References')) return denied;
+        if (isReferencePagePath(routePath) && (!checkAccess('References') || !checkAccess(getReferencePermissionModule(routePath)))) return denied;
         if (routePath === '/settings') {
             const settingsModules = [
                 'Profile', 'Settings - User Management', 'Settings - Access Control', 'Settings - Data Scope',
@@ -1603,6 +1630,7 @@ const AppContent: React.FC = () => {
             const referencePage = resolveReferencePage(routePath);
             return <References
                 activePage={referencePage.page}
+                permissionModule={referencePage.module || 'References'}
                 uacsList={referenceUacsList}
                 setUacsList={setReferenceUacsList}
                 particularList={referenceParticularList}

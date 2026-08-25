@@ -97,9 +97,73 @@ export interface RoleConfig {
 export interface AuthorizationPolicyState {
     policy_version: number;
     legacy_user_auto_approve_enabled: boolean;
+    legacy_user_auto_approve_role?: UserRole;
+    legacy_user_auto_approve_modules?: string[];
     legacy_user_auto_approve_owner?: string | null;
     legacy_user_auto_approve_cutoff?: string | null;
 }
+
+export const dashboardPermissionModules = [
+    'Dashboard - Physical',
+    'Dashboard - Financial',
+    'Dashboard - SCAD',
+    'Dashboard - Agricultural Interventions',
+    'Dashboard - Farm Productivity and Income',
+    'Dashboard - Commodities',
+    'Dashboard - IPO Level of Development',
+    'Dashboard - GAD',
+    'Dashboard - Nutrition',
+    'Dashboard - Awards and Rankings',
+] as const;
+
+export const reportPermissionModules = [
+    'Report - WFP',
+    'Report - BP Forms',
+    'Report - BEDS',
+    'Report - PICS',
+    'Report - BAR1',
+    'Report - Budget Utilization',
+    'Report - Monthly Matrix',
+    'Report - Detailed Accomplishment Data',
+    'Report - Financial Audit',
+] as const;
+
+export const reportPermissionModuleByTab: Record<string, string> = {
+    WFP: 'Report - WFP',
+    'BP Forms': 'Report - BP Forms',
+    BEDS: 'Report - BEDS',
+    PICS: 'Report - PICS',
+    BAR1: 'Report - BAR1',
+    'Budget Utilization Report': 'Report - Budget Utilization',
+    'Monthly Matrix': 'Report - Monthly Matrix',
+    'Detailed Accomplishment Data': 'Report - Detailed Accomplishment Data',
+    'Financial Audit': 'Report - Financial Audit',
+};
+
+export const programManagementPermissionModules = [
+    'Program Management - Office Requirements',
+    'Program Management - Staffing Requirements',
+    'Program Management - Other Program Expenses',
+] as const;
+
+export const referencePermissionModules = [
+    'References - UACS Codes',
+    'References - Subproject Items',
+    'References - Crops',
+    'References - Livestock',
+    'References - Agricultural Inputs',
+    'References - Equipment',
+    'References - Infrastructure',
+    'References - Training',
+    'References - GIDA Areas',
+    'References - ELCAC Areas',
+] as const;
+
+export const workflowPermissionModules = [
+    'Subprojects',
+    'Activities',
+    ...programManagementPermissionModules,
+] as const;
 
 export const appModules = [
     'Home',
@@ -129,7 +193,11 @@ export const appModules = [
     'Settings - Audit and Security',
     'Settings - Google Drive',
     'Settings - LOD',
-    'Settings - Archive'
+    'Settings - Archive',
+    ...dashboardPermissionModules,
+    ...reportPermissionModules,
+    ...programManagementPermissionModules,
+    ...referencePermissionModules,
 ];
 
 export interface User extends BaseEntity {

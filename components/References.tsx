@@ -30,6 +30,7 @@ export interface ReferenceParticular {
 
 interface ReferencesProps {
     activePage: ReferencePageKey;
+    permissionModule: string;
     uacsList: ReferenceUacs[];
     setUacsList: React.Dispatch<React.SetStateAction<ReferenceUacs[]>>;
     particularList: ReferenceParticular[];
@@ -148,8 +149,8 @@ const TRAINING_TOOLTIPS = {
     certification_type: "Type of certificate issued (e.g., Certificate of Completion, NC II)"
 };
 
-const References: React.FC<ReferencesProps> = ({ activePage: activeTab, uacsList, setUacsList, particularList, setParticularList, refCommodities, setRefCommodities, refLivestock, setRefLivestock, refEquipment, setRefEquipment, refInputs, setRefInputs, refInfrastructure, setRefInfrastructure, refTrainings, setRefTrainings, gidaList, setGidaList, elcacList, setElcacList, ipos, setIpos }) => {
-    const { canEdit, canDelete } = useUserAccess('References');
+const References: React.FC<ReferencesProps> = ({ activePage: activeTab, permissionModule, uacsList, setUacsList, particularList, setParticularList, refCommodities, setRefCommodities, refLivestock, setRefLivestock, refEquipment, setRefEquipment, refInputs, setRefInputs, refInfrastructure, setRefInfrastructure, refTrainings, setRefTrainings, gidaList, setGidaList, elcacList, setElcacList, ipos, setIpos }) => {
+    const { canEdit, canDelete } = useUserAccess(permissionModule);
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<any>(null);

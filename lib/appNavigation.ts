@@ -31,23 +31,25 @@ export interface RoutePageDefinition<TPage extends string> {
     page: TPage;
     route: string;
     activeMatchPaths?: readonly string[];
+    module?: string;
 }
 
 export const dashboardPages: readonly RoutePageDefinition<DashboardPageKey>[] = [
-    { id: 'dashboard-physical', label: 'Physical', page: 'Physical', route: '/dashboards/physical' },
-    { id: 'dashboard-financial', label: 'Financial', page: 'Financial', route: '/dashboards/financial' },
-    { id: 'dashboard-scad', label: 'SCAD', page: 'SCAD', route: '/dashboards/scad' },
-    { id: 'dashboard-agricultural-interventions', label: 'Agricultural Interventions', page: 'Agricultural Interventions', route: '/dashboards/agricultural-interventions' },
-    { id: 'dashboard-farm-productivity-income', label: 'Farm Productivity and Income', sidebarLabel: 'FPI', page: 'Farm Productivity and Income', route: '/dashboards/farm-productivity-income' },
-    { id: 'dashboard-commodities', label: 'Commodities', page: 'Commodities', route: '/dashboards/commodities' },
-    { id: 'dashboard-ipo-level-development', label: 'IPO Level of Development', sidebarLabel: 'IPO LOD', page: 'IPO Level of Development', route: '/dashboards/ipo-level-development' },
-    { id: 'dashboard-gad', label: 'GAD', page: 'GAD', route: '/dashboards/gad' },
-    { id: 'dashboard-nutrition', label: 'Nutrition', page: 'Nutrition', route: '/dashboards/nutrition' },
+    { id: 'dashboard-physical', label: 'Physical', page: 'Physical', route: '/dashboards/physical', module: 'Dashboard - Physical' },
+    { id: 'dashboard-financial', label: 'Financial', page: 'Financial', route: '/dashboards/financial', module: 'Dashboard - Financial' },
+    { id: 'dashboard-scad', label: 'SCAD', page: 'SCAD', route: '/dashboards/scad', module: 'Dashboard - SCAD' },
+    { id: 'dashboard-agricultural-interventions', label: 'Agricultural Interventions', page: 'Agricultural Interventions', route: '/dashboards/agricultural-interventions', module: 'Dashboard - Agricultural Interventions' },
+    { id: 'dashboard-farm-productivity-income', label: 'Farm Productivity and Income', sidebarLabel: 'FPI', page: 'Farm Productivity and Income', route: '/dashboards/farm-productivity-income', module: 'Dashboard - Farm Productivity and Income' },
+    { id: 'dashboard-commodities', label: 'Commodities', page: 'Commodities', route: '/dashboards/commodities', module: 'Dashboard - Commodities' },
+    { id: 'dashboard-ipo-level-development', label: 'IPO Level of Development', sidebarLabel: 'IPO LOD', page: 'IPO Level of Development', route: '/dashboards/ipo-level-development', module: 'Dashboard - IPO Level of Development' },
+    { id: 'dashboard-gad', label: 'GAD', page: 'GAD', route: '/dashboards/gad', module: 'Dashboard - GAD' },
+    { id: 'dashboard-nutrition', label: 'Nutrition', page: 'Nutrition', route: '/dashboards/nutrition', module: 'Dashboard - Nutrition' },
     {
         id: 'dashboard-awards-rankings',
         label: 'Awards and Rankings',
         page: 'Awards and Rankings',
-        route: '/dashboards/awards-rankings'
+        route: '/dashboards/awards-rankings',
+        module: 'Dashboard - Awards and Rankings'
     }
 ];
 
@@ -57,6 +59,7 @@ export const programManagementPages: readonly RoutePageDefinition<ProgramManagem
         label: 'Office Requirements',
         page: 'Office',
         route: '/program-management/office-requirements',
+        module: 'Program Management - Office Requirements',
         activeMatchPaths: ['/program-management/office-detail']
     },
     {
@@ -64,6 +67,7 @@ export const programManagementPages: readonly RoutePageDefinition<ProgramManagem
         label: 'Staffing Requirements',
         page: 'Staffing',
         route: '/program-management/staffing-requirements',
+        module: 'Program Management - Staffing Requirements',
         activeMatchPaths: ['/program-management/staffing-detail']
     },
     {
@@ -71,6 +75,7 @@ export const programManagementPages: readonly RoutePageDefinition<ProgramManagem
         label: 'Other Expenses',
         page: 'Other',
         route: '/program-management/other-expenses',
+        module: 'Program Management - Other Program Expenses',
         activeMatchPaths: ['/program-management/other-expense-detail']
     }
 ];
@@ -86,34 +91,34 @@ export const referenceNavigationGroups: readonly ReferenceNavigationGroup[] = [
         id: 'references-dcf',
         label: 'DCF References',
         pages: [
-            { id: 'references-uacs', label: 'UACS Codes', page: 'UACS', route: '/references/uacs-codes' },
-            { id: 'references-subproject-items', label: 'Subproject Items', page: 'Items', route: '/references/subproject-items' }
+            { id: 'references-uacs', label: 'UACS Codes', page: 'UACS', route: '/references/uacs-codes', module: 'References - UACS Codes' },
+            { id: 'references-subproject-items', label: 'Subproject Items', page: 'Items', route: '/references/subproject-items', module: 'References - Subproject Items' }
         ]
     },
     {
         id: 'references-commodity',
         label: 'Commodity References',
         pages: [
-            { id: 'references-crops', label: 'Crop', page: 'Crop Reference', route: '/references/crops' },
-            { id: 'references-livestock', label: 'Livestock', page: 'Livestock Reference', route: '/references/livestock' }
+            { id: 'references-crops', label: 'Crop', page: 'Crop Reference', route: '/references/crops', module: 'References - Crops' },
+            { id: 'references-livestock', label: 'Livestock', page: 'Livestock Reference', route: '/references/livestock', module: 'References - Livestock' }
         ]
     },
     {
         id: 'references-intervention',
         label: 'Intervention References',
         pages: [
-            { id: 'references-agricultural-inputs', label: 'Agricultural Inputs', page: 'Agricultural Input Reference', route: '/references/agricultural-inputs' },
-            { id: 'references-equipment', label: 'Equipment', page: 'Equipment Reference', route: '/references/equipment' },
-            { id: 'references-infrastructure', label: 'Infrastructure', page: 'Infrastructure Reference', route: '/references/infrastructure' },
-            { id: 'references-training', label: 'Training', page: 'Training Reference', route: '/references/training' }
+            { id: 'references-agricultural-inputs', label: 'Agricultural Inputs', page: 'Agricultural Input Reference', route: '/references/agricultural-inputs', module: 'References - Agricultural Inputs' },
+            { id: 'references-equipment', label: 'Equipment', page: 'Equipment Reference', route: '/references/equipment', module: 'References - Equipment' },
+            { id: 'references-infrastructure', label: 'Infrastructure', page: 'Infrastructure Reference', route: '/references/infrastructure', module: 'References - Infrastructure' },
+            { id: 'references-training', label: 'Training', page: 'Training Reference', route: '/references/training', module: 'References - Training' }
         ]
     },
     {
         id: 'references-policy',
         label: 'Policy References',
         pages: [
-            { id: 'references-gida', label: 'GIDA Areas', page: 'GIDA', route: '/references/gida-areas' },
-            { id: 'references-elcac', label: 'ELCAC Areas', page: 'ELCAC', route: '/references/elcac-areas' }
+            { id: 'references-gida', label: 'GIDA Areas', page: 'GIDA', route: '/references/gida-areas', module: 'References - GIDA Areas' },
+            { id: 'references-elcac', label: 'ELCAC Areas', page: 'ELCAC', route: '/references/elcac-areas', module: 'References - ELCAC Areas' }
         ]
     }
 ];
@@ -142,7 +147,7 @@ const pageToNavigationItem = <TPage extends string>(
     title: page.sidebarLabel ? page.label : undefined,
     kind: 'link',
     href: page.route,
-    module,
+    module: page.module || module,
     activeMatchPaths: page.activeMatchPaths
 });
 
@@ -221,6 +226,11 @@ const resolvePage = <TPage extends string>(
     _role?: string | null
 ) => pages.find(page => page.route === path) || pages[0];
 
+const resolvePageIncludingDetails = <TPage extends string>(
+    pages: readonly RoutePageDefinition<TPage>[],
+    path: string,
+) => pages.find(page => page.route === path || page.activeMatchPaths?.includes(path)) || pages[0];
+
 export const isDashboardPagePath = (path: string) => path === '/dashboards' || path.startsWith('/dashboards/');
 
 const programManagementDetailPaths = new Set(programManagementPages.flatMap(page => page.activeMatchPaths || []));
@@ -233,6 +243,9 @@ export const isReferencePagePath = (path: string) => path === '/references' || p
 export const resolveDashboardPage = (path: string, role?: string | null) => resolvePage(dashboardPages, path, role);
 export const resolveProgramManagementPage = (path: string) => resolvePage(programManagementPages, path);
 export const resolveReferencePage = (path: string) => resolvePage(referencePages, path);
+export const getDashboardPermissionModule = (path: string) => resolvePageIncludingDetails(dashboardPages, path).module || 'Dashboards';
+export const getProgramManagementPermissionModule = (path: string) => resolvePageIncludingDetails(programManagementPages, path).module || 'Program Management';
+export const getReferencePermissionModule = (path: string) => resolvePageIncludingDetails(referencePages, path).module || 'References';
 
 export const getCanonicalModuleRoute = (path: string, role?: string | null): string | null => {
     if (isDashboardPagePath(path)) return resolveDashboardPage(path, role).route;

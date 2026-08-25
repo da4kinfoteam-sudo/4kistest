@@ -6,7 +6,6 @@ import { supabase } from '../../supabaseClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLogAction } from '../../hooks/useLogAction';
 import useLocalStorageState from '../../hooks/useLocalStorageState';
-import { useUserAccess } from '../mainfunctions/TableHooks';
 import { DataTablePagination, KpiCard, LoadingState, SortableTableHeader } from '../ui/enterprise';
 import { ColumnFilterDialog, MajorTableToolbar, TableColumnFilters, TruncatedTableCell } from '../ui/MajorDataTable';
 import { getLodEffectiveState, LodEffectiveStateKind } from '../../lib/lodScoring';
@@ -144,7 +143,6 @@ const parseAdminOverrideSelection = (value: string): LodAdminOverrideSelection |
 
 const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     const { currentUser, getVisibilityScope, hasAccess } = useAuth();
-    const { canManage } = useUserAccess('Level of Development');
     const { logAction } = useLogAction();
     const visibilityScope = getVisibilityScope('Level of Development');
     const ownRegion = currentUser?.operatingUnit ? ouToRegionMap[currentUser.operatingUnit] : '';
@@ -156,7 +154,13 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     const [loadError, setLoadError] = useState('');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [importReport, setImportReport] = useState<ImportResultRow[] | null>(null);
-    const canOverride = hasAccess('Level of Development', 'manage_settings');
+    const canManageController = hasAccess('Level of Development', 'manage_controller');
+    const canSetManualLevel = hasAccess('Level of Development', 'set_manual_level');
+    const canBulkAction = hasAccess('Level of Development', 'bulk_action');
+    const canInlineEdit = hasAccess('Level of Development', 'inline_edit');
+    const canImport = hasAccess('Level of Development', 'import');
+    const canExport = hasAccess('Level of Development', 'export');
+    const canOverride = canSetManualLevel;
     const [isControllerOpen, setIsControllerOpen] = useState(false);
     const [controllerSettings, setControllerSettings] = useState<LodControllerSettings>({
         year: filters.year,
@@ -351,11 +355,11 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     }, [selectedOnPage, paginatedIpos.length]);
 
     useEffect(() => {
-        if (canOverride) return;
+        if (canOverride && canManageController) return;
         setControllerSettings(previous => ({ ...previous, bulkSelection: false, inlineEditing: false }));
         setSelectedIpoIds(new Set());
         setInlineEditingIpoId(null);
-    }, [canOverride]);
+    }, [canManageController, canOverride]);
 
     const requestSort = (key: string) => updateFilters({
         sortKey: key,
@@ -363,6 +367,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     });
 
     const openController = () => {
+        if (!canManageController) return;
         const next = {
             ...controllerSettings,
             year: filters.year,
@@ -372,6 +377,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     };
 
     const saveController = () => {
+        if (!canManageController) return;
         setControllerSettings(controllerDraft);
         if (!controllerDraft.bulkSelection) setSelectedIpoIds(new Set());
         if (!controllerDraft.inlineEditing) setInlineEditingIpoId(null);
@@ -493,7 +499,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     const activeFilterCount = [filters.ou, filters.region, filters.effectiveState, filters.year !== new Date().getFullYear() ? String(filters.year) : ''].filter(Boolean).length;
 
     const handleExport = () => {
-        if (!canManage) return;
+        if (!canExport) return;
         const XLSX = (window as any).XLSX;
         if (!XLSX) {
             setLoadError('Excel library not loaded. Please refresh the page.');
@@ -517,7 +523,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
     };
 
     const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (!canManage || !supabase) return;
+        if (!canImport || !canBulkAction || !canSetManualLevel || !supabase) return;
         const file = event.target.files?.[0];
         const XLSX = (window as any).XLSX;
         if (!file || !XLSX) return;
@@ -606,11 +612,11 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
 
             <header className="data-list-header lod-list-header">
                 <h2 className="data-list-title">Level of Development</h2>
-                {canManage && (
+                {(canExport || (canImport && canBulkAction && canSetManualLevel)) && (
                     <div className="data-list-header__actions">
-                        <button type="button" onClick={handleExport} className="btn btn-secondary"><Download aria-hidden="true" /> Export / Template</button>
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn-primary"><Upload aria-hidden="true" /> Import</button>
-                        <input ref={fileInputRef} type="file" className="hidden" accept=".xlsx,.xls" onChange={handleImport} />
+                        {canExport && <button type="button" onClick={handleExport} className="btn btn-secondary"><Download aria-hidden="true" /> Export / Template</button>}
+                        {canImport && canBulkAction && canSetManualLevel && <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn-primary"><Upload aria-hidden="true" /> Import</button>}
+                        {canImport && canBulkAction && canSetManualLevel && <input ref={fileInputRef} type="file" className="hidden" accept=".xlsx,.xls" onChange={handleImport} />}
                     </div>
                 )}
             </header>
@@ -629,9 +635,9 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                     searchPlaceholder="Search IPOs by name or region..."
                     activeFilterCount={activeFilterCount}
                     onOpenFilters={() => setIsFilterOpen(true)}
-                    filterActions={canOverride ? (
+                    filterActions={canManageController ? (
                         <button type="button" className="btn btn-secondary" onClick={openController}>
-                            <Settings2 aria-hidden="true" /> Super Admin Controls
+                            <Settings2 aria-hidden="true" /> LOD Controls
                         </button>
                     ) : undefined}
                 />
@@ -642,7 +648,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                         <p>{overrideFeedback.message}</p>
                     </div>
                 )}
-                {canOverride && controllerSettings.bulkSelection && selectedIpoIds.size > 0 && (
+                {canOverride && canBulkAction && controllerSettings.bulkSelection && selectedIpoIds.size > 0 && (
                     <div className="lod-bulk-action-bar" role="region" aria-label="LOD bulk actions">
                         <span><strong>{selectedIpoIds.size}</strong> selected</span>
                         <div>
@@ -658,7 +664,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                         <div className="data-table-scroll">
                             <table className="data-table lod-major-table">
                                 <thead><tr>
-                                    {canOverride && controllerSettings.bulkSelection && (
+                                    {canOverride && canBulkAction && controllerSettings.bulkSelection && (
                                         <th className="lod-selection-column">
                                             <input
                                                 ref={pageSelectionRef}
@@ -677,7 +683,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                 <tbody>
                                     {paginatedIpos.map(ipo => (
                                         <tr key={ipo.id} className="data-table__row--interactive" onClick={() => onSelectIpo(ipo, filters.year)}>
-                                            {canOverride && controllerSettings.bulkSelection && (
+                                            {canOverride && canBulkAction && controllerSettings.bulkSelection && (
                                                 <td className="lod-selection-column" onClick={event => event.stopPropagation()}>
                                                     <input
                                                         type="checkbox"
@@ -692,10 +698,10 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                             <td><TruncatedTableCell value={ipo.region} /></td>
                                             {displayYears.map(year => {
                                                 const state = getLodEffectiveState(getAssessment(ipo.id, year));
-                                                const canInlineEdit = canOverride && controllerSettings.inlineEditing && controllerSettings.year === year;
+                                                const canInlineEditCell = canOverride && canInlineEdit && controllerSettings.inlineEditing && controllerSettings.year === year;
                                                 return (
                                                     <td key={year} className="data-table__numeric" onClick={event => event.stopPropagation()}>
-                                                        {canInlineEdit && inlineEditingIpoId === Number(ipo.id) ? (
+                                                        {canInlineEditCell && inlineEditingIpoId === Number(ipo.id) ? (
                                                             <select
                                                                 autoFocus
                                                                 className="form-control lod-inline-level-select"
@@ -716,9 +722,9 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                                         ) : (
                                                             <button
                                                                 type="button"
-                                                                className={`lod-assessment-link ${canInlineEdit ? 'is-inline-editable' : ''}`}
-                                                                onClick={() => canInlineEdit ? setInlineEditingIpoId(Number(ipo.id)) : onSelectIpo(ipo, year)}
-                                                                aria-label={canInlineEdit ? `Edit ${ipo.name} LOD for ${year}` : `Open ${ipo.name} assessment for ${year}`}
+                                                                className={`lod-assessment-link ${canInlineEditCell ? 'is-inline-editable' : ''}`}
+                                                                onClick={() => canInlineEditCell ? setInlineEditingIpoId(Number(ipo.id)) : onSelectIpo(ipo, year)}
+                                                                aria-label={canInlineEditCell ? `Edit ${ipo.name} LOD for ${year}` : `Open ${ipo.name} assessment for ${year}`}
                                                             >
                                                                 {state.label}
                                                             </button>
@@ -728,7 +734,7 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                                             })}
                                         </tr>
                                     ))}
-                                    {paginatedIpos.length === 0 && <tr><td className="data-table__empty-cell" colSpan={displayYears.length + 2 + (canOverride && controllerSettings.bulkSelection ? 1 : 0)}>No IPOs match the current LOD filters.</td></tr>}
+                                    {paginatedIpos.length === 0 && <tr><td className="data-table__empty-cell" colSpan={displayYears.length + 2 + (canOverride && canBulkAction && controllerSettings.bulkSelection ? 1 : 0)}>No IPOs match the current LOD filters.</td></tr>}
                                 </tbody>
                             </table>
                         </div>
@@ -745,12 +751,12 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                 )}
             </div>
 
-            {isControllerOpen && canOverride && (
+            {isControllerOpen && canManageController && (
                 <div className="modal-backdrop" role="presentation" onMouseDown={() => setIsControllerOpen(false)}>
                     <section className="modal-card lod-controller-modal" role="dialog" aria-modal="true" aria-labelledby="lod-controller-title" onMouseDown={event => event.stopPropagation()}>
                         <header className="modal-card__header">
-                            <div><h3 id="lod-controller-title">Super Admin Controls</h3><p>Configure manual LOD editing for this table.</p></div>
-                            <button type="button" className="modal-card__close" onClick={() => setIsControllerOpen(false)} aria-label="Close Super Admin controls"><X aria-hidden="true" /></button>
+                            <div><h3 id="lod-controller-title">LOD Controls</h3><p>Configure the authorized manual LOD tools for this table.</p></div>
+                            <button type="button" className="modal-card__close" onClick={() => setIsControllerOpen(false)} aria-label="Close LOD controls"><X aria-hidden="true" /></button>
                         </header>
                         <div className="modal-card__body lod-controller-form">
                             <label className="form-field">
@@ -761,11 +767,11 @@ const LODPage: React.FC<LODPageProps> = ({ onSelectIpo }) => {
                             </label>
                             <label className="lod-controller-toggle">
                                 <span><strong>Enable bulk selection</strong><small>Select IPOs and apply one manual level.</small></span>
-                                <input type="checkbox" className="form-checkbox" checked={controllerDraft.bulkSelection} onChange={event => setControllerDraft(previous => ({ ...previous, bulkSelection: event.target.checked }))} />
+                                <input type="checkbox" className="form-checkbox" checked={controllerDraft.bulkSelection && canBulkAction} disabled={!canBulkAction} onChange={event => setControllerDraft(previous => ({ ...previous, bulkSelection: event.target.checked }))} />
                             </label>
                             <label className="lod-controller-toggle">
                                 <span><strong>Enable inline LOD editing</strong><small>Click a value in the override-year column.</small></span>
-                                <input type="checkbox" className="form-checkbox" checked={controllerDraft.inlineEditing} onChange={event => setControllerDraft(previous => ({ ...previous, inlineEditing: event.target.checked }))} />
+                                <input type="checkbox" className="form-checkbox" checked={controllerDraft.inlineEditing && canInlineEdit} disabled={!canInlineEdit} onChange={event => setControllerDraft(previous => ({ ...previous, inlineEditing: event.target.checked }))} />
                             </label>
                             <label className="form-field">
                                 <span className="form-label">Default override reason <small>(optional)</small></span>

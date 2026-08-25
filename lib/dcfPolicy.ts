@@ -41,9 +41,9 @@ export const DCF_POLICY_ROLES: UserRole[] = ['Super Admin', 'Administrator', 'Ma
 export const DCF_MODULES: Array<{ key: DcfModuleKey; label: string; moduleName: string; statuses: DcfPolicyStatus[] }> = [
     { key: 'subprojects', label: 'Subprojects', moduleName: 'Subprojects', statuses: ['Proposed', 'Ongoing', 'Completed', 'Cancelled'] },
     { key: 'activities', label: 'Activities / Trainings', moduleName: 'Activities', statuses: ['Proposed', 'Ongoing', 'Completed', 'Cancelled'] },
-    { key: 'office_requirements', label: 'Office Requirements', moduleName: 'Program Management', statuses: ['Proposed', 'Ongoing', 'Completed', 'Cancelled'] },
-    { key: 'staffing_requirements', label: 'Staffing Requirements', moduleName: 'Program Management', statuses: ['Proposed', 'Filled', 'Unfilled'] },
-    { key: 'other_program_expenses', label: 'Other Program Expenses', moduleName: 'Program Management', statuses: ['Proposed', 'Ongoing', 'Completed', 'Cancelled'] },
+    { key: 'office_requirements', label: 'Office Requirements', moduleName: 'Program Management - Office Requirements', statuses: ['Proposed', 'Ongoing', 'Completed', 'Cancelled'] },
+    { key: 'staffing_requirements', label: 'Staffing Requirements', moduleName: 'Program Management - Staffing Requirements', statuses: ['Proposed', 'Filled', 'Unfilled'] },
+    { key: 'other_program_expenses', label: 'Other Program Expenses', moduleName: 'Program Management - Other Program Expenses', statuses: ['Proposed', 'Ongoing', 'Completed', 'Cancelled'] },
 ];
 
 export const DCF_POLICY_ACTIONS: Array<{ key: DcfPolicyAction; label: string; shortLabel: string }> = [

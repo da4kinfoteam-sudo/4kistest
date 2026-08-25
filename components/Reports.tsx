@@ -1,7 +1,7 @@
 
 // Author: 4K 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Subproject, Training, OtherActivity, IPO, OfficeRequirement, StaffingRequirement, OtherProgramExpense, Deadline, tiers, fundTypes, operatingUnits, ouToRegionMap, filterYears } from '../constants';
+import { Subproject, Training, OtherActivity, IPO, OfficeRequirement, StaffingRequirement, OtherProgramExpense, Deadline, tiers, fundTypes, operatingUnits, ouToRegionMap, filterYears, reportPermissionModuleByTab } from '../constants';
 import WFPReport from './reports/WFPReport';
 import BPFormsReport from './reports/BPFormsReport';
 import BEDSReport from './reports/BEDSReport';
@@ -92,9 +92,11 @@ const Reports: React.FC<ReportsProps> = ({
     onReportStateChange,
 }) => {
     const { currentUser, getVisibilityScope, hasAccess } = useAuth();
-    const visibilityScope = getVisibilityScope('Reports');
+    const activeReportModule = reportPermissionModuleByTab[reportState.activeTab] || 'Reports';
+    const visibilityScope = getVisibilityScope(activeReportModule);
     const isLockedToOwnOu = visibilityScope === 'Own OU';
-    const canViewFinancialAudit = hasAccess('Reports', 'manage_settings');
+    const canViewFinancialAudit = hasAccess('Report - Financial Audit', 'view');
+    const canExportActiveReport = hasAccess(activeReportModule, 'export');
 
     const {
         activeTab,
@@ -202,12 +204,6 @@ const Reports: React.FC<ReportsProps> = ({
         if (isLockedToOwnOu || Array.isArray(reportState.selectedOus)) return;
         updateReportState({ selectedOus: operatingUnits, selectedOu: 'All' });
     }, [isLockedToOwnOu, reportState.selectedOus, updateReportState]);
-
-    useEffect(() => {
-        if (!canViewFinancialAudit && activeTab === 'Financial Audit') {
-            updateReportState({ activeTab: 'WFP' });
-        }
-    }, [activeTab, canViewFinancialAudit, updateReportState]);
 
     useEffect(() => {
         const handleAfterPrint = () => {
@@ -318,7 +314,7 @@ const Reports: React.FC<ReportsProps> = ({
         };
     }, [allOusSelected, selectedOus, targetRegions, selectedTier, subprojects, ipos, trainings, otherActivities, officeReqs, staffingReqs, otherProgramExpenses]);
 
-    const reportTabs: { tabName: ReportTab; label: string }[] = [
+    const allReportTabs: { tabName: ReportTab; label: string }[] = [
         { tabName: 'WFP', label: 'WFP' },
         { tabName: 'BP Forms', label: 'BP Forms' },
         { tabName: 'BEDS', label: 'BEDS' },
@@ -327,8 +323,14 @@ const Reports: React.FC<ReportsProps> = ({
         { tabName: 'Budget Utilization Report', label: 'Budget Utilization' },
         { tabName: 'Monthly Matrix', label: 'Monthly Matrix' },
         { tabName: 'Detailed Accomplishment Data', label: 'Detailed Accomplishment Data' },
-        ...(canViewFinancialAudit ? [{ tabName: 'Financial Audit' as ReportTab, label: 'Financial Audit' }] : []),
+        { tabName: 'Financial Audit', label: 'Financial Audit' },
     ];
+    const reportTabs = allReportTabs.filter(({ tabName }) => hasAccess(reportPermissionModuleByTab[tabName], 'view'));
+
+    useEffect(() => {
+        if (reportTabs.length === 0 || reportTabs.some(tab => tab.tabName === activeTab)) return;
+        updateReportState({ activeTab: reportTabs[0].tabName });
+    }, [activeTab, reportTabs, updateReportState]);
 
     const TabButton: React.FC<{ tabName: ReportTab; label: string; }> = ({ tabName, label }) => {
         const isActive = activeTab === tabName;
@@ -362,6 +364,10 @@ const Reports: React.FC<ReportsProps> = ({
     };
 
     const handleRequestPrint = (request: ReportPrintRequest) => {
+        if (!canExportActiveReport) {
+            setPrintError('You do not have permission to print or export this report.');
+            return;
+        }
         setPrintError('');
         setPendingPrintRequest({
             ...request,
@@ -370,6 +376,10 @@ const Reports: React.FC<ReportsProps> = ({
     };
 
     const handleRequestExport = (request: ReportExcelRequest) => {
+        if (!canExportActiveReport) {
+            setPrintError('You do not have permission to print or export this report.');
+            return;
+        }
         setPrintError('');
         const fileName = request.fileName.replace(/_(All|All_OUs|NPMO|RPMO[^.]*)\.xlsx$/i, `_${selectedOuFileToken}.xlsx`);
         setPendingExcelRequest({

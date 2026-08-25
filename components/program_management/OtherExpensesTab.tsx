@@ -70,11 +70,12 @@ interface OtherExpensesTabProps {
 }
 
 export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setItems, uacsCodes, onSelect }) => {
-    const { currentUser, hasAccess } = useAuth();
+    const { currentUser, getAccessDecision, hasAccess } = useAuth();
+    const hasWorkflowBypass = getAccessDecision('Program Management - Other Program Expenses', 'edit').source === 'super_admin_invariant';
     const [submitIntent, setSubmitIntent] = useState<'draft' | 'submit'>('submit');
     const tableStoragePrefix = `programManagement_other_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
-    const { canEdit, canViewAll } = useUserAccess('Program Management');
+    const { canEdit, canViewAll } = useUserAccess('Program Management - Other Program Expenses');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
     
     // Local State
@@ -586,8 +587,8 @@ export const OtherExpensesTab: React.FC<OtherExpensesTabProps> = ({ items, setIt
         return <span className={classes}>{status || 'DRAFT'}</span>;
     };
 
-    const canApprove = () => hasAccess('Program Management', 'approve');
-    const canSubmitWorkflow = (item: OtherProgramExpense) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+    const canApprove = () => hasAccess('Program Management - Other Program Expenses', 'approve');
+    const canSubmitWorkflow = (item: OtherProgramExpense) => ['DRAFT', 'REJECTED'].includes(item.workflow_status || 'DRAFT') && (item.created_by_user_id === currentUser?.id || hasWorkflowBypass);
     const handleSubmitWorkflow = async (item: OtherProgramExpense, event: React.MouseEvent) => { event.stopPropagation(); try { const result = await transitionWorkflow('other_program_expenses', item.id, item.workflow_status === 'REJECTED' ? 'resubmit' : 'submit'); setItems(previous => previous.map(row => row.id === item.id ? { ...row, ...result } : row)); } catch (error: any) { alert('Failed to submit: ' + (error?.message || 'Unknown error')); } };
 
     const handleApprove = async (id: number, e: React.MouseEvent) => {

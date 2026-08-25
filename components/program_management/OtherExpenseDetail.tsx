@@ -34,7 +34,7 @@ const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 const OtherExpenseDetail: React.FC<OtherExpenseDetailProps> = ({ item, uacsCodes, onUpdate }) => {
     const { currentUser } = useAuth();
-    const { canEdit } = useUserAccess('Program Management');
+    const { canEdit } = useUserAccess('Program Management - Other Program Expenses');
     const { logAction } = useLogAction();
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
     const detailsDecision = getStatusDecision({

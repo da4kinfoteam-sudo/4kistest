@@ -75,7 +75,8 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
     externalFilters, onClearExternalFilters,
     onDataScopeChange
 }) => {
-    const { currentUser, hasAccess } = useAuth();
+    const { currentUser, getAccessDecision, hasAccess } = useAuth();
+    const hasWorkflowBypass = getAccessDecision('Activities', 'edit').source === 'super_admin_invariant';
     const tableStoragePrefix = `activities_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { addIpoHistory } = useIpoHistory();
@@ -527,7 +528,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
 
     const canApprove = () => hasAccess('Activities', 'approve');
     const canSubmitWorkflow = (activity: Activity) => ['DRAFT', 'REJECTED'].includes(activity.workflow_status || 'DRAFT')
-        && (activity.created_by_user_id === currentUser?.id || currentUser?.role === 'Super Admin');
+        && (activity.created_by_user_id === currentUser?.id || hasWorkflowBypass);
 
     const handleSubmitWorkflow = async (activity: Activity, event: React.MouseEvent) => {
         event.stopPropagation();

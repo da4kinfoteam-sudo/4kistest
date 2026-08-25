@@ -72,7 +72,13 @@ Deno.serve(async request => {
     };
 
     const syncWorkflowAssignments = async (profileUserId: number, profile: any) => {
-      const modules = ['Subprojects', 'Activities', 'Program Management'];
+      const modules = [
+        'Subprojects',
+        'Activities',
+        'Program Management - Office Requirements',
+        'Program Management - Staffing Requirements',
+        'Program Management - Other Program Expenses',
+      ];
       if (!profile.requires_approver || !profile.approver_id) {
         const { error } = await admin.from('workflow_assignments').update({ active: false, updated_at: new Date().toISOString() }).eq('submitter_user_id', profileUserId).in('module', modules);
         if (error) throw error;

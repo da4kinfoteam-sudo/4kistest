@@ -18,6 +18,7 @@ const user = (role, overrides = {}) => ({
   ...overrides,
 });
 const rule = (role, action, allowed, visibility_scope = 'Own OU') => ({ role, module: 'Subprojects', action, allowed, visibility_scope });
+const moduleRule = (role, module, action, allowed, visibility_scope = 'Own OU') => ({ role, module, action, allowed, visibility_scope });
 
 const superDecision = resolveAccessDecision({
   user: user('Super Admin'), module: 'Subprojects', action: 'delete', roleRules: [], userRules: [], userScopes: [], recordOperatingUnit: 'NPMO',
@@ -49,6 +50,41 @@ const missingView = resolveAccessDecision({
 });
 assert.equal(missingView.allowed, false);
 assert.equal(missingView.source, 'missing_policy');
+
+const childPageDeny = resolveAccessDecision({
+  user: user('Administrator'), module: 'Dashboard - Financial', action: 'view',
+  roleRules: [
+    moduleRule('Administrator', 'Dashboards', 'view', true, 'All OUs'),
+    moduleRule('Administrator', 'Dashboard - Financial', 'view', false, 'All OUs'),
+  ],
+  userRules: [], userScopes: [],
+});
+assert.equal(childPageDeny.allowed, false);
+assert.equal(childPageDeny.source, 'role_default');
+
+const childOverrideWins = resolveAccessDecision({
+  user: user('Administrator'), module: 'Program Management - Office Requirements', action: 'edit_financial_actual',
+  roleRules: [
+    moduleRule('Administrator', 'Program Management - Office Requirements', 'view', true, 'All OUs'),
+    moduleRule('Administrator', 'Program Management - Office Requirements', 'edit_financial_actual', false, 'All OUs'),
+  ],
+  userRules: [{ user_id: 10, module: 'Program Management - Office Requirements', action: 'edit_financial_actual', effect: 'allow' }],
+  userScopes: [],
+});
+assert.equal(childOverrideWins.allowed, true);
+assert.equal(childOverrideWins.source, 'user_override');
+
+const childViewDenyBlocksAction = resolveAccessDecision({
+  user: user('Administrator'), module: 'Report - BAR1', action: 'export',
+  roleRules: [
+    moduleRule('Administrator', 'Report - BAR1', 'view', true, 'All OUs'),
+    moduleRule('Administrator', 'Report - BAR1', 'export', true, 'All OUs'),
+  ],
+  userRules: [{ user_id: 10, module: 'Report - BAR1', action: 'view', effect: 'deny' }],
+  userScopes: [],
+});
+assert.equal(childViewDenyBlocksAction.allowed, false);
+assert.equal(childViewDenyBlocksAction.source, 'user_override');
 
 const policy = normalizeDcfPolicySettings(undefined);
 assert.equal(canEditDcfSection({ user: user('Focal - User'), hasModuleAccess: true, policy, moduleKey: 'subprojects', status: 'Completed', action: 'editFinancialAccomplishment' }).allowed, true);
