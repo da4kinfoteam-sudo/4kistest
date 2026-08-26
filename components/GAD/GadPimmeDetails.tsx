@@ -29,6 +29,9 @@ interface Props {
     operatingUnit: string;
     initialYear: number;
     canEdit: boolean;
+    canViewFiles: boolean;
+    canUploadFiles: boolean;
+    canDeleteFiles: boolean;
     onBack: () => void;
     onSelectYear: (year: number) => void;
 }
@@ -56,8 +59,10 @@ const EvidencePanel: React.FC<{
     operatingUnit: string;
     year: number;
     questionKey: string;
-    canEdit: boolean;
-}> = ({ operatingUnit, year, questionKey, canEdit }) => {
+    canViewFiles: boolean;
+    canUploadFiles: boolean;
+    canDeleteFiles: boolean;
+}> = ({ operatingUnit, year, questionKey, canViewFiles, canUploadFiles, canDeleteFiles }) => {
     const { currentUser } = useAuth();
     const { logAction } = useLogAction();
     const [open, setOpen] = useState(false);
@@ -75,7 +80,7 @@ const EvidencePanel: React.FC<{
         catch (loadError: any) { setError(loadError?.message || 'Unable to load evidence files.'); }
         finally { setLoading(false); }
     };
-    useEffect(() => { if (open) load(); }, [open, operatingUnit, year, questionKey]);
+    useEffect(() => { if (open && canViewFiles) load(); }, [open, canViewFiles, operatingUnit, year, questionKey]);
 
     const uploadFiles = async (selected: FileList | File[]) => {
         const nextFiles = Array.from(selected);
@@ -121,17 +126,17 @@ const EvidencePanel: React.FC<{
             <Paperclip aria-hidden="true" /> Evidence {files.length ? `(${files.length})` : ''}
         </button>
         {open && <div className="gad-pimme-evidence__body">
-            {canEdit && <button type="button" className="btn btn-secondary btn-compact gad-pimme-evidence__upload" onClick={() => setUploadOpen(true)}><Upload aria-hidden="true" /> Upload evidence</button>}
+            {canUploadFiles && <button type="button" className="btn btn-secondary btn-compact gad-pimme-evidence__upload" onClick={() => setUploadOpen(true)}><Upload aria-hidden="true" /> Upload evidence</button>}
             {error && <p className="form-error" role="alert">{error}</p>}
-            {loading ? <span className="text-muted">Loading evidence...</span> : files.map(file => <div className="gad-pimme-evidence__file" key={file.id}>
+            {!canViewFiles ? <span className="text-muted">Evidence viewing is not enabled for your account.</span> : loading ? <span className="text-muted">Loading evidence...</span> : files.map(file => <div className="gad-pimme-evidence__file" key={file.id}>
                 <FileText aria-hidden="true" />
                 <span><strong>{file.file_name}</strong><small>{file.mime_type || 'File'} · {formatGadPimmeFileSize(file.file_size)} · {file.uploaded_by_name || 'Unknown uploader'} · {new Date(file.uploaded_at).toLocaleDateString()}</small></span>
                 <a className="icon-btn" href={file.web_content_link || file.web_view_link || '#'} target="_blank" rel="noreferrer" aria-label={`Download ${file.file_name}`}><Download aria-hidden="true" /></a>
-                {canEdit && <button type="button" className="icon-btn icon-btn--danger" onClick={() => remove(file)} aria-label={`Delete ${file.file_name}`}><Trash2 aria-hidden="true" /></button>}
+                {canDeleteFiles && <button type="button" className="icon-btn icon-btn--danger" onClick={() => remove(file)} aria-label={`Delete ${file.file_name}`}><Trash2 aria-hidden="true" /></button>}
             </div>)}
-            {!loading && !files.length && <span className="text-muted">No evidence files uploaded.</span>}
+            {canViewFiles && !loading && !files.length && <span className="text-muted">No evidence files uploaded.</span>}
         </div>}
-        {uploadOpen && canEdit && <div className="modal-backdrop" role="presentation" onMouseDown={() => !uploading && setUploadOpen(false)}>
+        {uploadOpen && canUploadFiles && <div className="modal-backdrop" role="presentation" onMouseDown={() => !uploading && setUploadOpen(false)}>
             <section className="modal-card gad-pimme-upload-modal" role="dialog" aria-modal="true" aria-labelledby={`evidence-upload-${questionKey}`} onMouseDown={event => event.stopPropagation()}>
                 <header className="modal-card__header"><div><h3 id={`evidence-upload-${questionKey}`}>Upload evidence</h3><p>{operatingUnit} · {year} · Question {questionKey.replace(/^box\d+-/, '')}</p></div><button type="button" className="modal-card__close" disabled={uploading} onClick={() => setUploadOpen(false)} aria-label="Close evidence upload"><X aria-hidden="true" /></button></header>
                 <div className="modal-card__body">
@@ -148,7 +153,7 @@ const EvidencePanel: React.FC<{
     </div>;
 };
 
-const GadPimmeDetails: React.FC<Props> = ({ operatingUnit, initialYear, canEdit, onBack, onSelectYear }) => {
+const GadPimmeDetails: React.FC<Props> = ({ operatingUnit, initialYear, canEdit, canViewFiles, canUploadFiles, canDeleteFiles, onBack, onSelectYear }) => {
     const { currentUser } = useAuth();
     const { logAction } = useLogAction();
     const [assessment, setAssessment] = useState<GadPimmeAssessmentRecord | null>(null);
@@ -331,7 +336,7 @@ const GadPimmeDetails: React.FC<Props> = ({ operatingUnit, initialYear, canEdit,
                                                         </td>;
                                                     })}
                                                     <td className="gad-pimme-remarks-cell"><textarea rows={3} disabled={!canEdit} value={local.remarks} onChange={event => updateAnswer(question.key, { remarks: event.target.value })} placeholder="Add remarks (optional)..." aria-label={`Remarks for ${question.label}`} /></td>
-                                                    <td className="gad-pimme-evidence-cell"><EvidencePanel operatingUnit={operatingUnit} year={initialYear} questionKey={question.key} canEdit={canEdit} /></td>
+                                                    <td className="gad-pimme-evidence-cell"><EvidencePanel operatingUnit={operatingUnit} year={initialYear} questionKey={question.key} canViewFiles={canViewFiles} canUploadFiles={canUploadFiles} canDeleteFiles={canDeleteFiles} /></td>
                                                 </tr>;
                                             })}
                                         </React.Fragment>;

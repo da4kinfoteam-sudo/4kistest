@@ -123,6 +123,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
     const { canEdit: canEditPhysical } = useUserAccess('Accomplishment - Physical');
     const { getStatusDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
 
+    const canUploadDriveFiles = hasAccess('Activities', 'upload_files');
     const canDeleteDriveFiles = hasAccess('Activities', 'delete_files');
     const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
     const [driveFiles, setDriveFiles] = useState<ActivityDriveFile[]>([]);
@@ -405,7 +406,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                     description={uploadModal === 'gallery'
                         ? 'Add field photos to the Activity Gallery.'
                         : 'Upload supporting documents. These files do not appear in the Gallery.'}
-                    canUpload={canEdit}
+                    canUpload={canUploadDriveFiles}
                     isConnected={!!driveStatus?.isConnected}
                     uploadFile={uploadDriveFile}
                     onUploaded={file => setDriveFiles(current => [file, ...current])}
@@ -764,6 +765,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                             files={galleryFiles}
                             isLoading={isDriveLoading}
                             canEdit={canEdit}
+                            canUpload={canUploadDriveFiles}
                             canDelete={canDeleteDriveFiles}
                             isConnected={!!driveStatus?.isConnected}
                             getImageUrl={getActivityDriveImageUrl}
@@ -796,6 +798,7 @@ export const ActivityDetail: React.FC<ActivityDetailProps> = ({ activity, ipos, 
                             files={documentFiles}
                             isLoading={isDriveLoading}
                             canEdit={canEdit}
+                            canUpload={canUploadDriveFiles}
                             canDelete={canDeleteDriveFiles}
                             isConnected={!!driveStatus?.isConnected}
                             uploadFile={uploadDriveFile}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Info, KeyRound, Save, Shield, UserCheck, UserCog, UserMinus, Users, X } from 'lucide-react';
 import { appModules, operatingUnits, workflowPermissionModules, type User, type UserRole, type VisibilityScope } from '../../constants';
 import { useAuth } from '../../contexts/AuthContext';
@@ -38,12 +38,36 @@ const UserManagementTab: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [allUserRules, setAllUserRules] = useState<UserPermissionRule[]>([]);
 
     const canManageUsers = hasAccess('Settings - User Management', 'manage_users');
     const canManageOverrides = hasAccess('Settings - Access Control', 'manage_user_overrides');
     const canManageScopes = hasAccess('Settings - Data Scope', 'manage_user_scopes');
     const canManageSuper = hasAccess('Settings - User Management', 'manage_super_admins');
     const actorIsSuper = getAccessDecision('Settings - User Management', 'manage_users').source === 'super_admin_invariant';
+
+    useEffect(() => {
+        if (!supabase || !canManageUsers) return;
+        let cancelled = false;
+        void supabase
+            .from('authorization_user_rules')
+            .select('user_id,module,action,effect')
+            .then(({ data, error: rulesError }) => {
+                if (cancelled) return;
+                if (rulesError) {
+                    setError(rulesError.message);
+                    return;
+                }
+                setAllUserRules((data || []) as UserPermissionRule[]);
+            });
+        return () => { cancelled = true; };
+    }, [canManageUsers]);
+
+    const canUserApprove = (user: User) => user.role === 'Super Admin' || workflowPermissionModules.some(module => {
+        const override = allUserRules.find(rule => rule.user_id === user.id && rule.module === module && rule.action === 'approve');
+        if (override) return override.effect === 'allow';
+        return roleRules.some(rule => rule.role === user.role && rule.module === module && rule.action === 'approve' && rule.allowed);
+    });
 
     const allowedRoles = useMemo<UserRole[]>(() => (
         actorIsSuper
@@ -196,7 +220,7 @@ const UserManagementTab: React.FC = () => {
                 <label className="form-field"><span className="form-label">Operating Unit</span><select className="form-control" value={form.operatingUnit} onChange={event => setForm({ ...form, operatingUnit: event.target.value })}>{operatingUnits.map(unit => <option key={unit}>{unit}</option>)}</select></label>
                 <label className="form-field"><span className="form-label">Default Data Scope</span><select className="form-control" value={form.visibility_scope} onChange={event => setForm({ ...form, visibility_scope: event.target.value as VisibilityScope })}><option>Own OU</option><option>All OUs</option></select></label>
                 <label className="form-check form-field--full"><span><strong>Require workflow approval</strong><small>Use the assigned approver for workflow-enabled records.</small></span><input type="checkbox" checked={form.requires_approver} onChange={event => setForm({ ...form, requires_approver: event.target.checked, approver_id: event.target.checked ? form.approver_id : null })} /></label>
-                {form.requires_approver && <label className="form-field form-field--full"><span className="form-label">Assigned Approver</span><select className="form-control" value={form.approver_id || ''} onChange={event => setForm({ ...form, approver_id: event.target.value ? Number(event.target.value) : null })}><option value="">Administrator fallback</option>{usersList.filter(user => user.id !== editingUser?.id && user.is_active !== false && (user.role === 'Super Admin' || (user.role === 'Administrator' && workflowPermissionModules.every(module => roleRules.some(rule => rule.role === user.role && rule.module === module && rule.action === 'approve' && rule.allowed))))).map(user => <option key={user.id} value={user.id}>{user.fullName} · {user.role}</option>)}</select></label>}
+                {form.requires_approver && <label className="form-field form-field--full"><span className="form-label">Assigned Approver</span><select className="form-control" value={form.approver_id || ''} onChange={event => setForm({ ...form, approver_id: event.target.value ? Number(event.target.value) : null })}><option value="">Administrator fallback</option>{usersList.filter(user => user.id !== editingUser?.id && user.is_active !== false && canUserApprove(user)).map(user => <option key={user.id} value={user.id}>{user.fullName} · {user.role}</option>)}</select><span className="form-help">Active users with Approve capability are eligible, including Focal users. The backend creates assignments only for modules where the selected approver has capability and compatible scope; other modules use the configured Administrator fallback.</span></label>}
             </div></div><footer className="modal-card__footer"><button type="button" className="btn-secondary" onClick={() => setShowEditor(false)}>Cancel</button><button type="submit" className="btn-primary" disabled={saving}><Save className="btn-symbol" />{saving ? 'Saving…' : editingUser ? 'Save User' : 'Send Invitation'}</button></footer></form></section></div>}
 
             {showOverrides && editingUser && <div className="modal-backdrop" role="presentation"><section className="modal-card user-permissions-modal" role="dialog" aria-modal="true" aria-labelledby="override-title"><header className="modal-card__header"><div><h3 id="override-title"><UserCog className="btn-symbol" /> User Overrides</h3><p>{editingUser.fullName} · Inherit, Allow, or Deny</p></div><button type="button" onClick={() => setShowOverrides(false)} className="modal-card__close" aria-label="Close"><X /></button></header><div className="modal-card__body form-stack"><div className="form-grid"><label className="form-field"><span className="form-label">Module</span><select className="form-control" value={selectedModule} onChange={event => setSelectedModule(event.target.value)}>{appModules.map(module => <option key={module}>{module}</option>)}</select></label><label className="form-field"><span className="form-label">Module Data Scope</span><select className="form-control" value={editingUser.role === 'Super Admin' ? 'All OUs' : (moduleScopes[selectedModule] || editingUser.visibility_scope || 'Own OU')} disabled={!canManageScopes || editingUser.role === 'Super Admin'} onChange={event => setModuleScopes(previous => ({ ...previous, [selectedModule]: event.target.value as VisibilityScope }))}><option>Own OU</option><option>All OUs</option></select></label></div><div className="data-table-scroll"><table className="data-table"><thead><tr><th>Capability</th><th>Role Default</th><th>User Rule</th><th>Effective</th></tr></thead><tbody>

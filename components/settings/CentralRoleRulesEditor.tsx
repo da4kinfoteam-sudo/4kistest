@@ -48,10 +48,12 @@ const CentralRoleRulesEditor: React.FC = () => {
 
     const currentRules = useMemo(() => pending.filter(rule => rule.module === selectedModule), [pending, selectedModule]);
     const hasChanges = JSON.stringify(rules) !== JSON.stringify(pending);
+    const canEditRoleDefaults = currentUser?.role === 'Super Admin';
 
     const findRule = (role: UserRole, action: AccessAction) => currentRules.find(rule => rule.role === role && rule.action === action);
 
     const updateRule = (role: UserRole, action: AccessAction, allowed: boolean) => {
+        if (!canEditRoleDefaults) return;
         const ceiling = getProtectedRoleCeiling(role, action);
         if (role === 'Super Admin' || ceiling === false) return;
         setSaved(false);
@@ -65,6 +67,7 @@ const CentralRoleRulesEditor: React.FC = () => {
     };
 
     const updateScope = (role: UserRole, scope: Rule['visibility_scope']) => {
+        if (!canEditRoleDefaults) return;
         if (role === 'Super Admin') return;
         setPending(previous => previous.map(rule => rule.role === role && rule.module === selectedModule
             ? { ...rule, visibility_scope: scope }
@@ -72,7 +75,7 @@ const CentralRoleRulesEditor: React.FC = () => {
     };
 
     const save = async () => {
-        if (!supabase || !currentUser) return;
+        if (!supabase || !currentUser || !canEditRoleDefaults) return;
         setSaving(true);
         setError(null);
         const normalized = pending.map(rule => ({
@@ -106,19 +109,19 @@ const CentralRoleRulesEditor: React.FC = () => {
                 <div className="settings-accordion__toggle"><ShieldCheck className="btn-symbol" /><span><strong>Centralized Role Capabilities</strong><small>Every page action inherits from this matrix unless a user-specific override applies.</small></span></div>
                 <div className="settings-accordion__actions">
                     {saved && <span className="status-indicator status-indicator--success"><Check className="btn-symbol" /> Policy saved</span>}
-                    <button type="button" className="btn-secondary" disabled={!hasChanges || saving} onClick={() => setPending(rules)}>Cancel Changes</button>
-                    <button type="button" className="btn-primary" disabled={!hasChanges || saving} onClick={save}><Save className="btn-symbol" />{saving ? 'Saving...' : 'Save Policy'}</button>
+                    <button type="button" className="btn-secondary" disabled={!hasChanges || saving || !canEditRoleDefaults} onClick={() => setPending(rules)}>Cancel Changes</button>
+                    <button type="button" className="btn-primary" disabled={!hasChanges || saving || !canEditRoleDefaults} onClick={save}><Save className="btn-symbol" />{saving ? 'Saving...' : 'Save Policy'}</button>
                 </div>
             </header>
             <div className="settings-accordion__content form-stack">
                 {error && <div className="notice notice--danger"><AlertTriangle className="btn-symbol" /><div><strong>Authorization policy error</strong><p>{error}</p></div></div>}
                 <label className="form-field"><span className="form-label">Page or module</span><select className="form-control" value={selectedModule} onChange={event => setSelectedModule(event.target.value)}>{appModules.map(module => <option key={module} value={module}>{module}</option>)}</select></label>
                 <div className="data-table-scroll role-permissions-scroll"><table className="data-table role-permissions-table"><thead><tr><th className="data-table__sticky-left">Role</th><th>Data Scope</th>{ACCESS_ACTIONS.map(action => <th key={action}>{actionLabel(action)}</th>)}</tr></thead><tbody>
-                    {ROLES.map(role => <tr key={role}><td className="data-table__sticky-left data-table__cell--primary">{role}</td><td><select className="form-control form-control--compact" value={findRule(role, 'view')?.visibility_scope || (role === 'Super Admin' ? 'All OUs' : 'Own OU')} disabled={role === 'Super Admin'} onChange={event => updateScope(role, event.target.value as Rule['visibility_scope'])}><option>Own OU</option><option>All OUs</option></select></td>
-                        {ACCESS_ACTIONS.map(action => { const rule = findRule(role, action); const ceiling = getProtectedRoleCeiling(role, action); const disabled = role === 'Super Admin' || ceiling === false; const checked = role === 'Super Admin' ? true : ceiling === false ? false : !!rule?.allowed; return <td key={action}><label className={`toggle-control ${disabled ? 'is-disabled' : ''}`}><input type="checkbox" checked={checked} disabled={disabled} onChange={event => updateRule(role, action, event.target.checked)} aria-label={`${role} ${selectedModule} ${action}`} /><span className="toggle-control__track"><span /></span></label></td>; })}
+                    {ROLES.map(role => <tr key={role}><td className="data-table__sticky-left data-table__cell--primary">{role}</td><td><select className="form-control form-control--compact" value={findRule(role, 'view')?.visibility_scope || (role === 'Super Admin' ? 'All OUs' : 'Own OU')} disabled={role === 'Super Admin' || !canEditRoleDefaults} onChange={event => updateScope(role, event.target.value as Rule['visibility_scope'])}><option>Own OU</option><option>All OUs</option></select></td>
+                        {ACCESS_ACTIONS.map(action => { const rule = findRule(role, action); const ceiling = getProtectedRoleCeiling(role, action); const disabled = role === 'Super Admin' || ceiling === false || !canEditRoleDefaults; const checked = role === 'Super Admin' ? true : ceiling === false ? false : !!rule?.allowed; return <td key={action}><label className={`toggle-control ${disabled ? 'is-disabled' : ''}`}><input type="checkbox" checked={checked} disabled={disabled} onChange={event => updateRule(role, action, event.target.checked)} aria-label={`${role} ${selectedModule} ${action}`} /><span className="toggle-control__track"><span /></span></label></td>; })}
                     </tr>)}
                 </tbody></table></div>
-                <div className="notice notice--info"><div><strong>Effective hierarchy</strong><p>Super Admin is immutable allow-all. Management and Guest are immutable read-only. A specific user deny wins; all other user overrides supersede ordinary role defaults. Page view, record scope, and the requested action must all allow access.</p></div></div>
+                <div className="notice notice--info"><div><strong>Effective hierarchy</strong><p>Super Admin is immutable allow-all. Management and Guest are immutable read-only. A specific user deny wins; all other user overrides supersede ordinary role defaults. Page view, record scope, and the requested action must all allow access.</p>{!canEditRoleDefaults && <p>Role-level defaults are read-only for delegated administrators. Use User Overrides for permitted non-Super users.</p>}</div></div>
             </div>
         </section>
     );

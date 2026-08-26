@@ -817,7 +817,7 @@ const AppContent: React.FC = () => {
             ? selectedMonitoringReportContext.ipo
             : ipos.find(item => item.id === ipoId) || null;
         if (selectedActivityRecord && selectedIpoRecord) return;
-        if (!hasAccess('Activities', 'view') || !hasAccess('IPO Management', 'view')) return;
+        if (!hasAccess('Activities', 'view_monitoring') || !hasAccess('IPO Management', 'view')) return;
 
         const lookupKey = `monitoring:${activityId}:${ipoId}:${currentUser.id}`;
         if (directRouteLookupKeyRef.current === lookupKey) return;
@@ -1550,7 +1550,7 @@ const AppContent: React.FC = () => {
         if (['/trainings', '/other-activities', '/activities', '/activity-edit', '/activity-detail', '/activity-monitoring-report'].includes(routePath)) {
             if (!checkAccess('Activities')) return denied;
         }
-        if (routePath === '/activity-monitoring-report' && !checkAccess('IPO Management')) return denied;
+        if (routePath === '/activity-monitoring-report' && (!hasAccess('Activities', 'view_monitoring') || !checkAccess('IPO Management'))) return denied;
         if (routePath === '/program-management' || routePath.startsWith('/program-management/')) {
             if (!checkAccess('Program Management') || !checkAccess(getProgramManagementPermissionModule(routePath))) return denied;
         }
@@ -1747,6 +1747,9 @@ const AppContent: React.FC = () => {
                     return <DetailRouteFallback title="Activity unavailable" message="This activity was not found or is outside your visibility scope." actionLabel="Back to Activities" onAction={() => navigateTo('/activities')} />;
                 }
                 const effectiveEditMode = existingMode || activityEditMode;
+                if (effectiveEditMode === 'create' && !hasAccess('Activities', 'create')) {
+                    return <AccessDenied onBackToHome={() => navigateTo('/activities')} />;
+                }
                 if (effectiveEditMode !== 'create' && routeActivity) {
                     const activityEditDecision = effectiveEditMode === 'details'
                         ? getStatusDecision({ moduleKey: 'activities', item: routeActivity, action: 'editDetails', hasModuleAccess: hasAccess('Activities', 'edit') })
@@ -1794,6 +1797,9 @@ const AppContent: React.FC = () => {
                         />;
             }
             case '/subproject-edit':
+                if (!selectedSubproject && !hasAccess('Subprojects', 'create')) {
+                    return <AccessDenied onBackToHome={() => navigateTo('/subprojects')} />;
+                }
                 if (selectedSubproject) {
                     const subprojectEditDecision = getStatusDecision({
                         moduleKey: 'subprojects',

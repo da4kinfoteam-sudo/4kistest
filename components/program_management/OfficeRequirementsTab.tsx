@@ -79,6 +79,11 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
     const tableStoragePrefix = `programManagement_office_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Program Management - Office Requirements');
+    const permissionModule = 'Program Management - Office Requirements';
+    const canCreate = hasAccess(permissionModule, 'create');
+    const canImport = hasAccess(permissionModule, 'import');
+    const canClone = hasAccess(permissionModule, 'clone');
+    const canDelete = hasAccess(permissionModule, 'delete');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
     
     // Local State
@@ -906,9 +911,9 @@ export const OfficeRequirementsTab: React.FC<OfficeRequirementsTabProps> = ({ it
             {isMultiDeleteModalOpen && <ConfirmDialog title={`Delete ${selectedIds.length} ${selectedIds.length === 1 ? 'entry' : 'entries'}?`} description="This action cannot be undone. The selected records will be permanently removed." confirmLabel="Delete" onCancel={() => setIsMultiDeleteModalOpen(false)} onConfirm={handleMultiDelete} />}
             <ColumnFilterDialog open={isColumnFilterOpen} fields={tableFilterFields} filters={columnFilters} onApply={setColumnFilters} onClose={() => setIsColumnFilterOpen(false)} />
             <MajorTableToolbar searchTerm={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Search office requirements..." activeFilterCount={Object.keys(columnFilters).length} onOpenFilters={() => setIsColumnFilterOpen(true)} actions={isSelectionMode ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} /> : <>
-                {canEdit && <button onClick={() => setView('form')} className="btn btn-primary"><Plus aria-hidden="true" /> Add New</button>}
+                {canCreate && <button onClick={() => setView('form')} className="btn btn-primary"><Plus aria-hidden="true" /> Add New</button>}
                 <button onClick={handleDownloadReport} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
-                {canEdit && <><button onClick={handleDownloadTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button><label className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}<input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} /></label><button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple office requirements"><DuplicateIcon /> Clone</button><button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple office requirements"><TrashIcon /> Delete</button></>}
+                {(canImport || canClone || canDelete) && <>{canImport && <><button onClick={handleDownloadTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button><label className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}<input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} disabled={isUploading} /></label></>}{canClone && <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple office requirements"><DuplicateIcon /> Clone</button>}{canDelete && <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple office requirements"><TrashIcon /> Delete</button>}</>}
             </>} />
             <div className="data-table-scroll"><table className="data-table"><thead><tr>
                 {isSelectionMode && <th className="data-table__cell--selection"><SelectionCheckbox aria-label="Select all office requirements on this page" onChange={(event) => handleSelectAll(event, paginatedData)} checked={paginatedData.length > 0 && paginatedData.every(item => selectedIds.includes(item.id))} indeterminate={paginatedData.some(item => selectedIds.includes(item.id)) && !paginatedData.every(item => selectedIds.includes(item.id))} /></th>}

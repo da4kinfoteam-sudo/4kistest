@@ -74,7 +74,10 @@ const Settings: React.FC<SettingsProps> = ({
     const canManageUsers = hasAccess('Settings - User Management', 'manage_users');
     const canManageAccess = hasAccess('Settings - Access Control', 'manage_permissions');
     const canManageDrive = hasAccess('Settings - Google Drive', 'manage_settings');
-    const canManageDcf = hasAccess('Settings - DCF and Status', 'manage_settings');
+    const canManageDcfSettings = hasAccess('Settings - DCF and Status', 'manage_settings');
+    const canManageDcfStatus = hasAccess('Settings - DCF and Status', 'manage_status');
+    const canManageDcfBudget = hasAccess('Settings - Financial Accomplishment', 'manage_settings');
+    const canManageDcf = canManageDcfSettings || canManageDcfStatus || canManageDcfBudget;
     const canManageLod = hasAccess('Settings - LOD', 'manage_settings');
     const canAccessSystem = hasAccess('Settings - System', 'view');
     const canViewAudit = hasAccess('Settings - Audit and Security', 'view');
@@ -178,6 +181,8 @@ const Settings: React.FC<SettingsProps> = ({
                             setOtherProgramExpenses={setOtherProgramExpenses}
                             onSelectSubproject={onSelectSubproject}
                             onSelectActivity={onSelectActivity}
+                            canManageStatus={canManageDcfStatus}
+                            canManageBudget={canManageDcfBudget}
                         />
                     )}
 

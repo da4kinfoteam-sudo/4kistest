@@ -692,6 +692,11 @@ const ActivityEdit: React.FC<ActivityEditProps> = ({
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
+        if (mode === 'create' && !hasAccess('Activities', 'create')) {
+            alert('Create permission is required to add an activity.');
+            return;
+        }
+
         if (mode === 'accomplishment') {
             const obligationError = (formData.expenses || [])
                 .map(expense => getActualObligationValidationError(expense.obligations || []))

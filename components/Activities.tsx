@@ -89,6 +89,10 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
 
     // Shared Hooks
     const { canEdit, canViewAll } = useUserAccess('Activities');
+    const canCreate = hasAccess('Activities', 'create');
+    const canImport = hasAccess('Activities', 'import');
+    const canClone = hasAccess('Activities', 'clone');
+    const canDelete = hasAccess('Activities', 'delete');
     const {
         isSelectionMode, selectedIds, setSelectedIds, isMultiDeleteModalOpen, setIsMultiDeleteModalOpen, toggleSelectionMode,
         handleSelectAll, handleSelectRow, resetSelection
@@ -583,7 +587,7 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
 
             <div className="data-list-header">
                 <h2 className="data-list-title">{activityPageTitle}</h2>
-                {canEdit && <button onClick={onCreateActivity} className="btn btn-primary"><Plus aria-hidden="true" /> Add New Activity</button>}
+                {canCreate && <button onClick={onCreateActivity} className="btn btn-primary"><Plus aria-hidden="true" /> Add New Activity</button>}
             </div>
             <DcfScopeFilterPanel idPrefix="activities-dcf" filters={dcfFilters} />
             <div className="data-table-card major-table-card">
@@ -597,12 +601,14 @@ export const ActivitiesComponent: React.FC<ActivitiesProps> = ({
                         ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} />
                         : <>
                         <button onClick={() => downloadActivitiesReport(processedActivities)} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
-                        {canEdit && <>
+                        {(canImport || canClone || canDelete) && <>
+                        {canImport && <>
                             <button onClick={downloadActivitiesTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
                             <label htmlFor="activity-upload-major" className={`btn btn-secondary ${isUploading ? 'is-disabled' : 'cursor-pointer'}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
                             <input id="activity-upload-major" type="file" className="hidden" onChange={(event) => handleActivitiesUpload(event, activities, setActivities, ipos, logAction, setIsUploading, uacsCodes, currentUser)} accept=".xlsx,.xls" disabled={isUploading} />
-                            <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple activities"><DuplicateIcon /> Clone</button>
-                            <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple activities"><TrashIcon /> Delete</button>
+                        </>}
+                        {canClone && <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple activities"><DuplicateIcon /> Clone</button>}
+                        {canDelete && <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple activities"><TrashIcon /> Delete</button>}
                         </>}
                     </>}
                 />

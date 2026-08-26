@@ -482,6 +482,10 @@ const SubprojectEdit: React.FC<SubprojectEditProps> = ({
         
         // Final guard: only allow submission from the intended tabs
         const isNew = !subproject;
+        if (isNew && !hasAccess('Subprojects', 'create')) {
+            alert('Create permission is required to add a subproject.');
+            return;
+        }
         if (isNew && activeTab !== 'summary') {
             // If they pressed Enter, we don't want to save.
             // We just return and do nothing, letting the user use the navigation buttons.

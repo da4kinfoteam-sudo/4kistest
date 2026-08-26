@@ -29,11 +29,14 @@ export interface DcfMonthLockSettings {
 export type DcfStatusActionRules = Partial<Record<DcfPolicyAction, boolean>>;
 export type DcfModulePolicyRules = Partial<Record<DcfPolicyStatus, DcfStatusActionRules>>;
 export type DcfRolePolicyRules = Partial<Record<DcfModuleKey, DcfModulePolicyRules>>;
+export type DcfTransitionModuleRules = Partial<Record<DcfPolicyStatus, Partial<Record<DcfPolicyStatus, boolean>>>>;
+export type DcfTransitionRules = Partial<Record<DcfModuleKey, DcfTransitionModuleRules>>;
 
 export interface DcfPolicySettings {
     version: 1;
     roleRules: Partial<Record<UserRole, DcfRolePolicyRules>>;
     monthLock: DcfMonthLockSettings;
+    transitionRules: DcfTransitionRules;
 }
 
 export const DCF_POLICY_ROLES: UserRole[] = ['Super Admin', 'Administrator', 'Management', 'Focal - User', 'RFO - User', 'User', 'Guest'];
@@ -137,6 +140,32 @@ const buildDefaultRoleRules = (): DcfPolicySettings['roleRules'] => {
 export const DEFAULT_DCF_POLICY_SETTINGS: DcfPolicySettings = {
     version: 1,
     roleRules: buildDefaultRoleRules(),
+    transitionRules: {
+        subprojects: {
+            Proposed: { Ongoing: true, Cancelled: true },
+            Ongoing: { Completed: true, Cancelled: true },
+            Completed: {}, Cancelled: {},
+        },
+        activities: {
+            Proposed: { Ongoing: true, Cancelled: true },
+            Ongoing: { Completed: true, Cancelled: true },
+            Completed: {}, Cancelled: {},
+        },
+        office_requirements: {
+            Proposed: { Ongoing: true, Cancelled: true },
+            Ongoing: { Completed: true, Cancelled: true },
+            Completed: {}, Cancelled: {},
+        },
+        other_program_expenses: {
+            Proposed: { Ongoing: true, Cancelled: true },
+            Ongoing: { Completed: true, Cancelled: true },
+            Completed: {}, Cancelled: {},
+        },
+        staffing_requirements: {
+            Proposed: { Filled: true, Unfilled: true },
+            Filled: {}, Unfilled: { Filled: true },
+        },
+    },
     monthLock: {
         enabled: true,
         dateSource: 'server',
@@ -155,11 +184,24 @@ export const normalizeDcfPolicySettings = (settings: unknown): DcfPolicySettings
     const normalized: DcfPolicySettings = {
         version: 1,
         roleRules: buildDefaultRoleRules(),
+        transitionRules: DEFAULT_DCF_POLICY_SETTINGS.transitionRules,
         monthLock: {
             ...DEFAULT_DCF_POLICY_SETTINGS.monthLock,
             ...(isObject(raw.monthLock) ? raw.monthLock : {}),
         },
     };
+
+    if (isObject(raw.transitionRules)) {
+        normalized.transitionRules = Object.fromEntries(
+            DCF_MODULES.map(module => {
+                const rawModule = isObject(raw.transitionRules?.[module.key]) ? raw.transitionRules?.[module.key] : {};
+                return [module.key, Object.fromEntries(module.statuses.map(from => {
+                    const rawFrom = isObject(rawModule?.[from]) ? rawModule?.[from] : {};
+                    return [from, Object.fromEntries(module.statuses.filter(to => to !== from).map(to => [to, rawFrom?.[to] === true]))];
+                }))];
+            }),
+        ) as DcfTransitionRules;
+    }
 
     DCF_POLICY_ROLES.forEach(role => {
         const rawRoleRules = isObject(raw.roleRules?.[role]) ? raw.roleRules?.[role] : {};
@@ -358,4 +400,34 @@ export const canUseAccomplishmentMonth = ({
     }
 
     return { allowed: true, code: 'allowed', message: 'Accomplishment month is allowed by period policy.' };
+};
+
+export const getDcfTransitionValue = (
+    policy: DcfPolicySettings,
+    moduleKey: DcfModuleKey,
+    from: DcfPolicyStatus,
+    to: DcfPolicyStatus,
+): boolean => from === to || policy.transitionRules?.[moduleKey]?.[from]?.[to] === true;
+
+export const setDcfTransitionValue = (
+    policy: DcfPolicySettings,
+    moduleKey: DcfModuleKey,
+    from: DcfPolicyStatus,
+    to: DcfPolicyStatus,
+    value: boolean,
+): DcfPolicySettings => {
+    if (from === to) return policy;
+    return normalizeDcfPolicySettings({
+        ...policy,
+        transitionRules: {
+            ...policy.transitionRules,
+            [moduleKey]: {
+                ...(policy.transitionRules?.[moduleKey] || {}),
+                [from]: {
+                    ...(policy.transitionRules?.[moduleKey]?.[from] || {}),
+                    [to]: value,
+                },
+            },
+        },
+    });
 };

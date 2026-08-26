@@ -654,7 +654,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
                     if (supabase) {
                         if (newStatus !== sp.status) await transitionItemStatus('subprojects', sp.id, newStatus);
-                        await supabase.from('subprojects').update({
+                        const { error } = await supabase.from('subprojects').update({
                             actualCompletionDate: newActualCompletionDate,
                             estimatedCompletionDate: item.targetDateStart || null,
                             catchUpPlanRemarks: item.catchUpPlanRemarks || null,
@@ -665,6 +665,7 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                             physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
                             updated_at: submittedAt
                         }).eq('id', sp.id);
+                        if (error) throw error;
                     }
 
                     // Update Context
@@ -706,12 +707,13 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
                     if (supabase) {
                         if (newStatus !== sp.status) await transitionItemStatus('subprojects', sp.id, newStatus);
-                        await supabase.from('subprojects').update({
+                        const { error } = await supabase.from('subprojects').update({
                             details: normalizedUpdatedDetails,
                             actualCompletionDate: newActualCompletionDate,
                             physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
                             updated_at: submittedAt
                         }).eq('id', sp.id);
+                        if (error) throw error;
                     }
                     setSubprojects(prev => prev.map(s => s.id === sp.id ? { ...s, details: normalizedUpdatedDetails, status: newStatus, actualCompletionDate: newActualCompletionDate || undefined, physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt, updated_at: submittedAt } : s));
                 }
@@ -747,12 +749,15 @@ const PhysicalAccomplishment: React.FC<Props> = ({
 
                 if (supabase) {
                     if (newStatus !== act.status) await transitionItemStatus('activities', act.id, newStatus);
-                    await supabase.from('activities').update(payload).eq('id', act.id);
+                    const { error } = await supabase.from('activities').update(payload).eq('id', act.id);
+                    if (error) throw error;
                 }
                 setActivities(prev => prev.map(a => a.id === act.id ? { ...a, ...payload, status: newStatus } : a));
 
             } else if (item.sourceType === 'Staffing') {
                  const existing = staffingReqs.find(s => s.id === item.sourceId);
+                 if (!existing) throw new Error('Staffing requirement not found');
+                 const newHiringStatus = item.actualDateStart ? 'Filled' : 'Proposed';
                  const physicalAccomplishmentSubmittedAt = resolvePhysicalAccomplishmentSubmittedAt({
                     hasPhysicalAccomplishment: !!item.actualDateStart,
                     hasChanged: valuesDiffer(existing?.actualObligationDate, item.actualDateStart),
@@ -765,11 +770,15 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                      obligationDate: item.targetDateStart,
                      physical_accomplishment_submitted_at: physicalAccomplishmentSubmittedAt,
                      updated_at: submittedAt
-                  };
+                 };
                  if (supabase) {
-                    await supabase.from('staffing_requirements').update(payload).eq('id', item.sourceId);
+                    if (newHiringStatus !== existing.hiringStatus) {
+                        await transitionItemStatus('staffing_requirements', item.sourceId, newHiringStatus);
+                    }
+                    const { error } = await supabase.from('staffing_requirements').update(payload).eq('id', item.sourceId);
+                    if (error) throw error;
                  }
-                 setStaffingReqs(prev => prev.map(s => s.id === item.sourceId ? { ...s, ...payload } : s));
+                 setStaffingReqs(prev => prev.map(s => s.id === item.sourceId ? { ...s, ...payload, hiringStatus: newHiringStatus } : s));
 
             } else if (item.sourceType === 'Office') {
                 const existing = officeReqs.find(o => o.id === item.sourceId);
@@ -788,7 +797,8 @@ const PhysicalAccomplishment: React.FC<Props> = ({
                     updated_at: submittedAt
                 }; 
                 if (supabase) {
-                    await supabase.from('office_requirements').update(payload).eq('id', item.sourceId);
+                    const { error } = await supabase.from('office_requirements').update(payload).eq('id', item.sourceId);
+                    if (error) throw error;
                 }
                 setOfficeReqs(prev => prev.map(o => o.id === item.sourceId ? { ...o, ...payload } : o));
             }

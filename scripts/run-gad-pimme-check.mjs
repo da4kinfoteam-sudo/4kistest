@@ -94,7 +94,9 @@ assert.match(appSource, /requestAppNavigation\(currentPageRef\.current, nextPage
 assert.match(listSource, /onClick=\{event => event\.stopPropagation\(\)\}[\s\S]*onClick=\{\(\) => onSelectAssessment\(ou, year\)\}/, 'Year-cell navigation must not trigger current-year row navigation.');
 assert.match(listSource, /onClick=\{\(\) => onSelectAssessment\(ou, currentYear\)\}/, 'OU row navigation must open the current year.');
 assert.match(detailsSource, /disabled=\{!canEdit\}/, 'View-only users must not be able to change questionnaire controls.');
-assert.match(detailsSource, /canEdit && <button[^>]+gad-pimme-evidence__upload/, 'Evidence uploads must be hidden from view-only users.');
+assert.match(detailsSource, /canUploadFiles && <button[^>]+gad-pimme-evidence__upload/, 'Evidence uploads must be governed by the centralized UploadFiles capability.');
+assert.match(detailsSource, /canDeleteFiles && <button[^>]+icon-btn--danger/, 'Evidence deletion must be governed by the centralized DeleteFiles capability.');
+assert.match(detailsSource, /canViewFiles && !loading && !files\.length/, 'Evidence listing must remain independently governed by ViewFiles.');
 assert.match(detailsSource, /Uploaded GAD PIMME Evidence[\s\S]*Deleted GAD PIMME Evidence/, 'Evidence changes must write audit entries.');
 
 console.log('GAD PIMME checklist and scoring checks passed.');
