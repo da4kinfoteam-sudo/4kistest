@@ -164,6 +164,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
     const { getStatusDecision, getMonthDecision, getMonthLockMessage, isMonthSelectionAllowed, ensureDecisionAllowed } = useDcfPolicyGuard();
     const canManageStatus = hasAccess('Subprojects', 'manage_status');
     const canManageOperatingUnit = hasAccess('Subprojects', 'manage_settings');
+    const canUploadDriveFiles = hasAccess('Subprojects', 'upload_files');
     const canDeleteDriveFiles = hasAccess('Subprojects', 'delete_files');
 
     // Edit Modes: 'full' (legacy), 'details' (exclusive), 'commodity' (exclusive), 'budget' (exclusive), 'accomplishment'
@@ -2135,7 +2136,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                     description={uploadModal === 'gallery'
                         ? 'Add field photos to the Subproject Gallery.'
                         : 'Upload supporting documents. These files do not appear in the Gallery.'}
-                    canUpload={canEdit}
+                    canUpload={canUploadDriveFiles}
                     isConnected={!!driveStatus?.isConnected}
                     uploadFile={uploadDriveFile}
                     onUploaded={file => setDriveFiles(current => [file, ...current])}
@@ -2503,6 +2504,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                             files={galleryFiles}
                             isLoading={isDriveLoading}
                             canEdit={canEdit}
+                            canUpload={canUploadDriveFiles}
                             canDelete={canDeleteDriveFiles}
                             isConnected={!!driveStatus?.isConnected}
                             getImageUrl={getSubprojectDriveImageUrl}
@@ -2535,6 +2537,7 @@ const SubprojectDetail: React.FC<SubprojectDetailProps> = ({ subproject, ipos, o
                             files={documentFiles}
                             isLoading={isDriveLoading}
                             canEdit={canEdit}
+                            canUpload={canUploadDriveFiles}
                             canDelete={canDeleteDriveFiles}
                             isConnected={!!driveStatus?.isConnected}
                             uploadFile={uploadDriveFile}

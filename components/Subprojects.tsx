@@ -68,6 +68,10 @@ const Subprojects: React.FC<SubprojectsProps> = ({
     const tableStoragePrefix = `subprojects_${currentUser?.id || 'anonymous'}`;
     const { logAction } = useLogAction();
     const { canEdit, canViewAll } = useUserAccess('Subprojects');
+    const canCreate = hasAccess('Subprojects', 'create');
+    const canImport = hasAccess('Subprojects', 'import');
+    const canClone = hasAccess('Subprojects', 'clone');
+    const canDelete = hasAccess('Subprojects', 'delete');
     const { getDeleteDecision, ensureDecisionAllowed } = useDcfPolicyGuard();
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -587,7 +591,7 @@ const Subprojects: React.FC<SubprojectsProps> = ({
 
             <div className="data-list-header">
                 <h2 className="data-list-title">Subprojects Management</h2>
-                {canEdit && <button onClick={onCreateSubproject} className="btn btn-primary"><Plus aria-hidden="true" /> Add New Subproject</button>}
+                {canCreate && <button onClick={onCreateSubproject} className="btn btn-primary"><Plus aria-hidden="true" /> Add New Subproject</button>}
             </div>
             <DcfScopeFilterPanel idPrefix="subprojects-dcf" filters={dcfFilters} />
 
@@ -602,12 +606,14 @@ const Subprojects: React.FC<SubprojectsProps> = ({
                         ? <BulkSelectionBar intent={selectionIntent} count={selectedIds.length} onConfirm={() => selectionIntent === 'delete' ? setIsMultiDeleteModalOpen(true) : handleClone()} onClear={() => setSelectedIds([])} onCancel={resetSelection} />
                         : <>
                         <button onClick={() => downloadSubprojectsReport(processedSubprojects)} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
-                        {canEdit && <>
+                        {(canImport || canClone || canDelete) && <>
+                        {canImport && <>
                             <button onClick={downloadSubprojectsTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
                             <label htmlFor="subproject-upload" className={`btn btn-secondary ${isUploading ? 'is-disabled' : 'cursor-pointer'}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
                             <input id="subproject-upload" type="file" className="hidden" onChange={(e) => handleSubprojectsUpload(e, subprojects, setSubprojects, ipos, logAction, setIsUploading, uacsCodes, currentUser)} accept=".xlsx, .xls" disabled={isUploading} />
-                            <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple subprojects"><DuplicateIcon /> Clone</button>
-                            <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple subprojects"><TrashIcon /> Delete</button>
+                        </>}
+                        {canClone && <button onClick={() => handleToggleMode('clone')} className="btn btn-secondary" aria-label="Clone multiple subprojects"><DuplicateIcon /> Clone</button>}
+                        {canDelete && <button onClick={() => handleToggleMode('delete')} className="btn btn-secondary" aria-label="Delete multiple subprojects"><TrashIcon /> Delete</button>}
                         </>}
                     </>}
                 />

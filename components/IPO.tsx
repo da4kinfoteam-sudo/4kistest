@@ -70,9 +70,11 @@ const defaultFormData = {
 const registeringBodyOptions = ['SEC', 'DOLE', 'CDA'];
 
 const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onSelectIpo, onSelectSubproject, particularTypes, commodityCategories, externalFilters, onClearExternalFilters, gidaAreas, elcacAreas }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, hasAccess } = useAuth();
     const tableStoragePrefix = `ipos_${currentUser?.id || 'anonymous'}`;
     const { canEdit, canDelete } = useUserAccess('IPO Management');
+    const canCreate = hasAccess('IPO Management', 'create');
+    const canImport = hasAccess('IPO Management', 'import');
     const { logAction } = useLogAction();
     const [formData, setFormData] = useState(defaultFormData);
     const [baseRegion, setBaseRegion] = useState(''); // Track base region from dropdown
@@ -856,7 +858,7 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
             <ColumnFilterDialog open={isColumnFilterOpen} fields={ipoFilterFields} filters={dialogFilters} onApply={applyIpoFilters} onClose={() => setIsColumnFilterOpen(false)} />
             <div className="data-list-header">
                 <h2 className="data-list-title">IPO Management</h2>
-                {canEdit && <button onClick={handleAddNewClick} className="btn btn-primary"><Plus aria-hidden="true" /> Add New IPO</button>}
+                {canCreate && <button onClick={handleAddNewClick} className="btn btn-primary"><Plus aria-hidden="true" /> Add New IPO</button>}
             </div>
             <div className="data-table-card major-table-card">
                 <MajorTableToolbar
@@ -869,11 +871,13 @@ const IPOs: React.FC<IPOsProps> = ({ ipos, setIpos, subprojects, activities, onS
                         ? <BulkSelectionBar intent="delete" count={selectedIds.length} onConfirm={() => setIsMultiDeleteModalOpen(true)} onClear={() => setSelectedIds([])} onCancel={handleToggleSelectionMode} />
                         : <>
                         <button onClick={() => downloadIposReport(processedIpos)} className="btn btn-secondary"><Download aria-hidden="true" /> Export</button>
-                        {canEdit && <>
+                        {(canImport || canDelete) && <>
+                        {canImport && <>
                             <button onClick={downloadIposTemplate} className="btn btn-secondary"><FileSpreadsheet aria-hidden="true" /> Template</button>
                             <label htmlFor="ipo-upload-major" className={`btn btn-secondary ${isUploading ? 'is-disabled' : ''}`}><Upload aria-hidden="true" /> {isUploading ? 'Uploading...' : 'Import'}</label>
                             <input id="ipo-upload-major" type="file" className="hidden" onChange={(event) => handleIposUpload(event, ipos, setIpos, logAction, setIsUploading, gidaAreas, elcacAreas)} accept=".xlsx,.xls" disabled={isUploading} />
-                            {canDelete && <button onClick={handleToggleSelectionMode} className="btn btn-secondary" aria-label="Delete multiple IPOs"><TrashIcon /> Delete</button>}
+                        </>}
+                        {canDelete && <button onClick={handleToggleSelectionMode} className="btn btn-secondary" aria-label="Delete multiple IPOs"><TrashIcon /> Delete</button>}
                         </>}
                     </>}
                 />

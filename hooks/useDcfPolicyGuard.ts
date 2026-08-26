@@ -84,6 +84,26 @@ export const getDcfModuleKeyForSourceType = (sourceType?: string): DcfModuleKey 
     }
 };
 
+const getDcfModuleName = (moduleKey: DcfModuleKey): string => {
+    switch (moduleKey) {
+        case 'subprojects': return 'Subprojects';
+        case 'activities': return 'Activities';
+        case 'office_requirements': return 'Program Management - Office Requirements';
+        case 'staffing_requirements': return 'Program Management - Staffing Requirements';
+        case 'other_program_expenses': return 'Program Management - Other Program Expenses';
+    }
+};
+
+const getDcfTargetTable = (moduleKey: DcfModuleKey): string => {
+    switch (moduleKey) {
+        case 'subprojects': return 'subprojects';
+        case 'activities': return 'activities';
+        case 'office_requirements': return 'office_requirements';
+        case 'staffing_requirements': return 'staffing_requirements';
+        case 'other_program_expenses': return 'other_program_expenses';
+    }
+};
+
 export const normalizePolicyMonth = (value?: string | null): string | null => {
     if (!value) return null;
     const match = String(value).match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
@@ -136,19 +156,11 @@ export const useDcfPolicyGuard = () => {
         action: DcfPolicyAction;
         hasModuleAccess: boolean;
     }): DcfPolicyDecision => {
-        if (loading) {
-            return { allowed: false, code: 'blocked_by_status', message: 'DCF editing policy is still loading.' };
+        if (loading || error) {
+            return { allowed: false, code: 'blocked_by_status', message: error ? 'DCF editing policy is unavailable; writes are blocked until User Settings restores it.' : 'DCF editing policy is still loading.' };
         }
         const resolvedStatus = status || getDcfItemPolicyStatus(moduleKey, item || {});
-        const moduleName = moduleKey === 'subprojects'
-            ? 'Subprojects'
-            : moduleKey === 'activities'
-                ? 'Activities'
-                : moduleKey === 'office_requirements'
-                    ? 'Program Management - Office Requirements'
-                    : moduleKey === 'staffing_requirements'
-                        ? 'Program Management - Staffing Requirements'
-                        : 'Program Management - Other Program Expenses';
+        const moduleName = getDcfModuleName(moduleKey);
         const centralizedAccess = action === 'editPhysicalAccomplishment'
             ? hasAccess(moduleName, 'edit_physical_actual') && hasAccess('Accomplishment - Physical', 'edit_physical_actual')
             : action === 'editFinancialAccomplishment'
@@ -156,7 +168,7 @@ export const useDcfPolicyGuard = () => {
                 : action === 'delete'
                     ? hasAccess(moduleName, 'delete')
                     : hasAccess(moduleName, 'edit');
-        return canEditDcfSection({
+        const decision = canEditDcfSection({
             user: currentUser,
             hasModuleAccess: hasModuleAccess && centralizedAccess,
             policy,
@@ -164,7 +176,25 @@ export const useDcfPolicyGuard = () => {
             status: resolvedStatus,
             action,
         });
-    }, [currentUser, hasAccess, loading, policy]);
+        if (!decision.allowed && decision.code === 'blocked_by_status' && currentUser?.role !== 'Super Admin') {
+            const overrideAction = action === 'editPhysicalAccomplishment' ? 'override_physical_lock' : action === 'editFinancialAccomplishment' ? 'override_financial_lock' : null;
+            const overrideModule = overrideAction ? hasAccess(moduleName, overrideAction) : false;
+            const overrideAccomplishment = action === 'editPhysicalAccomplishment'
+                ? hasAccess('Accomplishment - Physical', 'override_period')
+                : action === 'editFinancialAccomplishment'
+                    ? hasAccess('Accomplishment - Financial', 'override_period')
+                    : false;
+            if (hasModuleAccess && hasAccess(moduleName, 'view') && (overrideModule || overrideAccomplishment)) {
+                return {
+                    allowed: true,
+                    code: 'allowed_by_override',
+                    message: `Allowed by configured ${action === 'editPhysicalAccomplishment' ? 'physical' : 'financial'} DCF override.`,
+                    requiresOverrideReason: true,
+                };
+            }
+        }
+        return decision;
+    }, [currentUser, error, hasAccess, loading, policy]);
 
     const getDeleteDecision = useCallback(({
         moduleKey,
@@ -177,19 +207,11 @@ export const useDcfPolicyGuard = () => {
         status?: DcfPolicyStatus;
         hasModuleAccess: boolean;
     }): DcfPolicyDecision => {
-        if (loading) {
-            return { allowed: false, code: 'blocked_by_status', message: 'DCF editing policy is still loading.' };
+        if (loading || error) {
+            return { allowed: false, code: 'blocked_by_status', message: error ? 'DCF editing policy is unavailable; deletes are blocked until User Settings restores it.' : 'DCF editing policy is still loading.' };
         }
         const resolvedStatus = status || getDcfItemPolicyStatus(moduleKey, item || {});
-        const moduleName = moduleKey === 'subprojects'
-            ? 'Subprojects'
-            : moduleKey === 'activities'
-                ? 'Activities'
-                : moduleKey === 'office_requirements'
-                    ? 'Program Management - Office Requirements'
-                    : moduleKey === 'staffing_requirements'
-                        ? 'Program Management - Staffing Requirements'
-                        : 'Program Management - Other Program Expenses';
+        const moduleName = getDcfModuleName(moduleKey);
         return canDeleteDcfItem({
             user: currentUser,
             hasModuleAccess: hasModuleAccess && hasAccess(moduleName, 'delete'),
@@ -197,13 +219,13 @@ export const useDcfPolicyGuard = () => {
             moduleKey,
             status: resolvedStatus,
         });
-    }, [currentUser, hasAccess, loading, policy]);
+    }, [currentUser, error, hasAccess, loading, policy]);
 
     const getMonthDecision = useCallback((month?: string | null, accomplishment: 'physical' | 'financial' = 'financial'): DcfPolicyDecision => {
         const normalizedMonth = normalizePolicyMonth(month);
         if (!normalizedMonth) return ALLOWED_DECISION;
-        if (loading) {
-            return { allowed: false, code: 'blocked_by_month_lock', message: 'DCF period-lock policy is still loading.' };
+        if (loading || error) {
+            return { allowed: false, code: 'blocked_by_month_lock', message: error ? 'DCF period-lock policy is unavailable; period writes are blocked until User Settings restores it.' : 'DCF period-lock policy is still loading.' };
         }
         return canUseAccomplishmentMonth({
             user: currentUser,
@@ -212,7 +234,7 @@ export const useDcfPolicyGuard = () => {
             serverDate,
             canOverride: hasAccess(accomplishment === 'physical' ? 'Accomplishment - Physical' : 'Accomplishment - Financial', 'override_period'),
         });
-    }, [currentUser, hasAccess, loading, policy, serverDate]);
+    }, [currentUser, error, hasAccess, loading, policy, serverDate]);
 
     const getCurrentAccomplishmentMonthLabel = useCallback((): string => (
         formatPolicyMonthLabel(serverDate)
@@ -246,6 +268,23 @@ export const useDcfPolicyGuard = () => {
 
     const logOverride = useCallback(async (decision: DcfPolicyDecision, context: DcfPolicyGuardContext, reason: string | null) => {
         if (decision.code !== 'allowed_by_override') return;
+        if (!supabase) throw new Error('Supabase is not configured for DCF override authorization.');
+        const moduleName = getDcfModuleName(context.moduleKey);
+        const overrideAction = context.action === 'editPhysicalAccomplishment'
+            ? 'edit_physical_actual'
+            : context.action === 'editFinancialAccomplishment'
+                ? 'edit_financial_actual'
+                : 'edit_financial_actual';
+        const { error: grantError } = await supabase.rpc('request_dcf_override', {
+            p_module: moduleName,
+            p_action: overrideAction,
+            p_target_type: getDcfTargetTable(context.moduleKey),
+            p_target_id: context.itemId !== undefined ? String(context.itemId) : null,
+            p_target_month: normalizePolicyMonth(context.month),
+            p_operating_unit: context.item?.operatingUnit || null,
+            p_reason: reason,
+        });
+        if (grantError) throw grantError;
         await logAction(
             'DCF Policy Override',
             `${getDcfModuleLabel(context.moduleKey)} override used${context.itemName ? ` for ${context.itemName}` : ''}.`,
@@ -260,7 +299,6 @@ export const useDcfPolicyGuard = () => {
                 userRole: currentUser?.role,
             })
         );
-        if (!supabase) throw new Error('Supabase is not configured for override auditing.');
         const auditModule = context.action === 'editPhysicalAccomplishment'
             ? 'Accomplishment - Physical'
             : 'Accomplishment - Financial';

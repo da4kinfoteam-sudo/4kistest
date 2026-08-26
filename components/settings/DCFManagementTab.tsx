@@ -19,35 +19,47 @@ interface DCFManagementTabProps {
     setOtherProgramExpenses: React.Dispatch<React.SetStateAction<OtherProgramExpense[]>>;
     onSelectSubproject: (project: Subproject) => void;
     onSelectActivity: (activity: Activity) => void;
+    canManageStatus: boolean;
+    canManageBudget: boolean;
 }
 
 const DCFManagementTab: React.FC<DCFManagementTabProps> = (props) => {
-    const [activeSection, setActiveSection] = useState<'physical' | 'budget'>('physical');
+    const firstAvailableSection = props.canManageStatus ? 'physical' : props.canManageBudget ? 'budget' : null;
+    const [activeSection, setActiveSection] = useState<'physical' | 'budget'>(firstAvailableSection || 'physical');
+
+    React.useEffect(() => {
+        if (activeSection === 'physical' && !props.canManageStatus) setActiveSection('budget');
+        if (activeSection === 'budget' && !props.canManageBudget) setActiveSection('physical');
+    }, [activeSection, props.canManageBudget, props.canManageStatus]);
+
+    if (!firstAvailableSection) {
+        return <div className="ui-state">No DCF or status management capability is enabled for your account.</div>;
+    }
 
     return (
         <div className="form-stack form-stack--spacious">
             <div className="data-tabs__nav" role="tablist" aria-label="DCF management sections">
-                <button
+                {props.canManageStatus && <button
                     onClick={() => setActiveSection('physical')}
                     className={activeSection === 'physical' ? 'is-active' : undefined}
                     role="tab"
                     aria-selected={activeSection === 'physical'}
                 >
                     Physical Status Management
-                </button>
-                <button
+                </button>}
+                {props.canManageBudget && <button
                     onClick={() => setActiveSection('budget')}
                     className={activeSection === 'budget' ? 'is-active' : undefined}
                     role="tab"
                     aria-selected={activeSection === 'budget'}
                 >
                     Budget Ceiling Management
-                </button>
+                </button>}
             </div>
 
-            {activeSection === 'physical' ? (
+            {activeSection === 'physical' && props.canManageStatus ? (
                 <PhysicalStatusManagement {...props} />
-            ) : (
+            ) : props.canManageBudget ? (
                 <BudgetCeilingManagement 
                     subprojects={props.subprojects}
                     activities={props.activities}
@@ -55,7 +67,7 @@ const DCFManagementTab: React.FC<DCFManagementTabProps> = (props) => {
                     staffingReqs={props.staffingReqs}
                     otherProgramExpenses={props.otherProgramExpenses}
                 />
-            )}
+            ) : null}
         </div>
     );
 };

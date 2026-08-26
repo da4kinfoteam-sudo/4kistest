@@ -84,19 +84,39 @@ Deno.serve(async request => {
         if (error) throw error;
         return;
       }
-      const rows = modules.map(module => ({ submitter_user_id: profileUserId, approver_user_id: Number(profile.approver_id), module, active: true, created_by: actor.id, updated_at: new Date().toISOString() }));
-      const { error } = await admin.from('workflow_assignments').upsert(rows, { onConflict: 'submitter_user_id,module' });
-      if (error) throw error;
+      const rows: any[] = [];
+      for (const module of modules) {
+        const { data: decision, error: decisionError } = await admin.rpc('resolve_access_for_user', {
+          p_user_id: Number(profile.approver_id),
+          p_module: module,
+          p_action: 'approve',
+          p_record_ou: profile.operatingUnit || null,
+        });
+        if (decisionError) throw decisionError;
+        if (decision?.[0]?.allowed) {
+          rows.push({ submitter_user_id: profileUserId, approver_user_id: Number(profile.approver_id), module, active: true, created_by: actor.id, updated_at: new Date().toISOString() });
+        } else {
+          const { error: deactivateError } = await admin.from('workflow_assignments')
+            .update({ active: false, updated_at: new Date().toISOString() })
+            .eq('submitter_user_id', profileUserId).eq('module', module);
+          if (deactivateError) throw deactivateError;
+        }
+      }
+      if (rows.length) {
+        const { error } = await admin.from('workflow_assignments').upsert(rows, { onConflict: 'submitter_user_id,module' });
+        if (error) throw error;
+      }
     };
 
     const audit = async (eventAction: string, targetUserId: number | null, beforeState: unknown, afterState: unknown) => {
       const { data: policy } = await admin.from('authorization_policy').select('policy_version').eq('singleton', true).single();
-      await admin.from('authorization_audit_events').insert({
+      const { error: auditError } = await admin.from('authorization_audit_events').insert({
         actor_user_id: actor.id, actor_auth_id: actor.auth_id, actor_role: actor.role,
         module: 'Settings - User Management', action: eventAction, target_type: 'user',
         target_id: targetUserId ? String(targetUserId) : null, before_state: beforeState,
         after_state: afterState, policy_version: policy?.policy_version || 0, outcome: 'allowed',
       });
+      if (auditError) throw auditError;
     };
 
     if (action === 'invite') {

@@ -55,12 +55,16 @@ export const DcfPolicyProvider: React.FC<{ children: ReactNode }> = ({ children 
             if (settingsResult.error) {
                 console.error('Unable to load DCF policy settings:', settingsResult.error);
                 setError('DCF policy settings could not be loaded. Check that the DCF policy migration has been applied.');
+            } else if (!settingsResult.data?.settings || typeof settingsResult.data.settings !== 'object' || Array.isArray(settingsResult.data.settings)) {
+                setError('DCF policy settings are unavailable. DCF writes are blocked until an authorized administrator restores the policy.');
+                setPolicy(DEFAULT_DCF_POLICY_SETTINGS);
             } else {
                 setPolicy(normalizeDcfPolicySettings(settingsResult.data?.settings));
             }
 
             if (dateResult.error) {
                 console.error('Unable to load app current date:', dateResult.error);
+                setError('The server application date is unavailable. DCF period writes are blocked until it can be verified.');
                 setServerDate(getLocalFallbackDate());
             } else if (dateResult.data) {
                 setServerDate(String(dateResult.data));

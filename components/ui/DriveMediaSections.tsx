@@ -435,6 +435,7 @@ interface EntityGalleryProps<TFile extends DriveMediaFile> {
     files: TFile[];
     isLoading: boolean;
     canEdit: boolean;
+    canUpload?: boolean;
     canDelete: boolean;
     isConnected: boolean;
     getImageUrl: (file: TFile, size?: number) => string;
@@ -474,6 +475,7 @@ export function EntityGallery<TFile extends DriveMediaFile>({
     files,
     isLoading,
     canEdit,
+    canUpload = canEdit,
     canDelete,
     isConnected,
     getImageUrl,
@@ -595,10 +597,10 @@ export function EntityGallery<TFile extends DriveMediaFile>({
                 </div>
             )}
 
-            {canEdit && showUploader && (
+            {canUpload && showUploader && (
                 <DriveUploadDropzone
                     section="gallery"
-                    canUpload={canEdit}
+                    canUpload={canUpload}
                     isConnected={isConnected}
                     uploadFile={uploadFile}
                     onUploaded={onFileAdded}
@@ -817,6 +819,7 @@ interface EntityFilesListProps<TFile extends DriveMediaFile> {
     files: TFile[];
     isLoading: boolean;
     canEdit: boolean;
+    canUpload?: boolean;
     canDelete: boolean;
     isConnected: boolean;
     uploadFile: (file: File, section: DriveUploadSection) => Promise<TFile>;
@@ -838,6 +841,7 @@ export function EntityFilesList<TFile extends DriveMediaFile>({
     files,
     isLoading,
     canEdit,
+    canUpload = canEdit,
     canDelete,
     isConnected,
     uploadFile,
@@ -865,10 +869,10 @@ export function EntityFilesList<TFile extends DriveMediaFile>({
                     </button>
                 </div>
             )}
-            {canEdit && showUploader && (
+            {canUpload && showUploader && (
                 <DriveUploadDropzone
                     section="files"
-                    canUpload={canEdit}
+                    canUpload={canUpload}
                     isConnected={isConnected}
                     uploadFile={uploadFile}
                     onUploaded={onFileAdded}
