@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.0';
+import { extractBearerToken } from '../_shared/userAdminAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,24 +14,65 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const env = (name: string) => Deno.env.get(name)?.trim() || '';
 
+const safeErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message.trim() : '';
+  const normalized = message.toLowerCase();
+  if (!message) return 'User administration request failed. Please try again.';
+
+  if (/rate limit|too many requests/.test(normalized)) {
+    return 'Invitation email sending is temporarily rate-limited. Please try again later.';
+  }
+  if (/already registered|already exists|duplicate/.test(normalized)) {
+    return 'A user with this email or username already exists.';
+  }
+  if (/invalid.*email|email.*invalid/.test(normalized)) return 'Enter a valid email address.';
+  if (/smtp|mailer|email provider|failed to send.*email|send.*invitation.*email/.test(normalized)) {
+    return 'The invitation email could not be sent. Please try again later or contact an administrator.';
+  }
+  if (/workflow assignment|workflow.*synchron/.test(normalized)) {
+    return 'Workflow assignment synchronization failed. Please review the user before retrying.';
+  }
+  if (/authorization audit|audit.*(entry|event|log)/.test(normalized)) {
+    return 'The authorization audit entry could not be written. Please contact an administrator.';
+  }
+  if (/application profile|profile.*synchron|public\.users|user profile/.test(normalized)) {
+    return 'The application user profile could not be synchronized. Please contact an administrator.';
+  }
+
+  const safeMessages = [
+    'You cannot grant ',
+    'Unsupported user administration action.',
+    'User not found.',
+    'Only Super Admin may ',
+    'Administrators cannot ',
+    'The last active Super Admin cannot ',
+    'Authentication required.',
+    'Invalid or expired session.',
+    'Active application profile required.',
+    'You do not have permission to manage users.',
+  ];
+  if (safeMessages.some(prefix => message.startsWith(prefix))) return message.slice(0, 500);
+  return 'User administration request failed. Please try again.';
+};
+
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
   try {
     const authHeader = request.headers.get('Authorization') || '';
-    if (!authHeader.startsWith('Bearer ')) return json({ error: 'Authentication required.' }, 401);
+    const accessToken = extractBearerToken(authHeader);
+    if (!accessToken) return json({ error: 'Authentication required.' }, 401);
     const url = env('SUPABASE_URL');
     const anonKey = env('SUPABASE_ANON_KEY');
     const serviceRoleKey = env('SUPABASE_SERVICE_ROLE_KEY');
     if (!url || !anonKey || !serviceRoleKey) throw new Error('User administration environment is incomplete.');
 
     const actorClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data: authData, error: authError } = await actorClient.auth.getUser();
+    const { data: authData, error: authError } = await admin.auth.getUser(accessToken);
     if (authError || !authData.user) return json({ error: 'Invalid or expired session.' }, 401);
     const { data: actor, error: actorError } = await admin.from('users').select('id,auth_id,role,is_active').eq('auth_id', authData.user.id).single();
     if (actorError || !actor?.is_active) return json({ error: 'Active application profile required.' }, 403);
@@ -121,16 +163,25 @@ Deno.serve(async request => {
 
     if (action === 'invite') {
       const profile = body.profile || {};
+      const email = String(profile.email || '').trim().toLowerCase();
+      const username = String(profile.username || '').trim();
+      const fullName = String(profile.fullName || '').trim();
+      if (!email || !username || !fullName || !profile.role || !profile.operatingUnit) {
+        return json({ error: 'Display name, username, email, role, and operating unit are required.' }, 400);
+      }
       if (profile.role === 'Super Admin' && !actorIsSuper) return json({ error: 'Only Super Admin may create another Super Admin.' }, 403);
       await assertCanGrantRole(profile.role);
-      const { data: invited, error } = await admin.auth.admin.inviteUserByEmail(profile.email, {
-        data: { full_name: profile.fullName, username: profile.username, role: profile.role, operatingUnit: profile.operatingUnit },
+      const { data: existingProfile, error: existingProfileError } = await admin.from('users').select('id').ilike('email', email).maybeSingle();
+      if (existingProfileError) throw new Error('Unable to validate the existing application profile.');
+      if (existingProfile) return json({ error: 'A user with this email already exists.' }, 409);
+      const { data: invited, error } = await admin.auth.admin.inviteUserByEmail(email, {
+        data: { full_name: fullName, username, role: profile.role, operatingUnit: profile.operatingUnit },
         redirectTo: env('SITE_URL') || undefined,
       });
       if (error) throw error;
       const { data: saved, error: saveError } = await admin.from('users').update({
-        username: profile.username,
-        'fullName': profile.fullName,
+        username,
+        'fullName': fullName,
         role: profile.role,
         'operatingUnit': profile.operatingUnit,
         visibility_scope: profile.visibility_scope || 'Own OU',
@@ -139,7 +190,7 @@ Deno.serve(async request => {
         is_active: true,
         password_reset_required: true,
       }).eq('auth_id', invited.user.id).select('*').single();
-      if (saveError) throw saveError;
+      if (saveError) throw new Error('Application profile synchronization failed.');
       await syncWorkflowAssignments(saved.id, profile);
       await audit('manage_users', saved.id, null, { role: saved.role, operatingUnit: saved.operatingUnit, active: saved.is_active });
       return json({ user: saved, message: 'Invitation sent.' });
@@ -204,6 +255,6 @@ Deno.serve(async request => {
 
     return json({ error: 'Unsupported user administration action.' }, 400);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'User administration failed.' }, 400);
+    return json({ error: safeErrorMessage(error) }, 400);
   }
 });
