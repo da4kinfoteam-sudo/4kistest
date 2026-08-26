@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient';
 import type { User, UserRole, VisibilityScope } from '../constants';
+import { extractUserAdminError } from './userAdminErrors';
 
 export type UserAdminRequest =
   | { action: 'invite'; profile: { email: string; username: string; fullName: string; role: UserRole; operatingUnit: string; visibility_scope?: VisibilityScope; requires_approver?: boolean; approver_id?: number | null } }
@@ -9,7 +10,10 @@ export type UserAdminRequest =
 export async function invokeUserAdmin(request: UserAdminRequest): Promise<{ user?: User; message: string }> {
   if (!supabase) throw new Error('Supabase is not configured.');
   const { data, error } = await supabase.functions.invoke('user-admin', { body: request });
-  if (error) throw new Error(error.message || 'User administration request failed.');
+  if (error) {
+    const message = await extractUserAdminError(error);
+    throw new Error(message || 'User administration request failed. Please try again.');
+  }
   if (data?.error) throw new Error(data.error);
   return data;
 }

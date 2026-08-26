@@ -19,6 +19,8 @@
     "test:access-control": "node --experimental-strip-types scripts/run-central-access-check.mjs",
     "test:access-control:live": "node scripts/verify-live-central-authorization.mjs",
     "test:permissions-closure:live": "node scripts/verify-live-permissions-closure.mjs",
+    "test:user-admin-auth": "node --experimental-strip-types scripts/run-user-admin-auth-check.mjs",
+    "test:user-admin-errors": "node --experimental-strip-types scripts/run-user-admin-error-check.mjs",
     "audit:ui": "node scripts/ui-consistency-audit.mjs",
     "audit:legacy-ui": "node scripts/legacy-ui-inventory.mjs"
   },
